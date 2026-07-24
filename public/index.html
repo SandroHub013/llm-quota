@@ -178,7 +178,24 @@
         transition: transform 0.6s var(--ease-out);
       }
       button.primary:hover { box-shadow: 0 6px 30px rgba(91, 140, 255, 0.6); }
-      button.primary:hover::after { transform: translateX(120%); }
+      button.demo-btn {
+        background: linear-gradient(135deg, rgba(155, 91, 255, 0.25), rgba(91, 140, 255, 0.25));
+        border: 1px solid rgba(155, 91, 255, 0.4);
+        color: #e0d0ff;
+        font-weight: 600;
+        box-shadow: 0 0 16px rgba(155, 91, 255, 0.2);
+      }
+      button.demo-btn:hover {
+        background: linear-gradient(135deg, rgba(155, 91, 255, 0.45), rgba(91, 140, 255, 0.45));
+        border-color: rgba(185, 130, 255, 0.7);
+        box-shadow: 0 0 24px rgba(155, 91, 255, 0.5);
+      }
+      button.demo-btn.active {
+        background: linear-gradient(135deg, #9b5bff, #5b8cff);
+        color: #ffffff;
+        border-color: transparent;
+        box-shadow: 0 0 25px rgba(155, 91, 255, 0.6);
+      }
 
       /* ---------- marquee ---------- */
       .marquee {
@@ -482,7 +499,8 @@
         </h1>
         <div class="sub">Stato quota delle tue sub AI — legge i <b>login CLI esistenti</b> + key salvate localmente</div>
       </div>
-      <div style="display:flex;gap:10px">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button id="toggleDemo" class="demo-btn" title="Mostra dati dimostrativi identici al banner">✨ Vista Banner</button>
         <button id="openWidget" title="Apri il widget desktop sul PC">▣ Widget</button>
         <button class="primary" id="refreshAll">↻ Aggiorna tutto</button>
       </div>
