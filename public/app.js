@@ -213,85 +213,7 @@ function animate(el) {
   });
 }
 
-let isDemoMode = false;
-
-const DEMO_PROVIDERS = [
-  {
-    id: "claude",
-    name: "Claude Code",
-    plan: "Max Tier (OAuth)",
-    status: "ok",
-    consoleUrl: "https://claude.ai",
-    metrics: [
-      { label: "Finestra 5 Ore", used: 22, limit: 100, unit: "percent", remaining: 78, resetAt: new Date(Date.now() + 3.5 * 3600 * 1000).toISOString() },
-      { label: "Quota Settimanale", used: 34, limit: 100, unit: "percent", remaining: 66, resetAt: new Date(Date.now() + 4 * 86400 * 1000).toISOString() }
-    ],
-    authSource: "~/.claude/.credentials.json"
-  },
-  {
-    id: "codex",
-    name: "Codex (ChatGPT)",
-    plan: "ChatGPT Plus / Team",
-    status: "ok",
-    consoleUrl: "https://chatgpt.com",
-    metrics: [
-      { label: "Limiti GPT-5.6 Sol / Terra", used: 35, limit: 100, unit: "percent", remaining: 65, resetAt: new Date(Date.now() + 1.2 * 3600 * 1000).toISOString() }
-    ],
-    authSource: "~/.codex/auth.json"
-  },
-  {
-    id: "zai",
-    name: "z.ai",
-    plan: "Coding Plan Active",
-    status: "ok",
-    consoleUrl: "https://z.ai",
-    metrics: [
-      { label: "Finestra 5 Ore", used: 16, limit: 100, unit: "percent", remaining: 84, resetAt: new Date(Date.now() + 2.8 * 3600 * 1000).toISOString() },
-      { label: "Utilizzo Mensile", used: 42, limit: 100, unit: "percent", remaining: 58 }
-    ],
-    authSource: "opencode-key"
-  },
-  {
-    id: "opencode-zen",
-    name: "OpenCode Zen",
-    plan: "Pro Gateway (58 modelli)",
-    status: "ok",
-    consoleUrl: "https://opencode.ai/zen",
-    metrics: [
-      { label: "Crediti Gateway", used: 85, limit: 100, unit: "percent", remaining: 15 }
-    ],
-    authSource: "opencode.json"
-  },
-  {
-    id: "gemini",
-    name: "Gemini AI Studio",
-    plan: "Code Assist Sub",
-    status: "ok",
-    consoleUrl: "https://aistudio.google.com",
-    metrics: [
-      { label: "Gemini 3.6 Flash (1.04M ctx)", used: 8, limit: 100, unit: "percent", remaining: 92, resetAt: new Date(Date.now() + 14 * 3600 * 1000).toISOString() },
-      { label: "Gemini 3.1 Pro (1.04M ctx)", used: 28, limit: 100, unit: "percent", remaining: 72, resetAt: new Date(Date.now() + 14 * 3600 * 1000).toISOString() }
-    ],
-    authSource: "~/.gemini/oauth_creds.json"
-  },
-  {
-    id: "moonshot",
-    name: "Moonshot AI",
-    plan: "Kimi K3 / K2.7 Plan",
-    status: "ok",
-    consoleUrl: "https://platform.moonshot.cn",
-    metrics: [
-      { label: "Saldo Credito Residuo", used: 5.80, limit: 20.00, unit: "usd", remaining: 14.20 }
-    ],
-    authSource: "config.json"
-  }
-];
-
 async function loadAll() {
-  if (isDemoMode) {
-    DEMO_PROVIDERS.forEach(render);
-    return;
-  }
   const btn = document.getElementById("refreshAll");
   btn.innerHTML = '<span class="spin">↻</span> Aggiorno…';
   try {
@@ -386,16 +308,6 @@ async function startLogin(btn) {
 }
 
 document.getElementById("refreshAll").addEventListener("click", loadAll);
-
-const toggleDemoBtn = document.getElementById("toggleDemo");
-if (toggleDemoBtn) {
-  toggleDemoBtn.addEventListener("click", () => {
-    isDemoMode = !isDemoMode;
-    toggleDemoBtn.classList.toggle("active", isDemoMode);
-    toggleDemoBtn.textContent = isDemoMode ? "✨ Vista Banner (Attiva)" : "✨ Vista Banner";
-    loadAll();
-  });
-}
 
 // Let the browser/Windows shell launch Tk on the interactive desktop.
 document.getElementById("openWidget").addEventListener("click", (e) => {
