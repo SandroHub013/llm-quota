@@ -4,6 +4,8 @@ Dashboard unificata e CLI local-first per monitorare lo stato delle quote dei tu
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+![LLM Quota Dashboard Snapshot](docs/dashboard-preview.jpg)
+
 ---
 
 ## ⚡ Caratteristiche
