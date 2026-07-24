@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+.bun/
+bun.lockb
+
+# Local credentials & configs
+.env
+.env.local
+.env.*.local
+*.log
+cloudflared.log
+cloudflared.exe
+
+# Build & runtime cache
+.vercel/
+__pycache__/
+*.pyc
+.impeccable/
+reports/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
