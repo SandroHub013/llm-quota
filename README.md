@@ -13,6 +13,8 @@ Runs on your machine. Talks to nobody but the providers.
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Stars](https://img.shields.io/github/stars/SandroHub013/llm-quota?style=social)](https://github.com/SandroHub013/llm-quota/stargazers)
 
+**[→ llm-quota website](https://sandrohub013.github.io/llm-quota/)**
+
 [Quickstart](#quickstart) · [Providers](#supported-providers) · [CLI](#cli-for-terminals-and-ai-agents) · [Privacy](#privacy) · [Contributing](CONTRIBUTING.md) · [🇮🇹 Italiano](README.it.md)
 
 ![LLM Quota dashboard](docs/dashboard-preview.jpg)
