@@ -59,7 +59,7 @@
       :root {
         /* surface */
         --bg: #05060b;
-        --surface: rgba(15, 20, 33, 0.55);
+        --surface: rgba(15, 20, 33, 0.78);
         --surface-solid: #111726;
         --line: rgba(120, 150, 200, 0.13);
         --line-strong: rgba(140, 170, 220, 0.3);
@@ -169,20 +169,24 @@
 
       /* ---------- backdrop ---------- */
       .aurora { position: fixed; inset: 0; z-index: -3; overflow: hidden; }
+      /* No `filter: blur()` here on purpose. The source is already a radial gradient
+         fading to transparent, so a blur pass only re-smooths something smooth — but
+         it re-runs over a 46vw box on every frame of `drift`, because the element is
+         also being scaled. A wider falloff buys the same softness for free. */
       .aurora i {
         position: absolute;
         border-radius: 50%;
-        filter: blur(110px);
         opacity: 0.4;
         animation: drift 34s ease-in-out infinite alternate;
+        will-change: transform;
       }
       .aurora i:nth-child(1) {
-        width: 46vw; height: 46vw; left: -12vw; top: -18vw;
-        background: radial-gradient(circle, rgba(91, 140, 255, 0.34), transparent 65%);
+        width: 52vw; height: 52vw; left: -15vw; top: -21vw;
+        background: radial-gradient(circle, rgba(91, 140, 255, 0.3) 0%, rgba(91, 140, 255, 0.12) 38%, transparent 72%);
       }
       .aurora i:nth-child(2) {
-        width: 40vw; height: 40vw; right: -10vw; bottom: -22vw;
-        background: radial-gradient(circle, rgba(155, 91, 255, 0.26), transparent 65%);
+        width: 46vw; height: 46vw; right: -13vw; bottom: -25vw;
+        background: radial-gradient(circle, rgba(155, 91, 255, 0.23) 0%, rgba(155, 91, 255, 0.09) 38%, transparent 72%);
         animation-delay: -14s; animation-duration: 42s;
       }
       @keyframes drift {
@@ -208,7 +212,9 @@
       @media (pointer: fine) {
         body, button, a, summary { cursor: none; }
         input, textarea { cursor: text; }
-        .cur, .cur-ring { position: fixed; top: 0; left: 0; z-index: 70; pointer-events: none; border-radius: 50%; }
+        /* Own compositor layer each: JS rewrites these transforms every frame the
+           pointer moves, and without the hint that is a paint, not just a composite. */
+        .cur, .cur-ring { position: fixed; top: 0; left: 0; z-index: 70; pointer-events: none; border-radius: 50%; will-change: transform; }
         .cur { width: 7px; height: 7px; background: #fff; mix-blend-mode: difference; }
         /* JS drives the wrapper's translate; the ring itself only ever scales. */
         .cur-ring { width: 54px; height: 54px; }
@@ -237,10 +243,13 @@
         margin: 0 auto;
         padding: var(--head-pad) var(--pad-x);
       }
+      /* `backdrop-filter` used to live on the header and on every card. Both sit above
+         `.aurora`, which animates continuously — so the browser re-blurred seven regions
+         on every frame, forever, for a backdrop that is already soft and 40% opaque.
+         Opaque-enough surfaces read the same and cost nothing. */
       header {
         border-bottom: 1px solid var(--line);
-        background: rgba(5, 6, 11, 0.55);
-        backdrop-filter: blur(18px) saturate(1.4);
+        background: rgba(5, 6, 11, 0.82);
       }
       header .wrap {
         display: flex;
@@ -456,8 +465,9 @@
         padding: 8px 11px;
         border-radius: var(--r-sm);
         border: 1px solid var(--line-strong);
+        /* No backdrop-filter: at 96% opacity nothing shows through to blur, but the
+           tip is `fixed` and follows the pointer, so the filter re-ran constantly. */
         background: rgba(10, 14, 24, 0.96);
-        backdrop-filter: blur(8px);
         font-size: var(--t-sm);
         line-height: 1.35;
         white-space: nowrap;
@@ -498,7 +508,6 @@
         flex-direction: column;
         gap: calc(var(--card-pad) * 0.55);
         min-width: 0;
-        backdrop-filter: blur(16px) saturate(1.3);
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
         transition: transform 0.3s var(--ease-out), border-color 0.3s, box-shadow 0.3s;
         animation: rise 0.6s var(--ease-out) backwards;
