@@ -29,9 +29,24 @@ from datetime import datetime, timezone
 BASE = "http://localhost:4747"
 POLL_MS = 5 * 60_000
 MUTEX_NAME = "Local\\LLMQuotaWidget"
+WAKE_PORT = 51122
 
 
-def acquire_single_instance():
+def wake_running_instance():
+    """Try sending a wake signal to an already running instance."""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(1.0)
+        s.connect(("127.0.0.1", WAKE_PORT))
+        s.sendall(b"WAKE\n")
+        s.close()
+        return True
+    except Exception:
+        return False
+
+
+def acquire_single_instance(wake_callback=None):
     """Return a process-held Windows mutex, or None when widget is already open."""
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     create_mutex = kernel32.CreateMutexW
@@ -39,11 +54,34 @@ def acquire_single_instance():
     create_mutex.restype = wintypes.HANDLE
     handle = create_mutex(None, False, MUTEX_NAME)
     if not handle:
+        wake_running_instance()
         return None
     if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
         kernel32.CloseHandle(handle)
+        wake_running_instance()
         return None
+
+    if wake_callback:
+        import socket
+        def _listen():
+            try:
+                srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                srv.bind(("127.0.0.1", WAKE_PORT))
+                srv.listen(1)
+                while True:
+                    conn, _ = srv.accept()
+                    data = conn.recv(64)
+                    conn.close()
+                    if b"WAKE" in data:
+                        wake_callback()
+            except Exception:
+                pass
+        t = threading.Thread(target=_listen, daemon=True)
+        t.start()
+
     return handle
+
 
 
 class Rect(ctypes.Structure):
@@ -453,6 +491,21 @@ class Widget(tk.Tk):
         else:
             self._place_bottom_right()
 
+    def wake_up(self):
+        self.after(0, self._do_wake_up)
+
+    def _do_wake_up(self):
+        self.deiconify()
+        if self.view_mode == "q" and not self.expanded:
+            self.expanded = True
+            self.panel.pack(before=self.header)
+        self.lift()
+        self.attributes("-topmost", True)
+        if not self._user_positioned:
+            self._place_bottom_right()
+        self.refresh()
+
+
     def switch_view_mode(self):
         self.view_mode = "bar" if self.view_mode == "q" else "q"
         if self.view_mode == "bar":
@@ -653,11 +706,14 @@ if __name__ == "__main__":
     if "--register-protocol" in sys.argv:
         print(register_protocol())
         raise SystemExit(0)
-    instance_mutex = acquire_single_instance()
+    widget_ref = []
+    instance_mutex = acquire_single_instance(lambda: widget_ref and widget_ref[0].wake_up())
     if instance_mutex is None:
         raise SystemExit(0)
     w = Widget()
+    widget_ref.append(w)
     if "--selftest" in sys.argv:
         w.after(3000, w.destroy)
     w.mainloop()
     print("widget ok")
+

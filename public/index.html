@@ -3,33 +3,131 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>LLM Quota — stato quota AI</title>
+    <title>LLM Quota — un solo orizzonte per sei abbonamenti AI</title>
+    <meta
+      name="description"
+      content="Dashboard local-first che legge i login CLI già sul tuo disco e mostra su un unico orizzonte temporale quando si azzerano le quote di Claude Code, Codex, z.ai, OpenCode Zen, Gemini e Kimi."
+    />
+    <meta name="theme-color" content="#05060b" />
+    <meta name="color-scheme" content="dark" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="LLM Quota — un solo orizzonte per sei abbonamenti AI" />
+    <meta
+      property="og:description"
+      content="Quanto tempo ti resta prima che le tue quote AI si azzerino. Tutto in locale, zero telemetria."
+    />
+    <meta property="og:image" content="/og.jpg" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/schibsted-var-latin.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/syne-var-latin.woff2" crossorigin />
+
     <style>
+      /* ---------- self-hosted, latin subset, variable: no third-party request ---------- */
+      @font-face {
+        font-family: "Schibsted Grotesk";
+        src: url("/fonts/schibsted-var-latin.woff2") format("woff2");
+        font-weight: 400 700;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "Syne";
+        src: url("/fonts/syne-var-latin.woff2") format("woff2");
+        font-weight: 700 800;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "JetBrains Mono";
+        src: url("/fonts/jetbrains-mono-500-latin.woff2") format("woff2");
+        font-weight: 500;
+        font-display: swap;
+      }
+      /* Metric-matched stand-ins. Measured against the real faces: Schibsted Grotesk
+         sets 104% of Segoe UI/Arial, JetBrains Mono 109% of Consolas. Matching the
+         advance widths means the swap changes the shapes, never the layout. */
+      @font-face {
+        font-family: "Schibsted Fallback";
+        src: local("Segoe UI"), local("Arial"), local("Helvetica Neue");
+        size-adjust: 104%;
+      }
+      @font-face {
+        font-family: "Mono Fallback";
+        src: local("Consolas"), local("Menlo"), local("DejaVu Sans Mono");
+        size-adjust: 109%;
+      }
+
       :root {
+        /* surface */
         --bg: #05060b;
-        --panel: rgba(16, 21, 34, 0.5);
-        --panel2: #121829;
-        --border: rgba(120, 150, 200, 0.13);
+        --surface: rgba(15, 20, 33, 0.55);
+        --surface-solid: #111726;
+        --line: rgba(120, 150, 200, 0.13);
+        --line-strong: rgba(140, 170, 220, 0.3);
+
+        /* ink — every value below is ≥ 4.5:1 on --bg */
         --text: #eef3fa;
-        --muted: #8d9cb3;
+        --muted: #93a2b8;
+        --dim: #7d8a9e;
+
+        /* signal */
         --accent: #5b8cff;
         --violet: #9b5bff;
         --ok: #3fb950;
-        --warn: #d29922;
+        --warn: #e0a72c;
         --err: #f85149;
-        --idle: #6e7681;
+
+        /* one radius scale */
+        --r-sm: 8px;
+        --r-md: 12px;
+        --r-lg: 18px;
+        --r-full: 999px;
+
+        /* one type scale */
+        --t-xs: 11px;
+        --t-sm: 12px;
+        --t-md: 14px;
+        --t-lg: 16px;
+
+        /* rhythm — retuned per viewport height, see the density tiers below */
+        --pad-x: 32px;
+        --gap: 18px;
+        --card-pad: 20px;
+        --donut: 56px;
+        --head-pad: 16px;
+        --hz-h: 68px;
+
         --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
         --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
       }
+
+      /* Density tiers: the dashboard has to fit a laptop without scrolling. */
+      @media (max-height: 940px) {
+        :root {
+          --pad-x: 26px;
+          --gap: 13px;
+          --card-pad: 15px;
+          --donut: 42px;
+          --head-pad: 11px;
+          --hz-h: 58px;
+        }
+        .sub { display: none; }
+      }
+      @media (max-height: 820px) {
+        :root {
+          --pad-x: 22px;
+          --gap: 10px;
+          --card-pad: 12px;
+          --donut: 36px;
+          --head-pad: 8px;
+          --hz-h: 48px;
+        }
+      }
+
       * { box-sizing: border-box; }
-      html { scroll-behavior: smooth; }
+      h1, h2, p { margin: 0; }
       body {
         margin: 0;
-        font: 15px/1.5 "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+        font: var(--t-md) / 1.5 "Schibsted Grotesk", "Schibsted Fallback", sans-serif;
         color: var(--text);
         background: var(--bg);
         min-height: 100vh;
@@ -38,211 +136,383 @@
       }
       ::selection { background: rgba(91, 140, 255, 0.35); }
 
-      /* ---------- backdrop: aurora + grid + grain ---------- */
+      /* One designed focus ring for the whole product. */
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+        border-radius: var(--r-sm);
+      }
+      .skip {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 100;
+        padding: 10px 16px;
+        border-radius: var(--r-md);
+        background: var(--accent);
+        color: #04060d;
+        font-weight: 600;
+        text-decoration: none;
+        transform: translateY(-200%);
+        transition: transform 0.2s var(--ease-out);
+      }
+      .skip { display: inline-flex; align-items: center; min-height: 44px; }
+      .skip:focus-visible { transform: translateY(0); }
+      .vh {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
+      /* ---------- backdrop ---------- */
       .aurora { position: fixed; inset: 0; z-index: -3; overflow: hidden; }
       .aurora i {
         position: absolute;
         border-radius: 50%;
-        filter: blur(100px);
-        opacity: 0.55;
-        animation: drift 26s ease-in-out infinite alternate;
-        will-change: transform;
+        filter: blur(110px);
+        opacity: 0.4;
+        animation: drift 34s ease-in-out infinite alternate;
       }
-      .aurora i:nth-child(1) { width: 50vw; height: 50vw; left: -14vw; top: -16vw; background: radial-gradient(circle, rgba(91, 140, 255, 0.38), transparent 65%); }
-      .aurora i:nth-child(2) { width: 42vw; height: 42vw; right: -10vw; top: -8vw; background: radial-gradient(circle, rgba(155, 91, 255, 0.32), transparent 65%); animation-delay: -8s; animation-duration: 32s; }
-      .aurora i:nth-child(3) { width: 46vw; height: 46vw; left: 30vw; bottom: -24vw; background: radial-gradient(circle, rgba(63, 185, 140, 0.22), transparent 65%); animation-delay: -16s; animation-duration: 38s; }
+      .aurora i:nth-child(1) {
+        width: 46vw; height: 46vw; left: -12vw; top: -18vw;
+        background: radial-gradient(circle, rgba(91, 140, 255, 0.34), transparent 65%);
+      }
+      .aurora i:nth-child(2) {
+        width: 40vw; height: 40vw; right: -10vw; bottom: -22vw;
+        background: radial-gradient(circle, rgba(155, 91, 255, 0.26), transparent 65%);
+        animation-delay: -14s; animation-duration: 42s;
+      }
       @keyframes drift {
-        from { transform: translate(0, 0) scale(1); }
-        to { transform: translate(7vw, 5vh) scale(1.18); }
+        from { transform: translate3d(0, 0, 0) scale(1); }
+        to { transform: translate3d(5vw, 4vh, 0) scale(1.14); }
       }
       .gridlines {
         position: fixed; inset: 0; z-index: -2; pointer-events: none;
         background-image:
-          linear-gradient(rgba(120, 150, 200, 0.05) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(120, 150, 200, 0.05) 1px, transparent 1px);
+          linear-gradient(rgba(120, 150, 200, 0.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(120, 150, 200, 0.045) 1px, transparent 1px);
         background-size: 72px 72px;
-        mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 30%, transparent 75%);
+        mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, black 25%, transparent 78%);
       }
+      /* Static grain: texture without a repaint every 225ms. */
       .grain {
-        position: fixed; inset: -50%; z-index: 60; pointer-events: none;
-        width: 200%; height: 200%;
-        opacity: 0.05;
+        position: fixed; inset: 0; z-index: 60; pointer-events: none;
+        opacity: 0.045;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-        animation: grain 0.9s steps(4) infinite;
-      }
-      @keyframes grain {
-        0% { transform: translate(0, 0); }
-        25% { transform: translate(-2%, 3%); }
-        50% { transform: translate(3%, -2%); }
-        75% { transform: translate(-3%, -3%); }
-        100% { transform: translate(2%, 2%); }
       }
 
-      /* ---------- custom cursor ---------- */
+      /* ---------- cursor: additive ring, native cursor kept where it carries meaning ---------- */
       @media (pointer: fine) {
-        body, button, a, input, summary { cursor: none; }
+        body, button, a, summary { cursor: none; }
+        input, textarea { cursor: text; }
         .cur, .cur-ring { position: fixed; top: 0; left: 0; z-index: 70; pointer-events: none; border-radius: 50%; }
         .cur { width: 7px; height: 7px; background: #fff; mix-blend-mode: difference; }
-        .cur-ring {
-          width: 36px; height: 36px;
+        /* JS drives the wrapper's translate; the ring itself only ever scales. */
+        .cur-ring { width: 54px; height: 54px; }
+        .cur-ring::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border-radius: 50%;
           border: 1px solid rgba(160, 190, 255, 0.5);
-          transition: width 0.25s var(--ease-out), height 0.25s var(--ease-out), border-color 0.25s, background 0.25s;
+          transform: scale(0.63);
+          transition: transform 0.25s var(--ease-out), border-color 0.25s, background 0.25s;
         }
-        .cur-ring.on {
-          width: 56px; height: 56px;
+        .cur-ring.on::before {
+          transform: scale(1);
           border-color: rgba(160, 190, 255, 0.9);
           background: rgba(91, 140, 255, 0.08);
         }
       }
       @media (pointer: coarse) { .cur, .cur-ring { display: none; } }
 
-      /* ---------- header / hero ---------- */
+      /* ---------- header ---------- */
+      /* One measure for the whole page: header, horizon, cards and footer all start
+         and end on the same two vertical lines. */
+      .wrap {
+        max-width: 1500px;
+        margin: 0 auto;
+        padding: var(--head-pad) var(--pad-x);
+      }
       header {
-        position: sticky;
-        top: 0;
-        z-index: 10;
+        border-bottom: 1px solid var(--line);
+        background: rgba(5, 6, 11, 0.55);
+        backdrop-filter: blur(18px) saturate(1.4);
+      }
+      header .wrap {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        padding: 22px 32px;
-        border-bottom: 1px solid var(--border);
-        background: rgba(5, 6, 11, 0.6);
-        backdrop-filter: blur(18px) saturate(1.5);
+        gap: var(--gap);
         flex-wrap: wrap;
       }
+      /* The title box absorbs the slack, so the buttons sit against the right edge
+         whatever width the display face turns out to be once it swaps in. */
+      header .wrap > :first-child { flex: 1 1 auto; min-width: 0; }
       h1 {
         margin: 0;
         font-family: "Syne", sans-serif;
         font-weight: 800;
-        font-size: clamp(30px, 4vw, 44px);
-        letter-spacing: -1.5px;
+        font-size: clamp(24px, 2.4vw, 34px);
+        letter-spacing: -1.2px;
         line-height: 1;
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 11px;
       }
-      h1 .logo-mark {
-        width: 40px; height: 40px;
-        filter: drop-shadow(0 0 14px rgba(91, 140, 255, 0.6));
-        animation: logospin 14s linear infinite;
-      }
-      @keyframes logospin { to { transform: rotate(360deg); } }
+      h1 .logo-mark { width: 1em; height: 1em; }
       h1 .grad {
-        background: linear-gradient(92deg, #fff 10%, var(--accent) 55%, var(--violet) 90%);
+        background: linear-gradient(92deg, #fff 10%, var(--accent) 58%, var(--violet) 92%);
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
-        background-size: 200% 100%;
-        animation: gradslide 7s ease-in-out infinite alternate;
       }
-      @keyframes gradslide { to { background-position: 100% 0; } }
       h1 .ch {
         display: inline-block;
         animation: chrise 0.7s var(--ease-expo) backwards;
-        animation-delay: calc(var(--i) * 34ms);
+        animation-delay: calc(var(--i) * 32ms);
       }
-      @keyframes chrise { from { opacity: 0; transform: translateY(0.6em) rotate(6deg); } }
+      @keyframes chrise { from { opacity: 0; transform: translateY(0.55em) rotate(5deg); } }
       .sub {
-        color: var(--muted); font-size: 13px; margin-top: 6px; max-width: 60ch;
-        animation: fadein 0.8s var(--ease-out) 0.5s backwards;
+        color: var(--muted);
+        font-size: var(--t-sm);
+        margin-top: 5px;
+        max-width: 56ch;
+        animation: fadein 0.7s var(--ease-out) 0.45s backwards;
       }
       .sub b { color: var(--text); font-weight: 600; }
+      .actions { display: flex; gap: 10px; }
 
       button {
         font: inherit;
-        cursor: pointer;
-        border-radius: 10px;
-        border: 1px solid var(--border);
-        background: var(--panel2);
+        border-radius: var(--r-md);
+        border: 1px solid var(--line);
+        background: var(--surface-solid);
         color: var(--text);
-        padding: 8px 14px;
+        min-height: 44px;
+        padding: 0 16px;
         transition: transform 0.2s var(--ease-out), background 0.2s, border-color 0.2s, box-shadow 0.2s;
       }
-      button:hover { background: #1d2740; border-color: #35415a; transform: translateY(-1px); }
-      button:active { transform: translateY(0) scale(0.98); }
+      button:hover { background: #1c2740; border-color: var(--line-strong); transform: translateY(-1px); }
+      button:active { transform: translateY(0) scale(0.985); }
       button.primary {
         position: relative;
         background: linear-gradient(135deg, #5b8cff, #7b5bff);
         border: none;
         color: #fff;
         font-weight: 600;
-        box-shadow: 0 4px 18px rgba(91, 140, 255, 0.4);
         overflow: hidden;
       }
       button.primary::after {
         content: "";
         position: absolute; inset: 0;
-        background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
+        background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.32) 50%, transparent 70%);
         transform: translateX(-120%);
         transition: transform 0.6s var(--ease-out);
       }
       button.primary:hover::after { transform: translateX(120%); }
 
-      /* ---------- marquee ---------- */
-      .marquee {
+      /* ================================================================
+         THE HORIZON — the one idea. Every reset the six providers will
+         perform, plotted on a single non-linear time axis: now → 7 days.
+         Hovering a marker lights its card; hovering a card lights its
+         markers. It answers the question the percentages cannot:
+         "quando torno operativo?"
+         ================================================================ */
+      .horizon {
+        border-bottom: 1px solid var(--line);
+        background: rgba(5, 6, 11, 0.35);
+      }
+      /* The rail and the cards share one left edge, so a marker and its card read
+         as two views of the same thing. */
+      .horizon .wrap { padding-top: calc(var(--head-pad) + 2px); }
+      /* Fixed height: the headline goes from "loading" to the real countdown without
+         moving the rail — and therefore the whole page — underneath it. */
+      .hz-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 14px;
+        min-height: 22px;
+        margin-bottom: 6px;
         overflow: hidden;
-        border-bottom: 1px solid var(--border);
-        padding: 8px 0;
-        background: rgba(5, 6, 11, 0.4);
-        mask-image: linear-gradient(90deg, transparent, black 8%, black 92%, transparent);
       }
-      .marquee ul {
-        display: flex; gap: 0; margin: 0; padding: 0; list-style: none;
-        width: max-content;
-        animation: scrollx 30s linear infinite;
-      }
-      .marquee li {
-        font-family: "JetBrains Mono", monospace;
-        font-size: 11px;
-        letter-spacing: 2.5px;
+      .hz-next { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+      .hz-label {
+        font-family: "JetBrains Mono", "Mono Fallback", monospace;
+        font-size: var(--t-xs);
+        letter-spacing: 2.4px;
         text-transform: uppercase;
-        color: var(--idle);
-        padding: 0 26px;
+        color: var(--dim);
+      }
+      .hz-next { font-size: var(--t-sm); color: var(--muted); flex: 0 1 auto; min-width: 0; }
+      .hz-next b { color: var(--text); font-weight: 600; }
+      .hz-next .cd {
+        font-family: "JetBrains Mono", "Mono Fallback", monospace;
+        color: var(--accent);
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* Right inset keeps the "7g" tick label and its markers off the viewport edge. */
+      .hz-rail {
+        position: relative;
+        height: var(--hz-h);
+        margin: 0 26px 20px 0;
+        border-bottom: 1px solid var(--line-strong);
+      }
+      /* axis ticks */
+      .hz-tick {
+        position: absolute;
+        bottom: 0;
+        top: 8px;
+        width: 1px;
+        background: linear-gradient(rgba(120, 150, 200, 0), rgba(120, 150, 200, 0.16));
+        pointer-events: none;
+      }
+      .hz-tick span {
+        position: absolute;
+        bottom: -17px;
+        left: 0;
+        transform: translateX(-50%);
+        font-family: "JetBrains Mono", "Mono Fallback", monospace;
+        font-size: 9px;
+        letter-spacing: 1.4px;
+        color: var(--dim);
         white-space: nowrap;
       }
-      .marquee li b { color: var(--accent); font-weight: 500; }
-      @keyframes scrollx { to { transform: translateX(-50%); } }
-
-      /* ---------- cards ---------- */
-      main {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-        gap: 22px;
-        padding: 30px 32px 56px;
-        max-width: 1340px;
-        margin: 0 auto;
-        perspective: 1200px;
+      .hz-tick.is-first span { transform: none; }
+      /* the live playhead */
+      .hz-now {
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 2px;
+        background: linear-gradient(rgba(91, 140, 255, 0), var(--accent));
+        box-shadow: 0 0 12px rgba(91, 140, 255, 0.7);
       }
-      .card {
-        position: relative;
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 20px;
-        padding: 24px;
+
+      .hz-mark {
+        position: absolute;
+        bottom: 0;
+        width: 44px; /* touch target; the visual is the 2px stem inside */
+        height: 100%;
+        margin-left: -22px;
+        padding: 0;
+        border: none;
+        background: none;
+        min-height: 0;
         display: flex;
         flex-direction: column;
-        gap: 15px;
+        justify-content: flex-end;
+        align-items: center;
+        transition: none;
+      }
+      .hz-mark:hover { background: none; transform: none; }
+      .hz-stem {
+        width: 3px;
+        height: var(--h, 40%);
+        border-radius: 2px 2px 0 0;
+        background: linear-gradient(transparent, var(--c, var(--accent)));
+        opacity: 0.55;
+        transform-origin: bottom;
+        transform: scaleX(0.667);
+        animation: stem 0.7s var(--ease-expo) backwards;
+        animation-delay: var(--d, 0ms);
+        transition: opacity 0.25s, transform 0.25s var(--ease-out);
+      }
+      @keyframes stem { from { transform: scaleX(0.667) scaleY(0); } }
+      .hz-dot {
+        position: absolute;
+        bottom: calc(var(--h, 40%) - 9px);
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        /* The --bg ring is what keeps two adjacent resets legible as two marks. */
+        box-shadow: 0 0 0 2.5px var(--bg), 0 0 12px -2px var(--c, var(--accent));
+        animation: dotin 0.5s var(--ease-out) backwards;
+        animation-delay: calc(var(--d, 0ms) + 180ms);
+        transition: transform 0.25s var(--ease-out);
+      }
+      .hz-dot svg { width: 12px; height: 12px; }
+      .hz-dot img { padding: 3.5px; }
+      @keyframes dotin { from { opacity: 0; transform: scale(0.2); } }
+      .hz-mark:hover .hz-stem,
+      .hz-mark:focus-visible .hz-stem,
+      .hz-mark.linked .hz-stem { opacity: 1; width: 3px; }
+      /* Raised above its neighbours so an enlarged mark is never half-covered. */
+      .hz-mark:hover, .hz-mark:focus-visible, .hz-mark.linked { z-index: 2; }
+      .hz-mark:hover .hz-dot,
+      .hz-mark:focus-visible .hz-dot,
+      .hz-mark.linked .hz-dot { transform: scale(1.35); }
+      /* the nearest reset breathes — the only looping motion left on the page */
+      .hz-mark.imminent .hz-dot { animation: dotin 0.5s var(--ease-out) backwards, breathe 2.4s ease-in-out 1s infinite; }
+      @keyframes breathe { 50% { box-shadow: 0 0 0 3px var(--bg), 0 0 20px 2px var(--c, var(--accent)); } }
+
+      .hz-tip {
+        position: fixed;
+        z-index: 80;
+        pointer-events: none;
+        padding: 8px 11px;
+        border-radius: var(--r-sm);
+        border: 1px solid var(--line-strong);
+        background: rgba(10, 14, 24, 0.96);
+        backdrop-filter: blur(8px);
+        font-size: var(--t-sm);
+        line-height: 1.35;
+        white-space: nowrap;
+        opacity: 0;
+        transform: translate(-50%, -8px);
+        transition: opacity 0.16s;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      }
+      .hz-tip.on { opacity: 1; }
+      .hz-tip .tp { color: var(--dim); font-size: var(--t-xs); }
+      .hz-tip .tc { font-family: "JetBrains Mono", "Mono Fallback", monospace; color: var(--accent); }
+
+      /* ---------- cards: multi-column flow, so a short card is never stretched ---------- */
+      /* Column flow instead of a grid: a provider with one metric stays short instead
+         of being stretched to the height of the tallest card in its row. */
+      main {
+        columns: 3;
+        column-gap: var(--gap);
+        padding: var(--gap) var(--pad-x) calc(var(--gap) + 4px);
+        max-width: 1500px;
+        margin: 0 auto;
+      }
+      /* One column per provider as soon as there is room: the six cards land side by
+         side instead of stacking into a scroll, on every common desktop and laptop. */
+      @media (min-width: 1240px) { main { columns: 4; } }
+      @media (max-width: 1180px) { main { columns: 2; } }
+      @media (max-width: 720px) { main { columns: 1; } }
+
+      .card {
+        position: relative;
+        break-inside: avoid;
+        margin-bottom: var(--gap);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        padding: var(--card-pad);
+        display: flex;
+        flex-direction: column;
+        gap: calc(var(--card-pad) * 0.55);
         min-width: 0;
-        backdrop-filter: blur(16px) saturate(1.35);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(16px) saturate(1.3);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
         transition: transform 0.3s var(--ease-out), border-color 0.3s, box-shadow 0.3s;
         animation: rise 0.6s var(--ease-out) backwards;
         animation-delay: var(--d, 0ms);
         overflow: hidden;
-        transform-style: preserve-3d;
       }
-      /* spotlight that follows the pointer */
       .card::after {
         content: "";
         position: absolute; inset: 0;
-        background: radial-gradient(320px circle at var(--mx, 50%) var(--my, 50%), rgba(140, 175, 255, 0.09), transparent 65%);
+        background: radial-gradient(300px circle at var(--mx, 50%) var(--my, 50%), rgba(140, 175, 255, 0.09), transparent 65%);
         opacity: 0;
         transition: opacity 0.3s;
         pointer-events: none;
       }
-      .card:hover::after { opacity: 1; }
-      /* top accent line that lights up on hover */
       .card::before {
         content: "";
         position: absolute;
@@ -253,103 +523,144 @@
         transition: opacity 0.3s;
         z-index: 1;
       }
-      .card:hover {
-        transform: translateY(-5px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
-        border-color: rgba(140, 170, 220, 0.32);
-        box-shadow: 0 22px 50px rgba(0, 0, 0, 0.5), 0 0 34px -8px var(--brand, var(--accent));
+      /* Elevation and the brand hairline do the work here. Coloured glow is reserved
+         for the horizon, where it encodes time pressure rather than decoration. */
+      .card:hover, .card.linked, .card:focus-within {
+        transform: translateY(-4px);
+        border-color: var(--line-strong);
+        box-shadow: 0 20px 46px rgba(0, 0, 0, 0.55);
       }
-      .card:hover::before { opacity: 1; }
-      @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(0.97); } }
+      .card:hover::after, .card.linked::after { opacity: 1; }
+      .card:hover::before, .card.linked::before { opacity: 1; }
+      @keyframes rise { from { opacity: 0; transform: translateY(16px); } }
 
-      .card-top { display: flex; align-items: center; gap: 12px; }
-      .avatar {
+      .card-top { display: flex; align-items: center; gap: 11px; }
+      /* One brand plate, two sizes: the card avatar and the horizon marker. The
+         drawn glyph and the official logo stack, so losing the file degrades
+         instead of leaving a hole. */
+      .avatar, .hz-dot {
         position: relative;
-        width: 44px;
-        height: 44px;
         flex: none;
-        border-radius: 13px;
         display: grid;
         place-items: center;
-        font-weight: 800;
-        font-size: 18px;
         color: #fff;
         background: linear-gradient(135deg, var(--b1, #1e293b), var(--b2, #0f172a));
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-        transition: transform 0.3s var(--ease-out);
+        border: 1px solid rgba(255, 255, 255, 0.16);
         overflow: hidden;
       }
-      .card:hover .avatar { transform: scale(1.06) rotate(-3deg); }
-      .avatar img {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        border-radius: 12px;
-        display: block;
+      .avatar > *, .hz-dot > * { grid-area: 1 / 1; }
+      .avatar img, .hz-dot img { width: 100%; height: 100%; object-fit: contain; display: block; }
+      /* Icons that arrive with their own brand background cover the plate entirely,
+         so nothing of ours tints them. */
+      .avatar.is-full img, .hz-dot.is-full img { object-fit: cover; padding: 0; }
+
+      .avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--r-md);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+        transition: transform 0.3s var(--ease-out);
       }
+      .card:hover .avatar, .card.linked .avatar { transform: scale(1.06) rotate(-3deg); }
+      .avatar svg { width: 22px; height: 22px; }
+      .avatar img { padding: 7px; }
       .titles { flex: 1; min-width: 0; }
-      .name { font-family: "Syne", sans-serif; font-weight: 700; font-size: 17px; letter-spacing: -0.3px; }
-      .plan { color: var(--muted); font-size: 12px; margin-top: 1px; }
+      .name {
+        margin: 0;
+        font-family: "Syne", sans-serif;
+        font-weight: 700;
+        font-size: var(--t-lg);
+        letter-spacing: -0.3px;
+        line-height: 1.15;
+      }
+      .plan { color: var(--muted); font-size: var(--t-sm); margin-top: 2px; }
       .badge {
         display: inline-flex;
         align-items: center;
-        gap: 7px;
-        font-family: "JetBrains Mono", monospace;
+        gap: 6px;
+        font-family: "JetBrains Mono", "Mono Fallback", monospace;
         font-size: 10px;
         font-weight: 500;
         text-transform: uppercase;
         letter-spacing: 1px;
-        padding: 4px 11px;
-        border-radius: 999px;
+        padding: 4px 10px;
+        border-radius: var(--r-full);
         white-space: nowrap;
       }
-      .badge::before {
-        content: "";
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        background: currentColor;
-        animation: pulse 2s ease-in-out infinite;
-      }
-      @keyframes pulse { 50% { opacity: 0.35; transform: scale(0.8); } }
-      .b-ok { background: rgba(63, 185, 80, 0.14); color: var(--ok); }
-      .b-ok::before { box-shadow: 0 0 8px var(--ok); }
-      .b-partial, .b-rate_limited { background: rgba(210, 153, 34, 0.14); color: var(--warn); }
-      .b-unauthenticated, .b-no_endpoint { background: rgba(110, 118, 129, 0.16); color: var(--idle); }
-      .b-error { background: rgba(248, 81, 73, 0.14); color: var(--err); }
-      .b-error::before { box-shadow: 0 0 8px var(--err); }
+      .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+      .b-ok { background: rgba(63, 185, 80, 0.14); color: #56d364; }
+      .b-partial, .b-rate_limited { background: rgba(224, 167, 44, 0.14); color: #e3b341; }
+      .b-unauthenticated, .b-no_endpoint { background: rgba(125, 138, 158, 0.16); color: #a5b1c2; }
+      .b-error { background: rgba(248, 81, 73, 0.14); color: #ff7b72; }
 
-      .metric { display: flex; flex-direction: column; gap: 5px; animation: fadein 0.5s backwards; animation-delay: calc(var(--d, 0ms) + 120ms); }
-      .metric.with-donut { flex-direction: row; align-items: center; gap: 14px; }
-      @keyframes fadein { from { opacity: 0; transform: translateY(6px); } }
-      .metric-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-      .metric-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
-      .metric-head .val { color: var(--muted); font-variant-numeric: tabular-nums; }
-      .bar { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+      .metric { display: flex; align-items: center; gap: 12px; }
+      .metric-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+      .metric-head { display: flex; justify-content: space-between; gap: 8px; font-size: var(--t-md); }
+      .metric-head .val {
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+        font-size: var(--t-sm);
+        white-space: nowrap;
+      }
+      .bar { height: 6px; border-radius: var(--r-full); background: rgba(255, 255, 255, 0.06); overflow: hidden; }
       .bar > i {
         display: block;
         height: 100%;
-        width: 0;
-        border-radius: 999px;
+        width: 100%;
+        border-radius: var(--r-full);
         background: linear-gradient(90deg, var(--accent), #8fb3ff);
-        position: relative;
-        transition: width 1s var(--ease-out);
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform 1s var(--ease-out);
       }
-      .bar > i::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
-        animation: shimmer 2.2s linear infinite;
-      }
-      @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
       .bar.hot > i { background: linear-gradient(90deg, #b57a16, var(--warn)); }
       .bar.crit > i { background: linear-gradient(90deg, #c93c35, var(--err)); }
 
-      .models { font-size: 12px; }
-      .models summary { cursor: pointer; color: var(--muted); font-size: 12px; user-select: none; transition: color 0.2s; }
+      .donut, .donut-gap { width: var(--donut); flex: none; }
+      .donut { height: var(--donut); transform: rotate(-90deg); overflow: visible; }
+      .donut .track { fill: none; stroke: rgba(255, 255, 255, 0.09); stroke-width: 5; }
+      /* A 0% arc still shows a cap, so "nothing used" reads as a state, not as a bug. */
+      .donut .arc {
+        fill: none;
+        stroke: var(--c);
+        stroke-width: 5;
+        stroke-linecap: round;
+        stroke-dasharray: 113.1;
+        stroke-dashoffset: var(--off);
+        animation: fill 1.1s var(--ease-out);
+      }
+      @keyframes fill { from { stroke-dashoffset: 113.1; } }
+      .donut .pct {
+        fill: var(--text);
+        font-size: 12px;
+        font-weight: 700;
+        text-anchor: middle;
+        font-family: "JetBrains Mono", "Mono Fallback", monospace;
+      }
+
+      .models summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: var(--t-sm);
+        user-select: none;
+        min-height: 24px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        list-style: none;
+        transition: color 0.2s;
+      }
+      .models summary::-webkit-details-marker { display: none; }
+      /* Custom disclosure caret: the flex summary drops the native marker. */
+      .models summary::before {
+        content: "";
+        width: 0;
+        height: 0;
+        border: 4px solid transparent;
+        border-left-color: currentColor;
+        transition: transform 0.2s var(--ease-out);
+      }
+      .models[open] summary::before { transform: rotate(90deg) translateX(1px); }
       .models summary:hover { color: var(--text); }
       .mrow {
         display: flex;
@@ -357,54 +668,45 @@
         gap: 10px;
         padding: 5px 2px;
         border-top: 1px dashed rgba(120, 150, 200, 0.14);
-        font-size: 12px;
+        font-size: var(--t-sm);
       }
-      .mrow:first-of-type { margin-top: 6px; }
-      .mrow .mi { color: var(--muted); text-align: right; font-size: 11px; }
-      .mnote { color: var(--idle); font-size: 10px; padding: 4px 2px 0; }
+      .mrow .mi { color: var(--muted); text-align: right; font-size: var(--t-xs); }
+      .mnote { color: var(--dim); font-size: 10px; padding: 4px 2px 0; }
 
-      .donut { width: 70px; height: 70px; flex: none; transform: rotate(-90deg); overflow: visible; }
-      .donut .track { fill: none; stroke: rgba(255, 255, 255, 0.07); stroke-width: 5.5; }
-      .donut .arc {
-        fill: none;
-        stroke: var(--c);
-        stroke-width: 5.5;
-        stroke-linecap: round;
-        stroke-dasharray: 113.1;
-        stroke-dashoffset: var(--off);
-        animation: fill 1.1s var(--ease-out);
-        transition: stroke 0.4s;
-      }
-      @keyframes fill { from { stroke-dashoffset: 113.1; } }
-      .donut .pct { fill: var(--text); font-size: 11px; font-weight: 700; text-anchor: middle; font-family: "JetBrains Mono", monospace; }
-
-      .msg { color: var(--muted); font-size: 13px; }
-      .reset { color: var(--idle); font-size: 11px; font-family: "JetBrains Mono", monospace; }
+      .msg { color: var(--muted); font-size: var(--t-sm); }
+      .src { font-size: var(--t-sm); color: var(--dim); }
+      .reset { color: var(--dim); font-size: var(--t-xs); font-family: "JetBrains Mono", "Mono Fallback", monospace; }
       .keyrow { display: flex; gap: 8px; }
       .keyrow input {
         flex: 1;
         min-width: 0;
         font: inherit;
+        min-height: 44px;
         background: rgba(5, 6, 11, 0.55);
-        border: 1px solid var(--border);
-        border-radius: 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
         color: var(--text);
-        padding: 8px 10px;
+        padding: 0 12px;
         outline: none;
         transition: border-color 0.2s, box-shadow 0.2s;
       }
-      .keyrow input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.18); }
+      .keyrow input:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91, 140, 255, 0.18); outline: none; }
       .card-foot {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 10px;
         margin-top: auto;
-        padding-top: 6px;
+        padding-top: 4px;
         border-top: 1px solid rgba(120, 150, 200, 0.1);
       }
       .card-foot a {
-        color: var(--accent); text-decoration: none; font-size: 13px;
+        color: var(--accent);
+        text-decoration: none;
+        font-size: var(--t-sm);
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
         background-image: linear-gradient(currentColor, currentColor);
         background-size: 0 1px;
         background-repeat: no-repeat;
@@ -412,91 +714,195 @@
         transition: background-size 0.3s var(--ease-out);
       }
       .card-foot a:hover { background-size: 100% 1px; }
-      .mini { font-size: 12px; color: var(--muted); background: transparent; border: none; padding: 4px 6px; }
-      .mini:hover { color: var(--text); background: transparent; }
-      .src { font-size: 11px; color: var(--idle); }
+      .mini {
+        font-size: var(--t-sm);
+        color: var(--muted);
+        background: transparent;
+        border: none;
+        min-height: 32px;
+        padding: 0 6px;
+      }
+      .mini:hover { color: var(--text); background: transparent; transform: none; }
       .login-btn {
         display: block;
         width: 100%;
         border: none;
         text-align: center;
-        padding: 11px 14px;
-        border-radius: 11px;
+        border-radius: var(--r-md);
         font-weight: 600;
-        font-size: 14px;
         color: #fff;
         background: linear-gradient(135deg, #4285f4, #9b72cf);
-        box-shadow: 0 4px 18px rgba(66, 133, 244, 0.4);
-        transition: transform 0.2s var(--ease-out), box-shadow 0.2s;
       }
-      .login-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 26px rgba(66, 133, 244, 0.55); }
+      .login-btn:hover { background: linear-gradient(135deg, #5090f5, #a681d6); }
       .login-btn:disabled { opacity: 0.6; cursor: wait; }
       .spin { animation: sp 0.8s linear infinite; display: inline-block; }
       @keyframes sp { to { transform: rotate(360deg); } }
+      @keyframes fadein { from { opacity: 0; transform: translateY(6px); } }
 
-      footer {
-        padding: 20px 32px 28px;
-        border-top: 1px solid var(--border);
+      /* ---------- loading: real skeletons at the real height, so nothing shifts ---------- */
+      .card.is-skeleton { pointer-events: none; }
+      .card.is-skeleton::before { opacity: 0.12; }
+      .sk {
+        border-radius: var(--r-sm);
+        background: linear-gradient(90deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.045));
+        background-size: 220% 100%;
+        animation: sweep 1.5s linear infinite;
+      }
+      @keyframes sweep { to { background-position: -220% 0; } }
+      .sk-av { width: 40px; height: 40px; border-radius: var(--r-md); flex: none; }
+      .sk-line { height: 11px; }
+      .sk-sub { height: 9px; width: 34%; margin-top: 5px; }
+      .sk-det { height: 12px; width: 46%; }
+      .sk-foot { height: 14px; width: 60%; margin-top: auto; }
+      .sk-donut { width: var(--donut); height: var(--donut); border-radius: 50%; flex: none; }
+
+      footer { border-top: 1px solid var(--line); }
+      footer .wrap {
         display: flex;
-        justify-content: space-between;
         gap: 12px;
         flex-wrap: wrap;
-        color: var(--idle);
-        font-size: 12px;
-        font-family: "JetBrains Mono", monospace;
+        color: var(--dim);
+        font-size: var(--t-sm);
+        font-family: "JetBrains Mono", "Mono Fallback", monospace;
         letter-spacing: 0.5px;
       }
+      footer .wrap > :first-child { flex: 1 1 auto; }
 
       @media (max-width: 600px) {
-        header { align-items: flex-start; padding: 18px 16px; }
-        header > div:last-child { width: 100%; }
-        header button { flex: 1; }
-        h1 { font-size: 30px; }
-        h1 .logo-mark { width: 34px; height: 34px; }
-        main { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 20px 16px 40px; }
-        .card { padding: 18px; border-radius: 16px; }
-        .card-top { align-items: flex-start; flex-wrap: wrap; }
-        .badge { margin-left: 56px; }
-        .metric.with-donut { align-items: flex-start; }
-        footer { padding: 18px 16px 24px; }
+        :root { --pad-x: 16px; }
+        header .wrap { align-items: flex-start; }
+        /* Two lines instead of one cramped row: the section name keeps its place
+           and the countdown gets the full width it needs. */
+        .hz-head { flex-direction: column; align-items: flex-start; gap: 2px; min-height: 0; }
+        .hz-label { white-space: nowrap; }
+        .hz-next { max-width: 100%; }
+        .actions { width: 100%; }
+        .actions button { flex: 1; }
+        .card-top { align-items: flex-start; }
+        .name { font-size: var(--t-md); }
+      }
+
+      /* Touch gets the generous targets; a mouse keeps the dense layout.
+         Last in the sheet so it wins over the desktop sizes above. */
+      @media (pointer: coarse) {
+        .models summary { min-height: 44px; }
+        .card-foot a, .mini { min-height: 44px; }
+        .hz-mark { width: 48px; margin-left: -24px; }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+        .aurora i { animation: none; }
       }
     </style>
   </head>
   <body>
-    <div class="aurora"><i></i><i></i><i></i></div>
+    <a class="skip" href="#grid">Salta alle card provider</a>
+
+    <div class="aurora"><i></i><i></i></div>
     <div class="gridlines"></div>
     <div class="grain"></div>
     <div class="cur"></div>
     <div class="cur-ring"></div>
 
     <header>
+     <div class="wrap">
       <div>
         <h1>
-          <img class="logo-mark" src="/logo.svg" alt="" />
+          <img class="logo-mark" src="/logo.svg" alt="" width="40" height="40" />
           <span class="grad" id="title">LLM Quota</span>
         </h1>
-        <div class="sub">Stato quota delle tue sub AI — legge i <b>login CLI esistenti</b> + key salvate localmente</div>
+        <p class="sub">
+          Sei abbonamenti AI, <b>un solo orizzonte</b> — legge i login CLI già sul tuo disco, non esce mai da localhost.
+        </p>
       </div>
-      <div style="display:flex;gap:10px">
+      <div class="actions">
         <button id="openWidget" title="Apri il widget desktop sul PC">▣ Widget</button>
         <button class="primary" id="refreshAll">↻ Aggiorna tutto</button>
       </div>
+     </div>
     </header>
 
-    <div class="marquee" aria-hidden="true">
-      <ul id="marq"></ul>
-    </div>
+    <section class="horizon" aria-labelledby="hzTitle">
+      <div class="wrap">
+        <div class="hz-head">
+          <h2 class="hz-label" id="hzTitle">Orizzonte reset</h2>
+          <p class="hz-next" id="hzNext">Lettura quote in corso…</p>
+        </div>
+        <div class="hz-rail" id="hzRail">
+          <div class="hz-now"></div>
+        </div>
+        <p class="vh" id="hzText"></p>
+      </div>
+    </section>
 
-    <main id="grid"></main>
+    <!--
+      Static skeletons, not JS-generated: the module script is deferred, so anything
+      built in JS would land after first paint and push the whole page down. These
+      ship in the HTML, so the layout is final before a single byte of quota arrives.
+      Row counts mirror what each provider actually reports.
+    -->
+    <main id="grid" tabindex="-1">
+      <div class="card is-skeleton" data-provider="claude" style="--d:0ms;--brand:#d97757">
+        <div class="card-top"><div class="sk sk-av"></div><div class="titles"><div class="sk sk-line" style="width:54%"></div><div class="sk sk-line sk-sub"></div></div></div>
+        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:62%"></div><div class="sk sk-line sk-sub" style="width:38%"></div></div></div>
+        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:58%"></div><div class="sk sk-line sk-sub" style="width:34%"></div></div></div>
+        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:50%"></div><div class="sk sk-line sk-sub" style="width:30%"></div></div></div>
+        <div class="sk sk-line sk-det"></div>
+        <div class="sk sk-line sk-foot"></div>
+      </div>
+      <div class="card is-skeleton" data-provider="codex" style="--d:70ms;--brand:#10a37f">
+        <div class="card-top"><div class="sk sk-av"></div><div class="titles"><div class="sk sk-line" style="width:60%"></div><div class="sk sk-line sk-sub"></div></div></div>
+        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:60%"></div><div class="sk sk-line sk-sub" style="width:36%"></div></div></div>
+        <div class="sk sk-line sk-det"></div>
+        <div class="sk sk-line sk-foot"></div>
+      </div>
+      <div class="card is-skeleton" data-provider="zai" style="--d:140ms;--brand:#4f7cff">
+        <div class="card-top"><div class="sk sk-av"></div><div class="titles"><div class="sk sk-line" style="width:38%"></div><div class="sk sk-line sk-sub"></div></div></div>
+        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:58%"></div><div class="sk sk-line sk-sub" style="width:36%"></div></div></div>
+        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:48%"></div><div class="sk sk-line sk-sub" style="width:32%"></div></div></div>
+        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:54%"></div><div class="sk sk-line sk-sub" style="width:34%"></div></div></div>
+        <div class="sk sk-line sk-det"></div>
+        <div class="sk sk-line sk-foot"></div>
+      </div>
+      <div class="card is-skeleton" data-provider="opencode-zen" style="--d:210ms;--brand:#9b5bff">
+        <div class="card-top"><div class="sk sk-av"></div><div class="titles"><div class="sk sk-line" style="width:64%"></div><div class="sk sk-line sk-sub"></div></div></div>
+        <div class="sk sk-line sk-det"></div>
+        <div class="sk sk-line" style="width:100%"></div>
+        <div class="sk sk-line" style="width:78%"></div>
+        <div class="sk sk-line sk-foot"></div>
+      </div>
+      <div class="card is-skeleton" data-provider="gemini" style="--d:280ms;--brand:#4285f4">
+        <div class="card-top"><div class="sk sk-av"></div><div class="titles"><div class="sk sk-line" style="width:44%"></div><div class="sk sk-line sk-sub"></div></div></div>
+        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:74%"></div><div class="sk sk-line sk-sub" style="width:40%"></div></div></div>
+        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:70%"></div><div class="sk sk-line sk-sub" style="width:38%"></div></div></div>
+        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:76%"></div><div class="sk sk-line sk-sub" style="width:36%"></div></div></div>
+        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:72%"></div><div class="sk sk-line sk-sub" style="width:34%"></div></div></div>
+        <div class="sk sk-line sk-det"></div>
+        <div class="sk sk-line sk-foot"></div>
+      </div>
+      <div class="card is-skeleton" data-provider="moonshot" style="--d:350ms;--brand:#0ea5e9">
+        <div class="card-top"><div class="sk sk-av"></div><div class="titles"><div class="sk sk-line" style="width:58%"></div><div class="sk sk-line sk-sub"></div></div></div>
+        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:56%"></div><div class="sk sk-line sk-sub" style="width:34%"></div></div></div>
+        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:60%"></div><div class="sk sk-line sk-sub" style="width:36%"></div></div></div>
+        <div class="sk sk-line sk-det"></div>
+        <div class="sk sk-line sk-foot"></div>
+      </div>
+    </main>
 
     <footer>
-      <span>LLM QUOTA © 2026</span>
-      <span>LOCAL-FIRST · ZERO TELEMETRIA</span>
+      <div class="wrap">
+        <span>LLM QUOTA © 2026</span>
+        <span>LOCAL-FIRST · ZERO TELEMETRIA · ZERO CDN</span>
+      </div>
     </footer>
+
+    <!-- Visual echo of each marker's aria-label; the label already speaks it. -->
+    <div class="hz-tip" id="hzTip" aria-hidden="true"></div>
 
     <script type="module" src="/app.js"></script>
   </body>
