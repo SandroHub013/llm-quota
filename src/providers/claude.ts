@@ -8,12 +8,31 @@ const CONSOLE = "https://claude.ai/settings/usage";
 // Shape varies; we defensively pull whatever rate-limit windows it returns.
 const USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 
+let cache: { result: QuotaResult; timestamp: number } | null = null;
+const CACHE_TTL_MS = 60_000; // Cache 60s per normal responses
+const RATE_LIMIT_TTL_MS = 3 * 60_000; // Cache 3m for 429 rate-limited responses
+
+export function clearClaudeCache() {
+  cache = null;
+}
+
 export const claude: Provider = {
   id: "claude",
   name: "Claude Code",
   consoleUrl: CONSOLE,
 
   async fetch(): Promise<QuotaResult> {
+    const now = Date.now();
+    if (cache) {
+      const ttl = cache.result.status === "rate_limited" ? RATE_LIMIT_TTL_MS : CACHE_TTL_MS;
+      if (now - cache.timestamp < ttl) {
+        return {
+          ...cache.result,
+          updatedAt: nowIso(),
+        };
+      }
+    }
+
     const base: QuotaResult = {
       id: "claude",
       name: "Claude Code",
@@ -25,11 +44,13 @@ export const claude: Provider = {
 
     const cred = await readClaude();
     if (!cred?.accessToken) {
-      return {
+      const res: QuotaResult = {
         ...base,
         status: "unauthenticated",
         message: "Nessun login trovato in ~/.claude/.credentials.json. Esegui `claude` e fai il login.",
       };
+      cache = { result: res, timestamp: now };
+      return res;
     }
 
     const expired = cred.expiresAt && cred.expiresAt < Date.now();
@@ -46,17 +67,18 @@ export const claude: Provider = {
       },
     });
 
+    let result: QuotaResult;
+
     if (res.status === 429) {
-      return {
+      result = {
         ...base,
         status: "rate_limited",
         authSource: "~/.claude/.credentials.json",
         metrics: [tokenMetric],
-        message: "Anthropic ha risposto 429 (rate limited). Riprova tra poco.",
+        message: "Anthropic ha risposto 429 (rate limited). In pausa per 3 minuti per permettere il reset del limit.",
       };
-    }
-    if (res.status === 401 || res.status === 403) {
-      return {
+    } else if (res.status === 401 || res.status === 403) {
+      result = {
         ...base,
         status: expired ? "unauthenticated" : "partial",
         authSource: "~/.claude/.credentials.json",
@@ -65,28 +87,30 @@ export const claude: Provider = {
           ? "Token OAuth scaduto: rifai il login con `claude`."
           : "Token presente ma l'endpoint usage ha rifiutato la richiesta (scope insufficienti).",
       };
+    } else {
+      const metrics = parseUsage(res.body);
+      if (res.ok && metrics.length) {
+        result = {
+          ...base,
+          status: "ok",
+          authSource: "~/.claude/.credentials.json",
+          metrics: [...metrics, tokenMetric],
+          raw: res.body,
+        };
+      } else {
+        result = {
+          ...base,
+          status: "partial",
+          authSource: "~/.claude/.credentials.json",
+          metrics: [tokenMetric],
+          message: "Login attivo. Endpoint usage raggiunto ma senza finestre di quota leggibili; controlla la console.",
+          raw: res.body ?? res.text?.slice(0, 300),
+        };
+      }
     }
 
-    const metrics = parseUsage(res.body);
-    if (res.ok && metrics.length) {
-      return {
-        ...base,
-        status: "ok",
-        authSource: "~/.claude/.credentials.json",
-        metrics: [...metrics, tokenMetric],
-        raw: res.body,
-      };
-    }
-
-    // Endpoint reachable but shape unknown / no windows returned.
-    return {
-      ...base,
-      status: "partial",
-      authSource: "~/.claude/.credentials.json",
-      metrics: [tokenMetric],
-      message: "Login attivo. Endpoint usage raggiunto ma senza finestre di quota leggibili; controlla la console.",
-      raw: res.body ?? res.text?.slice(0, 300),
-    };
+    cache = { result, timestamp: now };
+    return result;
   },
 };
 

@@ -188,11 +188,29 @@ export const gemini: Provider = {
 // Real shape (retrieveUserQuotaSummary, antigravity tier): groups[].buckets[] with
 // displayName + remainingFraction + resetTime. Older tiers returned flat buckets with
 // a model field — handle both and keep raw for debugging.
+// Google returns English display names; the rest of the dashboard speaks Italian and
+// names its windows the same way for every provider. Unknown names pass through.
+const IT_LABEL: Record<string, string> = {
+  "five hour limit": "Sessione (5h)",
+  "daily limit": "Giornaliero (24h)",
+  "weekly limit": "Settimanale (7g)",
+  "monthly limit": "Mensile (30g)",
+  "gemini models": "Modelli Gemini",
+  "claude and gpt models": "Modelli Claude e GPT",
+};
+
+export function localiseLabel(name: string): string {
+  return name
+    .split(" · ")
+    .map((part) => IT_LABEL[part.trim().toLowerCase()] ?? part)
+    .join(" · ");
+}
+
 export function parseQuota(body: any): QuotaMetric[] {
   const out: QuotaMetric[] = [];
   const push = (label: string, frac: number, reset?: string) =>
     out.push({
-      label,
+      label: localiseLabel(label),
       used: Math.round((1 - frac) * 100),
       limit: 100,
       unit: "percent",
