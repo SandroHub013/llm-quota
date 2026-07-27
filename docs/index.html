@@ -160,6 +160,7 @@
       }
       .mark {
         display: flex; align-items: center; gap: 9px;
+        min-height: 44px;
         font-family: var(--display); font-weight: 800; font-size: 19px;
         letter-spacing: -0.6px; color: var(--text); text-decoration: none;
         margin-right: auto;
@@ -169,15 +170,19 @@
         background: linear-gradient(92deg, #fff 10%, var(--accent) 58%, var(--violet) 92%);
         -webkit-background-clip: text; background-clip: text; color: transparent;
       }
-      .site-head nav { display: flex; align-items: center; gap: 22px; }
+      .site-head nav { display: flex; align-items: center; gap: 8px; }
+      /* 44px of height on every nav target, including the plain text links —
+         the padding is invisible but it is what makes them tappable. */
       .site-head nav a {
+        display: inline-flex; align-items: center;
+        min-height: 44px; padding: 0 10px;
         color: var(--muted); text-decoration: none; font-size: 14px;
         transition: color 0.2s;
       }
       .site-head nav a:hover { color: var(--text); }
       .site-head nav a.cta {
         color: #fff; background: linear-gradient(135deg, #5b8cff, #7b5bff);
-        padding: 8px 16px; border-radius: var(--r-md); font-weight: 600;
+        padding: 0 18px; border-radius: var(--r-md); font-weight: 600;
       }
       @media (max-width: 720px) {
         .site-head nav a:not(.cta) { display: none; }
@@ -189,10 +194,13 @@
         font-family: var(--mono); font-size: 12px; letter-spacing: 1.6px;
         text-transform: uppercase; color: var(--dim); margin: 0 0 22px;
       }
+      /* The floor has to be low enough that "subscriptions." fits a 320px column, and
+         the tracking has to scale with the size — a flat -2.4px is tuned for the 74px
+         display face and crushes the 30px one. */
       h1 {
         font-family: var(--display); font-weight: 800;
-        font-size: clamp(38px, 6.4vw, 74px);
-        line-height: 1.02; letter-spacing: -2.4px;
+        font-size: clamp(29px, 7.6vw, 74px);
+        line-height: 1.04; letter-spacing: -0.033em;
         margin: 0 0 24px;
       }
       h1 em {
@@ -415,14 +423,23 @@
             <code>localhost:4747</code> · nothing else to configure
           </p>
 
-          <img
-            class="shot"
-            src="./dashboard-preview.jpg"
-            alt="The LLM Quota dashboard: a reset horizon spanning now to seven days, with markers for each provider, above six cards showing usage percentages and reset times for Claude Code, z.ai, Gemini, Kimi, Codex and OpenCode Zen."
-            width="1600"
-            loading="eager"
-            decoding="async"
-          />
+          <!-- This screenshot is the LCP element, so it carries the page's whole
+               first-paint budget. AVIF is 42% of the JPEG; the JPEG stays as the
+               fallback and as the image the README embeds. -->
+          <picture>
+            <source srcset="./dashboard-preview.avif" type="image/avif" />
+            <source srcset="./dashboard-preview.webp" type="image/webp" />
+            <img
+              class="shot"
+              src="./dashboard-preview.jpg"
+              alt="The LLM Quota dashboard: a reset horizon spanning now to seven days, with markers for each provider, above six cards showing usage percentages and reset times for Claude Code, z.ai, Gemini, Kimi, Codex and OpenCode Zen."
+              width="1600"
+              height="900"
+              loading="eager"
+              decoding="async"
+              fetchpriority="high"
+            />
+          </picture>
         </div>
       </section>
 
