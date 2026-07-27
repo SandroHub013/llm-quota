@@ -11,6 +11,8 @@ Gira sulla tua macchina. Non parla con nessuno tranne i provider.
 [![CI](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml/badge.svg)](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml)
 [![Runtime: Bun](https://img.shields.io/badge/runtime-Bun-000?logo=bun)](https://bun.sh)
 
+**[→ Sito llm-quota](https://sandrohub013.github.io/llm-quota/)**
+
 [Avvio rapido](#avvio-rapido) · [Provider](#provider-supportati) · [CLI](#cli-per-terminale-e-agenti-ai) · [Privacy](#privacy) · [🇬🇧 English](README.md)
 
 ![Dashboard LLM Quota](docs/dashboard-preview.jpg)

@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>LLM Quota — one horizon for every AI subscription</title>
+    <meta
+      name="description"
+      content="Local-first dashboard and CLI that reads the CLI logins already on your disk and puts every quota reset — Claude Code, Codex, z.ai, OpenCode Zen, Gemini, Moonshot — on one timeline. Zero telemetry, zero third-party requests."
+    />
+    <meta name="theme-color" content="#05060b" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="canonical" href="https://sandrohub013.github.io/llm-quota/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://sandrohub013.github.io/llm-quota/" />
+    <meta property="og:title" content="LLM Quota — one horizon for every AI subscription" />
+    <meta
+      property="og:description"
+      content="How long before your AI quotas reset. Six providers, one timeline, all local. Zero telemetry."
+    />
+    <meta property="og:image" content="https://sandrohub013.github.io/llm-quota/og.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/svg+xml" href="./logo.svg" />
+
+    <link rel="preload" as="font" type="font/woff2" href="./fonts/schibsted-var-latin.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="./fonts/syne-var-latin.woff2" crossorigin />
+
+    <style>
+      /* Same self-hosted, latin-subset, variable faces the dashboard itself uses.
+         The site keeps the project's promise: it requests nothing from anyone. */
+      @font-face {
+        font-family: "Schibsted Grotesk";
+        src: url("./fonts/schibsted-var-latin.woff2") format("woff2");
+        font-weight: 400 700;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "Syne";
+        src: url("./fonts/syne-var-latin.woff2") format("woff2");
+        font-weight: 700 800;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: "JetBrains Mono";
+        src: url("./fonts/jetbrains-mono-500-latin.woff2") format("woff2");
+        font-weight: 500;
+        font-display: swap;
+      }
+      /* Metric-matched stand-ins: the swap changes the shapes, never the layout. */
+      @font-face {
+        font-family: "Schibsted Fallback";
+        src: local("Segoe UI"), local("Arial"), local("Helvetica Neue");
+        size-adjust: 104%;
+      }
+      @font-face {
+        font-family: "Mono Fallback";
+        src: local("Consolas"), local("Menlo"), local("DejaVu Sans Mono");
+        size-adjust: 109%;
+      }
+
+      :root {
+        --bg: #05060b;
+        --surface: rgba(15, 20, 33, 0.78);
+        --surface-solid: #111726;
+        --line: rgba(120, 150, 200, 0.13);
+        --line-strong: rgba(140, 170, 220, 0.3);
+
+        --text: #eef3fa;
+        --muted: #93a2b8;
+        --dim: #7d8a9e;
+
+        --accent: #5b8cff;
+        --violet: #9b5bff;
+        --ok: #3fb950;
+        --warn: #e0a72c;
+
+        --r-sm: 8px;
+        --r-md: 12px;
+        --r-lg: 18px;
+        --r-full: 999px;
+
+        --sans: "Schibsted Grotesk", "Schibsted Fallback", system-ui, sans-serif;
+        --display: "Syne", "Schibsted Grotesk", "Schibsted Fallback", sans-serif;
+        --mono: "JetBrains Mono", "Mono Fallback", ui-monospace, monospace;
+
+        --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+        --shell: 1120px;
+      }
+
+      *,
+      *::before,
+      *::after { box-sizing: border-box; }
+
+      html { scroll-behavior: smooth; }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 16px;
+        line-height: 1.6;
+        overflow-x: hidden;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Backdrop: gradients wide enough to be soft on their own. No blur filter —
+         it would be a full-viewport pass for something already this diffuse. */
+      .aurora { position: fixed; inset: 0; z-index: -2; overflow: hidden; pointer-events: none; }
+      .aurora i {
+        position: absolute;
+        border-radius: 50%;
+        opacity: 0.42;
+      }
+      .aurora i:nth-child(1) {
+        width: 62vw; height: 62vw; left: -18vw; top: -26vw;
+        background: radial-gradient(circle, rgba(91, 140, 255, 0.3) 0%, rgba(91, 140, 255, 0.11) 38%, transparent 72%);
+      }
+      .aurora i:nth-child(2) {
+        width: 54vw; height: 54vw; right: -18vw; top: 34vh;
+        background: radial-gradient(circle, rgba(155, 91, 255, 0.24) 0%, rgba(155, 91, 255, 0.09) 38%, transparent 72%);
+      }
+      .gridlines {
+        position: fixed; inset: 0; z-index: -1; pointer-events: none;
+        background-image:
+          linear-gradient(rgba(120, 150, 200, 0.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(120, 150, 200, 0.045) 1px, transparent 1px);
+        background-size: 72px 72px;
+        mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, black 20%, transparent 76%);
+      }
+
+      .shell {
+        width: min(100% - 48px, var(--shell));
+        margin-inline: auto;
+      }
+
+      a { color: var(--accent); text-decoration-color: rgba(91, 140, 255, 0.4); text-underline-offset: 3px; }
+      a:hover { text-decoration-color: currentColor; }
+
+      .skip {
+        position: absolute; left: 12px; top: 12px; z-index: 90;
+        background: var(--surface-solid); color: var(--text);
+        padding: 10px 16px; border-radius: var(--r-md);
+        transform: translateY(-200%);
+      }
+      .skip:focus-visible { transform: translateY(0); }
+
+      :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+      /* ---------- header ---------- */
+      .site-head {
+        position: sticky; top: 0; z-index: 50;
+        background: rgba(5, 6, 11, 0.86);
+        border-bottom: 1px solid var(--line);
+      }
+      .site-head .shell {
+        display: flex; align-items: center; gap: 20px;
+        min-height: 62px;
+      }
+      .mark {
+        display: flex; align-items: center; gap: 9px;
+        font-family: var(--display); font-weight: 800; font-size: 19px;
+        letter-spacing: -0.6px; color: var(--text); text-decoration: none;
+        margin-right: auto;
+      }
+      .mark img { width: 22px; height: 22px; }
+      .mark .grad {
+        background: linear-gradient(92deg, #fff 10%, var(--accent) 58%, var(--violet) 92%);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+      }
+      .site-head nav { display: flex; align-items: center; gap: 22px; }
+      .site-head nav a {
+        color: var(--muted); text-decoration: none; font-size: 14px;
+        transition: color 0.2s;
+      }
+      .site-head nav a:hover { color: var(--text); }
+      .site-head nav a.cta {
+        color: #fff; background: linear-gradient(135deg, #5b8cff, #7b5bff);
+        padding: 8px 16px; border-radius: var(--r-md); font-weight: 600;
+      }
+      @media (max-width: 720px) {
+        .site-head nav a:not(.cta) { display: none; }
+      }
+
+      /* ---------- hero ---------- */
+      .hero { padding: clamp(56px, 9vw, 104px) 0 clamp(40px, 6vw, 64px); text-align: center; }
+      .eyebrow {
+        font-family: var(--mono); font-size: 12px; letter-spacing: 1.6px;
+        text-transform: uppercase; color: var(--dim); margin: 0 0 22px;
+      }
+      h1 {
+        font-family: var(--display); font-weight: 800;
+        font-size: clamp(38px, 6.4vw, 74px);
+        line-height: 1.02; letter-spacing: -2.4px;
+        margin: 0 0 24px;
+      }
+      h1 em {
+        font-style: normal;
+        background: linear-gradient(96deg, var(--accent) 8%, var(--violet) 92%);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+      }
+      .lede {
+        font-size: clamp(16px, 1.6vw, 19px);
+        color: var(--muted);
+        max-width: 62ch; margin: 0 auto 34px;
+      }
+      .lede b { color: var(--text); font-weight: 600; }
+
+      .snippet {
+        display: flex; align-items: stretch; gap: 0;
+        max-width: 700px; margin: 0 auto;
+        background: var(--surface-solid);
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        overflow: hidden;
+        text-align: left;
+      }
+      /* Wrap rather than truncate: a command you cannot read in full is worse than
+         one that takes two lines, and the Copy button carries the exact text anyway. */
+      .snippet code {
+        font-family: var(--mono); font-size: 13px;
+        padding: 14px 16px; flex: 1 1 auto; min-width: 0;
+        white-space: pre-wrap; word-break: break-word;
+        color: var(--text);
+      }
+      .snippet .copy {
+        font: inherit; font-size: 13px;
+        border: none; border-left: 1px solid var(--line);
+        background: transparent; color: var(--muted);
+        padding: 0 18px; cursor: pointer; flex: 0 0 auto;
+        transition: background 0.2s, color 0.2s;
+      }
+      .snippet .copy:hover { background: #1c2740; color: var(--text); }
+      .hero-alt { font-size: 13px; color: var(--dim); margin: 14px 0 0; }
+
+      .shot {
+        margin: clamp(40px, 6vw, 68px) auto 0;
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        overflow: hidden;
+        box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
+        display: block; max-width: 100%; height: auto;
+      }
+
+      /* ---------- provider strip ---------- */
+      .strip {
+        display: flex; flex-wrap: wrap; justify-content: center;
+        align-items: center; gap: clamp(18px, 3.4vw, 42px);
+        padding: clamp(34px, 5vw, 52px) 0;
+        border-block: 1px solid var(--line);
+      }
+      .strip figure {
+        display: flex; align-items: center; gap: 10px;
+        margin: 0; color: var(--muted); font-size: 14px;
+      }
+      .strip img { width: 24px; height: 24px; object-fit: contain; border-radius: 5px; }
+
+      /* ---------- sections ---------- */
+      section { padding: clamp(56px, 8vw, 96px) 0; }
+      h2 {
+        font-family: var(--display); font-weight: 800;
+        font-size: clamp(27px, 3.6vw, 40px);
+        letter-spacing: -1.4px; line-height: 1.1;
+        margin: 0 0 16px;
+      }
+      .section-lede { color: var(--muted); max-width: 60ch; margin: 0 0 40px; }
+
+      .pull {
+        font-family: var(--display); font-weight: 800;
+        font-size: clamp(23px, 3vw, 34px);
+        letter-spacing: -1.2px; line-height: 1.2;
+        margin: 0; padding-left: 22px;
+        border-left: 3px solid var(--accent);
+      }
+
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+        gap: 18px;
+      }
+      .feat {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        padding: 24px;
+        min-width: 0;
+        transition: transform 0.3s var(--ease-out), border-color 0.3s;
+      }
+      .feat:hover { transform: translateY(-3px); border-color: var(--line-strong); }
+      .feat h3 {
+        font-family: var(--display); font-weight: 700; font-size: 17px;
+        letter-spacing: -0.4px; margin: 0 0 9px;
+      }
+      .feat p { margin: 0; color: var(--muted); font-size: 14.5px; }
+      .feat .ico { font-size: 20px; display: block; margin-bottom: 12px; }
+
+      /* ---------- table ---------- */
+      .scroller { overflow-x: auto; }
+      table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14.5px; }
+      th, td { text-align: left; padding: 13px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+      th { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+      td code { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+
+      /* ---------- code block ---------- */
+      pre {
+        background: var(--surface-solid);
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        padding: 18px 20px;
+        overflow-x: auto;
+        margin: 0 0 18px;
+      }
+      pre code { font-family: var(--mono); font-size: 13px; line-height: 1.75; }
+      .cmt { color: var(--dim); }
+
+      .split {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+        gap: clamp(24px, 4vw, 48px);
+        align-items: start;
+      }
+
+      ul.ticks { list-style: none; padding: 0; margin: 0; }
+      ul.ticks li {
+        position: relative; padding-left: 26px; margin-bottom: 13px;
+        color: var(--muted); font-size: 15px;
+      }
+      ul.ticks li::before {
+        content: "✓"; position: absolute; left: 0; top: 0;
+        color: var(--ok); font-weight: 700;
+      }
+      ul.ticks b { color: var(--text); font-weight: 600; }
+
+      /* ---------- closing ---------- */
+      .close { text-align: center; }
+      .btnrow { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 26px; }
+      .btn {
+        font: inherit; font-weight: 600; font-size: 15px;
+        padding: 13px 24px; border-radius: var(--r-md);
+        border: 1px solid var(--line); background: var(--surface-solid);
+        color: var(--text); text-decoration: none;
+        transition: transform 0.2s var(--ease-out), background 0.2s, border-color 0.2s;
+      }
+      .btn:hover { transform: translateY(-2px); background: #1c2740; border-color: var(--line-strong); }
+      .btn.primary {
+        background: linear-gradient(135deg, #5b8cff, #7b5bff);
+        border-color: transparent; color: #fff;
+      }
+
+      footer {
+        border-top: 1px solid var(--line);
+        padding: 30px 0 44px;
+      }
+      footer .shell {
+        display: flex; flex-wrap: wrap; gap: 14px;
+        justify-content: space-between; align-items: center;
+        font-family: var(--mono); font-size: 11.5px;
+        letter-spacing: 1.1px; text-transform: uppercase; color: var(--dim);
+      }
+      footer a { color: var(--muted); text-decoration: none; }
+      footer a:hover { color: var(--text); }
+
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <div class="aurora"><i></i><i></i></div>
+    <div class="gridlines"></div>
+
+    <header class="site-head">
+      <div class="shell">
+        <a class="mark" href="#main">
+          <img src="./logo.svg" alt="" width="22" height="22" />
+          <span>LLM <span class="grad">Quota</span></span>
+        </a>
+        <nav aria-label="Primary">
+          <a href="#why">Why</a>
+          <a href="#providers">Providers</a>
+          <a href="#cli">CLI</a>
+          <a href="#privacy">Privacy</a>
+          <a class="cta" href="https://github.com/SandroHub013/llm-quota">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" tabindex="-1">
+      <section class="hero">
+        <div class="shell">
+          <p class="eyebrow">Local-first · MIT · Bun</p>
+
+          <h1>Six AI subscriptions.<br /><em>One horizon.</em></h1>
+
+          <p class="lede">
+            Every provider rate-limits you on its own clock, in its own console. LLM Quota reads
+            the CLI logins already sitting on your disk and puts every reset on
+            <b>one timeline</b> — so you can see which subscription is free, which is cooling
+            down, and exactly when you are back.
+          </p>
+
+          <div class="snippet">
+            <code id="cmd">git clone https://github.com/SandroHub013/llm-quota &amp;&amp; cd llm-quota &amp;&amp; bun install &amp;&amp; bun start</code>
+            <button type="button" class="copy" data-copy="#cmd">Copy</button>
+          </div>
+          <p class="hero-alt">
+            Needs <a href="https://bun.sh">Bun</a> 1.0+ · then open
+            <code>localhost:4747</code> · nothing else to configure
+          </p>
+
+          <img
+            class="shot"
+            src="./dashboard-preview.jpg"
+            alt="The LLM Quota dashboard: a reset horizon spanning now to seven days, with markers for each provider, above six cards showing usage percentages and reset times for Claude Code, z.ai, Gemini, Kimi, Codex and OpenCode Zen."
+            width="1600"
+            loading="eager"
+            decoding="async"
+          />
+        </div>
+      </section>
+
+      <div class="shell">
+        <div class="strip">
+          <figure><img src="./logos/claude.png" alt="" /> Claude Code</figure>
+          <figure><img src="./logos/codex.webp" alt="" /> Codex</figure>
+          <figure><img src="./logos/zai.svg" alt="" /> z.ai</figure>
+          <figure><img src="./logos/opencode-zen.png" alt="" /> OpenCode Zen</figure>
+          <figure><img src="./logos/gemini.svg" alt="" /> Gemini</figure>
+          <figure><img src="./logos/moonshot.png" alt="" /> Moonshot</figure>
+        </div>
+      </div>
+
+      <section id="why">
+        <div class="shell">
+          <h2>Percentages answer the wrong question</h2>
+          <p class="section-lede">
+            Claude Code has a 5-hour window <em>and</em> a weekly cap. Codex has its own. Gemini
+            counts per model. When you actually hit a limit, "62% used" tells you nothing you can
+            plan around.
+          </p>
+          <p class="pull">When am I back?</p>
+        </div>
+      </section>
+
+      <section>
+        <div class="shell">
+          <div class="cards">
+            <article class="feat">
+              <span class="ico" aria-hidden="true">⏳</span>
+              <h3>Reset horizon</h3>
+              <p>
+                All six providers' resets on one axis, now to seven days. Hover a marker and its
+                card lights up; hover a card and its marker does.
+              </p>
+            </article>
+            <article class="feat">
+              <span class="ico" aria-hidden="true">🔑</span>
+              <h3>Reuses your sessions</h3>
+              <p>
+                Reads the OAuth tokens <code>claude</code>, <code>codex</code> and
+                <code>opencode</code> already wrote to disk. No new logins for most providers.
+              </p>
+            </article>
+            <article class="feat">
+              <span class="ico" aria-hidden="true">🔒</span>
+              <h3>Local-first</h3>
+              <p>
+                No cloud, no database, no account. Keys and tokens never leave the machine, and
+                there is no server to report to.
+              </p>
+            </article>
+            <article class="feat">
+              <span class="ico" aria-hidden="true">🚫</span>
+              <h3>Zero third-party requests</h3>
+              <p>
+                Fonts and provider logos ship with the app. No CDN, no font host, no favicon
+                service — enforced by a test, not a promise.
+              </p>
+            </article>
+            <article class="feat">
+              <span class="ico" aria-hidden="true">🤖</span>
+              <h3>Built for agents</h3>
+              <p>
+                Sanitized JSON and meaningful exit codes, so an agent can check its own budget
+                before starting a long job.
+              </p>
+            </article>
+            <article class="feat">
+              <span class="ico" aria-hidden="true">♿</span>
+              <h3>Fits on one screen</h3>
+              <p>
+                All six providers visible without scrolling from 1280×800 up. Keyboard navigable,
+                <code>prefers-reduced-motion</code> respected.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="providers">
+        <div class="shell">
+          <h2>What it reads, and from where</h2>
+          <p class="section-lede">
+            Nothing is uploaded. Credentials are read from disk, used to call the provider they
+            belong to, and never written anywhere else.
+          </p>
+          <div class="scroller">
+            <table>
+              <thead>
+                <tr><th>Provider</th><th>Credentials from</th><th>What you get</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Claude Code</td>
+                  <td><code>~/.claude/.credentials.json</code></td>
+                  <td>Live 5h window + weekly quota %, reset time</td>
+                </tr>
+                <tr>
+                  <td>Codex (ChatGPT)</td>
+                  <td><code>~/.codex/auth.json</code></td>
+                  <td>Active plan + usage windows</td>
+                </tr>
+                <tr>
+                  <td>z.ai</td>
+                  <td><code>opencode</code> config or pasted key</td>
+                  <td>Live 5h token + monthly %, web-search status</td>
+                </tr>
+                <tr>
+                  <td>OpenCode Zen</td>
+                  <td><code>opencode</code> config or pasted key</td>
+                  <td>API key validity + model count</td>
+                </tr>
+                <tr>
+                  <td>Gemini</td>
+                  <td>In-app Google login or AI Studio key</td>
+                  <td>Live per-model quota via Code Assist</td>
+                </tr>
+                <tr>
+                  <td>Moonshot</td>
+                  <td>Pasted API key</td>
+                  <td>Live remaining credit and usage</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="cli">
+        <div class="shell">
+          <div class="split">
+            <div>
+              <h2>A CLI your agent can read</h2>
+              <p class="section-lede">
+                The same data as the dashboard, as sanitized JSON with exit codes that mean
+                something — safe to pipe into a prompt or a shell script.
+              </p>
+              <ul class="ticks">
+                <li><b>0</b> — healthy, quota available</li>
+                <li><b>1</b> — warning, at least one quota ≤ 20%</li>
+                <li><b>2</b> — auth error or provider unreachable</li>
+                <li><b>3</b> — server offline or bad arguments</li>
+              </ul>
+            </div>
+            <div>
+<pre><code><span class="cmt"># compact text summary</span>
+bun run cli status
+
+<span class="cmt"># sanitized JSON for prompts and agents</span>
+bun run cli status --json
+
+<span class="cmt"># one provider only</span>
+bun run cli provider codex
+
+<span class="cmt"># health check</span>
+bun run cli doctor</code></pre>
+              <p class="hero-alt" style="text-align: left">
+                Install it globally with
+                <code>bun add -g github:SandroHub013/llm-quota</code>
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="privacy">
+        <div class="shell">
+          <h2>The privacy claim, stated precisely</h2>
+          <p class="section-lede">
+            This is the point of the project, so it is worth being exact rather than
+            reassuring.
+          </p>
+          <ul class="ticks">
+            <li>
+              <b>No telemetry, analytics or crash reporting.</b> There is no server to report to.
+            </li>
+            <li>
+              <b>The frontend makes zero third-party requests.</b> Fonts and the six provider
+              logos are served from the app itself. A test fails the build if any external host
+              creeps back in.
+            </li>
+            <li>
+              <b>Logos are frozen in the repo deliberately.</b> Loading them from the provider —
+              or from a favicon service, as an earlier version did — would tell a third party
+              which AI subscriptions you hold, on every page load.
+            </li>
+            <li>
+              <b>Pasted keys stay in <code>~/.llm-quota/config.json</code>.</b> Local, and never
+              committed.
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="close">
+        <div class="shell">
+          <h2>Stop checking five billing consoles</h2>
+          <p class="section-lede" style="margin-inline: auto">
+            MIT licensed, one runtime dependency, no build step. Provider adapters and UI fixes
+            are welcome.
+          </p>
+          <div class="btnrow">
+            <a class="btn primary" href="https://github.com/SandroHub013/llm-quota">★ Star on GitHub</a>
+            <a class="btn" href="https://github.com/SandroHub013/llm-quota#quickstart">Read the docs</a>
+            <a class="btn" href="https://github.com/SandroHub013/llm-quota/issues">Good first issues</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="shell">
+        <span>LLM Quota © 2026 · MIT</span>
+        <span>Local-first · Zero telemetry · Zero CDN</span>
+        <span>
+          <a href="https://github.com/SandroHub013/llm-quota">GitHub</a> ·
+          <a href="https://github.com/SandroHub013/llm-quota/blob/main/README.it.md">Italiano</a>
+        </span>
+      </div>
+    </footer>
+
+    <script>
+      // Copy button. No dependency, and it degrades to a visible command either way.
+      document.querySelectorAll("[data-copy]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const text = document.querySelector(btn.dataset.copy)?.textContent ?? "";
+          try {
+            await navigator.clipboard.writeText(text);
+            const was = btn.textContent;
+            btn.textContent = "Copied";
+            setTimeout(() => (btn.textContent = was), 1600);
+          } catch {
+            btn.textContent = "Select it";
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
