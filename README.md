@@ -1,135 +1,224 @@
+<div align="center">
+
 # LLM Quota
 
-Dashboard unificata e CLI local-first per monitorare lo stato delle quote dei tuoi abbonamenti e provider AI: **Claude Code, Codex (ChatGPT), z.ai, OpenCode Zen, Gemini, Moonshot AI**.
+**One dashboard for every AI subscription you pay for.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+Claude Code · Codex · Gemini · z.ai · OpenCode Zen · Moonshot — on a single reset timeline.
+Runs on your machine. Talks to nobody but the providers.
 
-![LLM Quota Dashboard Snapshot](docs/dashboard-preview.jpg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml/badge.svg)](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml)
+[![Runtime: Bun](https://img.shields.io/badge/runtime-Bun-000?logo=bun)](https://bun.sh)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Stars](https://img.shields.io/github/stars/SandroHub013/llm-quota?style=social)](https://github.com/SandroHub013/llm-quota/stargazers)
 
----
+[Quickstart](#quickstart) · [Providers](#supported-providers) · [CLI](#cli-for-terminals-and-ai-agents) · [Privacy](#privacy) · [Contributing](CONTRIBUTING.md) · [🇮🇹 Italiano](README.it.md)
 
-## ⚡ Caratteristiche
+![LLM Quota dashboard](docs/dashboard-preview.jpg)
 
-- ⏳ **Orizzonte reset**: tutti i reset dei sei provider su un unico asse temporale (adesso → 7 giorni). Passando su un marcatore si illumina la card corrispondente, e viceversa. Risponde alla domanda che le percentuali non risolvono: *quando torno operativo?*
-- 🔒 **Local-first & Privacy-focused**: Non richiede server esterni o database cloud. Le tue API Key e token restano sempre sul tuo dispositivo.
-- 🚫 **Zero richieste di terze parti**: font e loghi sono serviti da `public/`. La pagina non contatta nessun host esterno — nemmeno per i font o le icone dei provider.
-- 🔑 **Riuṣa le sessioni esistenti**: Riconosce automaticamente i token OAuth salvati dalle CLI ufficiali (`Claude Code`, `Codex`, `OpenCode`).
-- 🌐 **Dashboard Web**: Tutti e sei i provider a schermo senza scroll da 1280×800 in su. Accessibile da tastiera, con `prefers-reduced-motion` rispettato.
-- 💻 **Widget Desktop Windows**: Floating widget integrato su Windows (interagibile tramite protocollo `llmquota://widget`).
-- 🤖 **CLI per Agenti AI & Terminale**: Output compatto in testo o JSON sanitizzato (`llm-quota status --json`), perfetto per integrarli in agenti, script e prompt.
-
----
-
-## 🚀 Requisiti e Installazione
-
-### Requisiti
-- [Bun](https://bun.sh) (consigliato v1.0+) oppure Node.js v18+
-- Python 3 (opzionale, richiesto solo per il widget GUI su Windows)
-
-### Quickstart
-
-1. **Clona il repository**:
-   ```bash
-   git clone https://github.com/SandroHub013/llm-quota.git
-   cd llm-quota
-   ```
-
-2. **Installa le dipendenze**:
-   ```bash
-   bun install
-   ```
-
-3. **Avvia la Dashboard**:
-   ```bash
-   bun run dev          # http://localhost:4747 (con hot reload)
-   ```
-   oppure in produzione:
-   ```bash
-   PORT=8080 bun start
-   ```
+</div>
 
 ---
 
-## 🪟 Widget Desktop (Windows)
+## The problem
 
-Per registrare ed abilitare il pulsante **Widget Desktop**:
+You pay for four or five AI subscriptions. Each one rate-limits you differently, in a different
+console, on a different clock. Claude Code has a 5-hour window *and* a weekly cap. Codex has its
+own. Gemini counts per model. The moment you actually hit a limit, the only question that matters
+is the one no percentage bar answers:
+
+> **When am I back?**
+
+LLM Quota puts every reset from every provider on one horizon — now → 7 days — so you can see at a
+glance which subscription is free, which is cooling down, and exactly when to come back.
+
+## Features
+
+- ⏳ **Reset horizon** — all six providers' resets on one time axis. Hover a marker, its card
+  lights up; hover a card, its marker lights up.
+- 🔑 **Reuses the sessions you already have** — reads the OAuth tokens the official CLIs
+  (`claude`, `codex`, `opencode`) already wrote to disk. No new logins for most providers.
+- 🔒 **Local-first** — no cloud, no database, no account. Keys and tokens never leave the machine.
+- 🚫 **Zero third-party requests** — fonts and provider logos ship in `public/`. The page loads
+  nothing from a CDN, a font host, or a favicon service. [Enforced by a test.](src/frontend.test.ts)
+- 🤖 **CLI built for AI agents** — `llm-quota status --json` gives sanitized JSON and meaningful
+  exit codes, so an agent can check its own budget before starting a long job.
+- 🪟 **Windows desktop widget** — a floating always-on-top Tk widget, launched from the dashboard
+  via the `llmquota://widget` protocol.
+- ♿ **Accessible** — full keyboard navigation, `prefers-reduced-motion` respected, all six
+  providers on screen without scrolling from 1280×800 up.
+
+---
+
+## Quickstart
+
+**Requires [Bun](https://bun.sh) 1.0+.** (The server uses `Bun.serve`; Node is not supported.)
+Python 3 is optional, and only for the Windows widget.
+
+```bash
+git clone https://github.com/SandroHub013/llm-quota.git
+cd llm-quota
+bun install
+bun start          # → http://localhost:4747
+```
+
+That is the whole setup. If you already use Claude Code, Codex or OpenCode, their providers light
+up immediately — the dashboard picks up the tokens those CLIs already stored.
+
+<details>
+<summary>One-liner install</summary>
+
+macOS / Linux:
+```bash
+git clone https://github.com/SandroHub013/llm-quota.git && cd llm-quota && bun install && bun start
+```
+
+Windows (PowerShell):
+```powershell
+git clone https://github.com/SandroHub013/llm-quota.git; cd llm-quota; bun install; bun start
+```
+</details>
+
+<details>
+<summary>Install the CLI globally</summary>
+
+```bash
+bun add -g github:SandroHub013/llm-quota
+llm-quota status
+```
+Both `llm-quota` and `webquota` are registered as commands.
+</details>
+
+<details>
+<summary>Other options</summary>
+
+```bash
+bun run dev            # hot reload
+PORT=8080 bun start    # custom port
+```
+</details>
+
+---
+
+## Supported providers
+
+| Provider | Credentials read from | What you get |
+|---|---|---|
+| **Claude Code** | `~/.claude/.credentials.json` (OAuth) | Live 5h window + weekly quota %, reset time |
+| **Codex** (ChatGPT) | `~/.codex/auth.json` (OAuth) | Active plan + usage windows |
+| **z.ai** | `opencode` config or pasted key | Live 5h token + monthly %, web-search status |
+| **OpenCode Zen** | `opencode` config or pasted key | API key validity + model count |
+| **Gemini** | In-app Google login or AI Studio key | Live per-model quota via Code Assist / AI Studio |
+| **Moonshot** | Pasted API key | Live remaining credit and usage |
+
+Keys you paste yourself are stored locally in `~/.llm-quota/config.json`. They are never sent
+anywhere except to the provider they belong to, and never committed.
+
+**Want another provider?** Add an adapter in `src/providers/` implementing the `Provider`
+interface and register it in `src/providers/index.ts`. That is the whole contract — see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+## CLI for terminals and AI agents
+
+With the server running:
+
+```bash
+bun run cli status            # compact text summary
+bun run cli status --json     # sanitized JSON, safe to paste into a prompt
+bun run cli provider codex    # one provider only
+bun run cli doctor            # health check
+```
+
+Exit codes make it scriptable — and let an agent decide for itself whether to start a job:
+
+| Code | Meaning |
+|---|---|
+| `0` | Healthy, quota available |
+| `1` | Warning — at least one quota ≤ 20% |
+| `2` | Auth error or provider unreachable |
+| `3` | Server offline or bad arguments |
+
+Point it at another host or port with `LLM_QUOTA_URL=http://localhost:4747`.
+
+---
+
+## Windows desktop widget
 
 ```bash
 python widget.py --register-protocol
 ```
 
-Questo registra il protocollo `llmquota://widget`. Cliccando su **Widget** nella dashboard web, verrà lanciato l'applicativo GUI Tk direttamente sul desktop interattivo.
+Registers `llmquota://widget`. The **Widget** button in the dashboard then launches a floating
+Tk widget on the desktop.
 
 ---
 
-## 🖥️ CLI per Agenti e Terminale
+## Privacy
 
-Quando il server è in esecuzione, puoi interrogare lo stato delle quote direttamente da riga di comando:
+This is the point of the project, so it is worth being precise:
 
-```bash
-# Esegui tramite il binario installato o via bun
-bun run cli status             # Output sintetico in formato testo
-bun run cli status --json      # JSON sanitizzato per prompt/agenti AI
-bun run cli provider codex     # Controlla solo un provider specifico
-bun run cli doctor             # Health check dello stato del server
-```
-
-### Codici di Uscita (Exit Codes)
-- `0`: Sistema sano e quote sufficienti
-- `1`: Warning (almeno una quota residua ≤ 20%)
-- `2`: Errore di autenticazione o provider non raggiungibile
-- `3`: Server offline o parametri errati
-
-Per server remoto o porta personalizzata: `LLM_QUOTA_URL=http://localhost:4747 bun run cli status`
+- No telemetry, no analytics, no crash reporting. There is no server to report *to*.
+- The frontend makes **zero** third-party requests. Fonts (Syne, Schibsted Grotesk, JetBrains
+  Mono — ~102 KB, latin subset) and the six provider logos are served from `public/`.
+  A [test](src/frontend.test.ts) fails the build if any external host creeps back in.
+- Provider logos are frozen in the repo deliberately: loading them from the provider — or from a
+  favicon service, as an earlier version did — would tell a third party which AI subscriptions
+  you hold, on every page load.
+- Credentials are read from disk, used to call the provider, and never written anywhere else.
 
 ---
 
-## 🗝️ Gestione delle Credenziali
-
-| Provider | Fonte delle credenziali | Monitoraggio |
-|---|---|---|
-| **Claude Code** | `~/.claude/.credentials.json` (OAuth) | **Live**: finestra 5h + quota settimanale %, reset time |
-| **Codex** | `~/.codex/auth.json` (OAuth ChatGPT) | Piano attivo + finestre d'uso |
-| **z.ai** | Key in `opencode` o inserimento manuale | **Live**: token 5h + mensile %, status web search |
-| **OpenCode Zen**| Key in `opencode` o inserimento manuale | Validità chiave API + numero modelli |
-| **Gemini** | Login Google in-app o Key AI Studio | **Live**: quota modelli via Code Assist / AI Studio |
-| **Moonshot** | API Key manuale | **Live**: credito residuo ed utilizzo |
-
-> Le API Key inserite manualmente vengono salvate in locale in `~/.llm-quota/config.json` e **mai inviate a terzi o committate**.
-
----
-
-## 🛠️ Architettura del Progetto
+## Architecture
 
 ```text
 src/
-├── server.ts              # Backend Hono (API endpoints: /api/quota, /api/key)
-├── credentials.ts         # Parser credenziali locali e configurazione utente
-├── cli.ts                 # CLI riga di comando per sviluppatori ed agenti
-├── providers/             # Adapter per ciascun provider AI (fetch → QuotaResult)
-public/                    # Frontend SPA (HTML5/CSS3/Vanilla JS)
-├── fonts/                 # Syne, Schibsted Grotesk, JetBrains Mono (woff2, subset latino)
-widget.py                  # Desktop Widget Tkinter per Windows
+├── server.ts          # Hono backend (/api/quota, /api/key, /api/auth/gemini)
+├── credentials.ts     # local credential + user config parsing
+├── cli.ts             # CLI for developers and agents
+└── providers/         # one adapter per provider (fetch → QuotaResult)
+public/                # frontend SPA — HTML, CSS, vanilla JS, no build step
+├── fonts/             # self-hosted variable fonts (woff2, latin subset)
+└── logos/             # official provider marks, frozen
+widget.py              # Windows Tkinter desktop widget
 ```
 
-I font sono variabili, sottoinsieme latino, ~102 KB in totale, serviti in locale con un
-fallback metricamente allineato: lo swap cambia le forme, mai il layout.
+Stack: [Bun](https://bun.sh) + [Hono](https://hono.dev) + TypeScript. One runtime dependency.
+No bundler, no framework, no build step for the frontend.
 
-I loghi in `public/logos/` sono le icone ufficiali di ciascun provider, scaricate una
-volta dal dominio del provider stesso e incluse nel repository per non doverle richiedere
-a runtime. Se un file manca, la card mostra un glifo disegnato di riserva.
-
-Per aggiungere un nuovo provider AI: crea una nuova classe adapter in `src/providers/` implementando l'interfaccia `Provider` e registrala in `src/providers/index.ts`.
+```bash
+bun test          # 31 tests
+bun run typecheck
+```
 
 ---
 
-## 📜 Licenza
+## Contributing
 
-Rilasciato sotto licenza [MIT](LICENSE). Libero per uso personale e commerciale. Contributi e Pull Request sono i benvenuti!
+New provider adapters, bug reports and UI fixes are all welcome — start with
+[CONTRIBUTING.md](CONTRIBUTING.md). Good first issues are tagged
+[`good first issue`](https://github.com/SandroHub013/llm-quota/labels/good%20first%20issue).
 
-### Marchi
+**The dashboard UI is currently in Italian.** English localisation is the most useful
+contribution right now, and a great first PR.
 
-La licenza MIT copre il codice di questo progetto, non i marchi altrui. I loghi in
-`public/logos/` appartengono ai rispettivi titolari (Anthropic, OpenAI, Z.ai, OpenCode,
-Google, Moonshot AI) e sono inclusi solo per identificare il servizio a cui ciascuna card
-si riferisce. Questo progetto non è affiliato né approvato da nessuno di essi.
+## License
+
+[MIT](LICENSE). Free for personal and commercial use.
+
+### Trademarks
+
+The MIT license covers this project's code, not other people's marks. The logos in
+`public/logos/` belong to their respective owners (Anthropic, OpenAI, Z.ai, OpenCode, Google,
+Moonshot AI) and are included only to identify the service each card refers to. This project is
+not affiliated with, endorsed by, or sponsored by any of them.
+
+---
+
+<div align="center">
+
+If this saved you a trip to five different billing consoles, **[⭐ star the repo](https://github.com/SandroHub013/llm-quota)** — it is how other people find it.
+
+</div>
