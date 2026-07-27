@@ -18,7 +18,9 @@ test("product surfaces use LLM Quota as the primary identity", async () => {
 
   expect(pkg.name).toBe("llm-quota");
   expect(pkg.bin["llm-quota"]).toBe("src/cli.ts");
-  expect(readme.startsWith("# LLM Quota\n")).toBe(true);
+  // The README opens with a centred banner div, so the identity is not on line 1 —
+  // what matters is that the first heading of the document is still the product name.
+  expect(readme.match(/^#+ .*/m)?.[0]).toBe("# LLM Quota");
   expect(server).toContain("LLM Quota →");
   expect(providers).not.toContain("WebQuota");
 });
