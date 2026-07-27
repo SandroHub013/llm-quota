@@ -577,31 +577,67 @@ if (titleEl) {
 }
 
 // Custom cursor: dot tracks instantly, ring lerps behind.
+//
+// One rAF frame owns every pointer-driven write on the page — the cursor dot, the ring,
+// and the card spotlight. A high-polling mouse fires `pointermove` several times per
+// frame, so handling it inline meant a style write (and a forced layout read, for the
+// spotlight's getBoundingClientRect) per *event* rather than per *frame*.
+//
+// The loop also stops. It used to call itself unconditionally: 60 frames a second for
+// the whole session, still writing a transform long after the ring had caught up with a
+// cursor that was not moving.
 const cur = document.querySelector(".cur");
 const ring = document.querySelector(".cur-ring");
-if (cur && matchMedia("(pointer: fine)").matches) {
-  let rx = -100, ry = -100, tx = -100, ty = -100;
-  addEventListener("pointermove", (e) => {
-    tx = e.clientX; ty = e.clientY;
-    cur.style.transform = `translate(${tx - 3.5}px, ${ty - 3.5}px)`;
-  });
-  (function loop() {
-    rx += (tx - rx) * 0.16; ry += (ty - ry) * 0.16;
+const fine = matchMedia("(pointer: fine)").matches;
+
+let px = -100, py = -100;      // latest pointer position
+let rx = -100, ry = -100;      // ring position, chasing it
+let spotCard = null;           // card under the pointer, if any
+let queued = false;
+
+function frame() {
+  queued = false;
+
+  if (cur) cur.style.transform = `translate(${px - 3.5}px, ${py - 3.5}px)`;
+
+  if (ring) {
+    // The trailing ring is the motion; under reduced motion it snaps instead, which
+    // also means the loop converges in one frame rather than a dozen.
+    const k = reduced.matches ? 1 : 0.16;
+    rx += (px - rx) * k;
+    ry += (py - ry) * k;
     ring.style.transform = `translate(${rx - 27}px, ${ry - 27}px)`;
-    requestAnimationFrame(loop);
-  })();
-  addEventListener("pointerover", (e) => {
-    ring.classList.toggle("on", !!e.target.closest("button, a, summary, input, .card"));
-  });
+  }
+
+  if (spotCard) {
+    const r = spotCard.getBoundingClientRect();
+    spotCard.style.setProperty("--mx", ((px - r.left) / r.width) * 100 + "%");
+    spotCard.style.setProperty("--my", ((py - r.top) / r.height) * 100 + "%");
+    spotCard = null;
+  }
+
+  // Keep going only while the ring still has ground to cover. Sub-pixel is done.
+  if (Math.abs(px - rx) > 0.1 || Math.abs(py - ry) > 0.1) schedule();
 }
 
-// Card tilt spotlight: delegation, survives innerHTML re-renders.
-grid.addEventListener("pointermove", (e) => {
-  const card = e.target.closest(".card");
-  if (!card) return;
-  const r = card.getBoundingClientRect();
-  card.style.setProperty("--mx", ((e.clientX - r.left) / r.width) * 100 + "%");
-  card.style.setProperty("--my", ((e.clientY - r.top) / r.height) * 100 + "%");
-});
+function schedule() {
+  if (queued) return;
+  queued = true;
+  requestAnimationFrame(frame);
+}
+
+if (fine) {
+  addEventListener("pointermove", (e) => {
+    px = e.clientX;
+    py = e.clientY;
+    // Delegated, so it survives the innerHTML re-render that rebuilds the cards.
+    spotCard = e.target.closest?.(".card") ?? null;
+    schedule();
+  }, { passive: true });
+
+  addEventListener("pointerover", (e) => {
+    ring?.classList.toggle("on", !!e.target.closest("button, a, summary, input, .card"));
+  });
+}
 
 loadAll();
