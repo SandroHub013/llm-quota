@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import { getProvider, providers } from "./providers/index.js";
@@ -8,7 +8,7 @@ import { readConfig, writeConfig, writeGeminiOauth } from "./credentials.js";
 import { GEMINI_CLIENT_ID, GEMINI_CLIENT_SECRET, GEMINI_REDIRECT, GEMINI_SCOPES, GEMINI_TOKEN_URL } from "./gemini-oauth.js";
 
 const app = new Hono();
-const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
+const PUBLIC = resolve(dirname(fileURLToPath(import.meta.url)), "..", "public");
 
 async function fetchOne(id: string): Promise<QuotaResult> {
   const p = getProvider(id)!;
@@ -131,26 +131,41 @@ app.get("/api/auth/gemini", async (c) => {
   return c.json({ url });
 });
 
-// Static frontend.
+// Static frontend. Everything the dashboard needs is served from ./public — no CDN,
+// so the page makes zero third-party requests.
+const MIME: Record<string, string> = {
+  ".js": "text/javascript; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".woff2": "font/woff2",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".webp": "image/webp",
+};
+
 app.get("/", async (c) => {
   const html = await readFile(join(PUBLIC, "index.html"), "utf8");
   return c.html(html);
 });
-app.get("/app.js", async (c) => {
-  const js = await readFile(join(PUBLIC, "app.js"), "utf8");
-  return c.body(js, 200, { "Content-Type": "text/javascript" });
-});
-app.get("/api.js", async (c) => {
-  const js = await readFile(join(PUBLIC, "api.js"), "utf8");
-  return c.body(js, 200, { "Content-Type": "text/javascript" });
-});
-app.get("/ui.js", async (c) => {
-  const js = await readFile(join(PUBLIC, "ui.js"), "utf8");
-  return c.body(js, 200, { "Content-Type": "text/javascript" });
-});
-app.get("/logo.svg", async (c) => {
-  const svg = await readFile(join(PUBLIC, "logo.svg"), "utf8");
-  return c.body(svg, 200, { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=3600" });
+
+// Single static route. `resolve` + prefix check keeps `..` from escaping ./public,
+// and only the extensions above are ever served.
+app.get("/:a{.+}", async (c) => {
+  const rel = c.req.path.slice(1);
+  const ext = rel.slice(rel.lastIndexOf("."));
+  const type = MIME[ext];
+  if (!type) return c.notFound();
+
+  const file = resolve(PUBLIC, rel);
+  if (file !== PUBLIC && !file.startsWith(PUBLIC + sep)) return c.notFound();
+
+  const body = await readFile(file).catch(() => null);
+  if (!body) return c.notFound();
+
+  // Fonts never change under their name, so they can be cached hard. Code and images
+  // must revalidate — with max-age the browser silently serves a stale bundle after
+  // every edit, which is wrong for a dashboard you run from a checkout.
+  const cache = ext === ".woff2" ? "public, max-age=31536000, immutable" : "no-cache";
+  return c.body(body, 200, { "Content-Type": type, "Cache-Control": cache });
 });
 
 const port = Number(process.env.PORT ?? 4747);

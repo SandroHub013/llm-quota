@@ -1,0 +1,90 @@
+import { expect, test } from "bun:test";
+import { localiseLabel } from "./providers/gemini.js";
+
+const read = (path: string) => Bun.file(path).text();
+
+// The footer and the README both promise "zero telemetria · zero CDN". This test is
+// what makes that promise true rather than aspirational: the dashboard must not
+// reference any host it does not serve itself.
+test("the frontend makes no third-party requests", async () => {
+  const [html, app, api, ui] = await Promise.all([
+    read("public/index.html"),
+    read("public/app.js"),
+    read("public/api.js"),
+    read("public/ui.js"),
+  ]);
+  const frontend = [html, app, api, ui].join("\n");
+
+  const remote = [...frontend.matchAll(/\bhttps?:\/\/([^\s"'`)]+)/g)].map((m) => m[1]);
+  const fetched = remote.filter(
+    // Links a user clicks (provider consoles, the OAuth consent page) are fine —
+    // what must not appear is a host the page itself loads from.
+    (host) => !/^(claude\.ai|chatgpt\.com|platform\.openai|z\.ai|opencode\.ai|gemini\.google|aistudio\.google|kimi\.com|platform\.moonshot|accounts\.google|console\.|www\.w3\.org)/.test(host),
+  );
+
+  expect(fetched).toEqual([]);
+  expect(frontend).not.toContain("fonts.googleapis.com");
+  expect(frontend).not.toContain("fonts.gstatic.com");
+  expect(frontend).not.toContain("s2/favicons");
+});
+
+// Official provider marks, but frozen in the repo. Loading them from the provider
+// (or from Google's favicon service, as this used to) would tell a third party which
+// AI subscriptions the user holds, on every single page load.
+test("provider logos are local files with no external references", async () => {
+  const logos = {
+    claude: "claude.png",
+    codex: "codex.webp",
+    zai: "zai.svg",
+    "opencode-zen": "opencode-zen.png",
+    gemini: "gemini.svg",
+    moonshot: "moonshot.png",
+  };
+  const app = await read("public/app.js");
+
+  for (const [id, file] of Object.entries(logos)) {
+    expect(app).toContain(`"/logos/${file}"`);
+    const asset = Bun.file(`public/logos/${file}`);
+    expect(await asset.exists()).toBe(true);
+    expect(asset.size).toBeGreaterThan(500);
+  }
+
+  // An SVG can pull in a remote image or stylesheet of its own; these must not.
+  for (const file of ["zai.svg", "gemini.svg"]) {
+    const svg = await read(`public/logos/${file}`);
+    const remote = [...svg.matchAll(/https?:\/\/[^\s"')]+/g)]
+      .map((m) => m[0])
+      .filter((u) => !u.startsWith("http://www.w3.org"));
+    expect(remote).toEqual([]);
+  }
+});
+
+test("fonts are served from the repo, not a CDN", async () => {
+  const html = await read("public/index.html");
+  for (const file of [
+    "schibsted-var-latin.woff2",
+    "syne-var-latin.woff2",
+    "jetbrains-mono-500-latin.woff2",
+  ]) {
+    expect(html).toContain(`/fonts/${file}`);
+    expect(await Bun.file(`public/fonts/${file}`).exists()).toBe(true);
+  }
+});
+
+// The cards are painted as static skeletons so the deferred module never pushes the
+// layout down after first paint. Losing them would bring the layout shift back.
+test("every provider ships a static skeleton card", async () => {
+  const html = await read("public/index.html");
+  for (const id of ["claude", "codex", "zai", "opencode-zen", "gemini", "moonshot"]) {
+    expect(html).toContain(`class="card is-skeleton" data-provider="${id}"`);
+  }
+});
+
+test("gemini quota windows are named like every other provider's", () => {
+  expect(localiseLabel("Gemini Models · Weekly Limit")).toBe("Modelli Gemini · Settimanale (7g)");
+  expect(localiseLabel("Claude and GPT models · Five Hour Limit")).toBe(
+    "Modelli Claude e GPT · Sessione (5h)",
+  );
+  // Anything Google adds later passes through untouched instead of being dropped.
+  expect(localiseLabel("Something New · Hourly Limit")).toBe("Something New · Hourly Limit");
+});

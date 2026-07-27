@@ -10,9 +10,11 @@ Dashboard unificata e CLI local-first per monitorare lo stato delle quote dei tu
 
 ## ⚡ Caratteristiche
 
+- ⏳ **Orizzonte reset**: tutti i reset dei sei provider su un unico asse temporale (adesso → 7 giorni). Passando su un marcatore si illumina la card corrispondente, e viceversa. Risponde alla domanda che le percentuali non risolvono: *quando torno operativo?*
 - 🔒 **Local-first & Privacy-focused**: Non richiede server esterni o database cloud. Le tue API Key e token restano sempre sul tuo dispositivo.
+- 🚫 **Zero richieste di terze parti**: font e loghi sono serviti da `public/`. La pagina non contatta nessun host esterno — nemmeno per i font o le icone dei provider.
 - 🔑 **Riuṣa le sessioni esistenti**: Riconosce automaticamente i token OAuth salvati dalle CLI ufficiali (`Claude Code`, `Codex`, `OpenCode`).
-- 🌐 **Dashboard Web**: Interfaccia reattiva e moderna per monitorare tutti i provider in un unico punto.
+- 🌐 **Dashboard Web**: Tutti e sei i provider a schermo senza scroll da 1280×800 in su. Accessibile da tastiera, con `prefers-reduced-motion` rispettato.
 - 💻 **Widget Desktop Windows**: Floating widget integrato su Windows (interagibile tramite protocollo `llmquota://widget`).
 - 🤖 **CLI per Agenti AI & Terminale**: Output compatto in testo o JSON sanitizzato (`llm-quota status --json`), perfetto per integrarli in agenti, script e prompt.
 
@@ -105,9 +107,17 @@ src/
 ├── credentials.ts         # Parser credenziali locali e configurazione utente
 ├── cli.ts                 # CLI riga di comando per sviluppatori ed agenti
 ├── providers/             # Adapter per ciascun provider AI (fetch → QuotaResult)
-public/                    # Frontend SPA (HTML5/CSS3/Vanilla JS, zero CDN est.)
+public/                    # Frontend SPA (HTML5/CSS3/Vanilla JS)
+├── fonts/                 # Syne, Schibsted Grotesk, JetBrains Mono (woff2, subset latino)
 widget.py                  # Desktop Widget Tkinter per Windows
 ```
+
+I font sono variabili, sottoinsieme latino, ~102 KB in totale, serviti in locale con un
+fallback metricamente allineato: lo swap cambia le forme, mai il layout.
+
+I loghi in `public/logos/` sono le icone ufficiali di ciascun provider, scaricate una
+volta dal dominio del provider stesso e incluse nel repository per non doverle richiedere
+a runtime. Se un file manca, la card mostra un glifo disegnato di riserva.
 
 Per aggiungere un nuovo provider AI: crea una nuova classe adapter in `src/providers/` implementando l'interfaccia `Provider` e registrala in `src/providers/index.ts`.
 
@@ -116,3 +126,10 @@ Per aggiungere un nuovo provider AI: crea una nuova classe adapter in `src/provi
 ## 📜 Licenza
 
 Rilasciato sotto licenza [MIT](LICENSE). Libero per uso personale e commerciale. Contributi e Pull Request sono i benvenuti!
+
+### Marchi
+
+La licenza MIT copre il codice di questo progetto, non i marchi altrui. I loghi in
+`public/logos/` appartengono ai rispettivi titolari (Anthropic, OpenAI, Z.ai, OpenCode,
+Google, Moonshot AI) e sono inclusi solo per identificare il servizio a cui ciascuna card
+si riferisce. Questo progetto non è affiliato né approvato da nessuno di essi.
