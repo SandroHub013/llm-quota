@@ -13,6 +13,37 @@
     "url": "https://github.com/SandroHub013/llm-quota/issues"
   },
   "homepage": "https://github.com/SandroHub013/llm-quota#readme",
+  "keywords": [
+    "llm",
+    "quota",
+    "rate-limit",
+    "usage",
+    "dashboard",
+    "cli",
+    "claude-code",
+    "anthropic",
+    "codex",
+    "openai",
+    "gemini",
+    "moonshot",
+    "opencode",
+    "local-first",
+    "self-hosted",
+    "privacy",
+    "developer-tools",
+    "ai-agents",
+    "bun"
+  ],
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "files": [
+    "src",
+    "public",
+    "widget.py",
+    "README.md",
+    "LICENSE"
+  ],
   "bin": {
     "llm-quota": "src/cli.ts",
     "webquota": "src/cli.ts"

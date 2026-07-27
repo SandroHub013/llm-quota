@@ -1,0 +1,43 @@
+name: Bug report
+description: Something shows the wrong number, or does not show up at all
+labels: [bug]
+body:
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - Claude Code
+        - Codex (ChatGPT)
+        - z.ai
+        - OpenCode Zen
+        - Gemini
+        - Moonshot
+        - Dashboard / UI (not provider-specific)
+        - CLI
+        - Windows widget
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: cli
+    attributes:
+      label: CLI output
+      description: Output of `bun run cli status --json`. It is sanitized, but read it before pasting.
+      render: json
+
+  - type: input
+    id: env
+    attributes:
+      label: OS and Bun version
+      placeholder: "Windows 11 / bun 1.3.14"
+    validations:
+      required: true
