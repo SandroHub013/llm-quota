@@ -1,3 +1,4 @@
+import { readdir } from "node:fs/promises";
 import { expect, test } from "bun:test";
 import { normaliseLabel } from "./providers/gemini.js";
 
@@ -15,17 +16,31 @@ test("the frontend makes no third-party requests", async () => {
   ]);
   const frontend = [html, app, api, ui].join("\n");
 
-  const remote = [...frontend.matchAll(/\bhttps?:\/\/([^\s"'`)]+)/g)].map((m) => m[1]);
-  const fetched = remote.filter(
-    // Links a user clicks (provider consoles, the OAuth consent page) are fine —
-    // what must not appear is a host the page itself loads from.
-    (host) => !/^(claude\.ai|chatgpt\.com|platform\.openai|z\.ai|opencode\.ai|gemini\.google|aistudio\.google|kimi\.com|platform\.moonshot|accounts\.google|console\.|www\.w3\.org)/.test(host),
-  );
+  // Console links arrive from the API at runtime. A literal remote URL in these files
+  // can be used by a resource-bearing element, so reject it; the W3C SVG namespace is
+  // metadata and causes no request.
+  const remote = [...frontend.matchAll(/\bhttps?:\/\/([^\s"'`)]+)/g)]
+    .map((m) => m[1])
+    .filter((host) => !host.startsWith("www.w3.org"));
 
-  expect(fetched).toEqual([]);
+  expect(remote).toEqual([]);
   expect(frontend).not.toContain("fonts.googleapis.com");
   expect(frontend).not.toContain("fonts.gstatic.com");
   expect(frontend).not.toContain("s2/favicons");
+});
+
+test("the documentation site loads no third-party assets", async () => {
+  const site = await read("docs/index.html");
+  const resources = [
+    ...site.matchAll(/\b(?:src|srcset)\s*=\s*["']([^"']+)/gi),
+    ...site.matchAll(/\burl\(\s*["']?([^"')]+)/gi),
+    ...site.matchAll(/<link\b[^>]*\bhref\s*=\s*["']([^"']+)/gi),
+  ].map((match) => match[1]).join("\n");
+  const remote = [...resources.matchAll(/\bhttps?:\/\/([^\s/"',)]+)/g)]
+    .map((match) => match[1])
+    .filter((host) => host !== "sandrohub013.github.io" && host !== "www.w3.org");
+
+  expect(remote).toEqual([]);
 });
 
 // Official provider marks, but frozen in the repo. Loading them from the provider
@@ -49,13 +64,16 @@ test("provider logos are local files with no external references", async () => {
     expect(asset.size).toBeGreaterThan(500);
   }
 
-  // An SVG can pull in a remote image or stylesheet of its own; these must not.
-  for (const file of ["zai.svg", "gemini.svg"]) {
-    const svg = await read(`public/logos/${file}`);
-    const remote = [...svg.matchAll(/https?:\/\/[^\s"')]+/g)]
-      .map((m) => m[0])
-      .filter((u) => !u.startsWith("http://www.w3.org"));
-    expect(remote).toEqual([]);
+  // An SVG can pull in a remote image or stylesheet of its own; neither surface may.
+  for (const dir of ["public/logos", "docs/logos"]) {
+    for (const file of await readdir(dir)) {
+      if (!file.endsWith(".svg")) continue;
+      const svg = await read(`${dir}/${file}`);
+      const remote = [...svg.matchAll(/https?:\/\/[^\s"')]+/g)]
+        .map((m) => m[0])
+        .filter((u) => !u.startsWith("http://www.w3.org"));
+      expect(remote).toEqual([]);
+    }
   }
 });
 

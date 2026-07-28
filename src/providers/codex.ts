@@ -38,7 +38,7 @@ export const codex: Provider = {
         authSource: "~/.codex/auth.json",
         message: stale
           ? "Codex token expired and the refresh token is spent. Run `codex login` once to renew it."
-          : `Refresh token fallito (${token.error}).`,
+          : `Token refresh failed (${token.error}).`,
       };
     }
 
@@ -137,7 +137,7 @@ function windowLabel(secs?: number): string {
   if (!secs) return "Window";
   if (secs <= 6 * 3600) return "Session (5h)";
   if (secs <= 8 * 86400) return "Weekly (7d)";
-  return `Finestra (${Math.round(secs / 86400)}g)`;
+  return `Window (${Math.round(secs / 86400)}d)`;
 }
 
 function resetFrom(w: any): string | undefined {
