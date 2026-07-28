@@ -1,7 +1,8 @@
 # Contributing
 
-Thanks for looking. This is a small project with a small surface, so contributing is meant to be
-quick.
+Issues and PRs welcome. What this file adds to the README is the repo-specific
+conventions: what to work on, how contributions are formatted, what has to stay in
+sync, and what gets rejected.
 
 ## Setup
 
@@ -19,50 +20,143 @@ bun test
 bun run typecheck
 ```
 
-Both must pass — CI runs exactly these two commands.
+Both must pass — CI (`.github/workflows/ci.yml`) runs exactly these two commands. A
+red CI run is a red PR; fix it before asking for review.
+
+## Where to contribute
+
+Providers change their APIs without warning, so keeping the existing adapters accurate
+outranks adding a new one. In priority order:
+
+**Always welcome — the issue is a formality here: title plus evidence, then the PR:**
+
+- **Provider fixes with evidence.** A provider shows wrong numbers, stale resets, or
+  its response shape changed. Paste the sanitized output of `bun run cli status
+  --json` (read it before posting) and, when the shape changed, a real response body
+  with credentials scrubbed. A fix without the response it fixes against can't be
+  reviewed — the adapter exists to parse that body.
+- **New provider adapters.** The most useful addition and a small contract — see
+  "Adding a provider" below. Use the `provider` label and the provider-request
+  template.
+- **Bug fixes with a failing test.** Dashboard, CLI, widget: reproduce it in a test
+  first, then make it pass.
+
+**Open an issue first — these are rejected as drive-by PRs:**
+
+- An i18n layer. Strings are hard-coded English by design; see "Localisation".
+- New runtime dependencies. The project ships with exactly one (`hono`); adding a
+  second is a design decision.
+- New surfaces: dashboard pages, widget features, output formats.
+- CI, linting, formatting or other tooling changes.
+
+**Not wanted:**
+
+- Telemetry, analytics, error reporting. Ever — local-first is the point of the
+  project.
+- Translations of the product strings or the READMEs.
+- Changelogs, badges, roadmap files. Git history is the changelog.
+- Third-party assets hotlinked into the frontend, in any form.
 
 ## Adding a provider
 
-This is the most useful contribution, and the contract is small. A provider is one file in
-`src/providers/` that fetches whatever the service exposes and returns a `QuotaResult`.
+A provider is one file in `src/providers/` that fetches whatever the service exposes
+and returns a `QuotaResult`.
 
 1. Read `src/providers/types.ts` for the shape.
 2. Copy the closest existing adapter — `moonshot.ts` is the simplest (plain API key),
    `claude.ts` the most complete (OAuth from disk, caching, rate-limit backoff).
 3. Register it in `src/providers/index.ts`.
-4. If the provider needs a logo, add an official mark to `public/logos/` and reference it — do
-   **not** hotlink it. `src/frontend.test.ts` will fail if you do.
-5. Add a test next to the adapter (`*.test.ts`) covering at least the parse of a real response
-   body, with any credentials scrubbed.
+4. If the provider needs a logo, add an official mark to `public/logos/` and reference
+   it — do **not** hotlink it. `src/frontend.test.ts` will fail if you do.
+5. Add a test next to the adapter (`*.test.ts`) covering at least the parse of a real
+   response body, with any credentials scrubbed.
+6. Run the sync checklist below — a provider is listed in more places than the
+   registry.
 
 ## Ground rules
 
-- **No third-party requests from the frontend.** No CDN, no font host, no favicon service. This
-  is the point of the project and `src/frontend.test.ts` enforces it.
+- **Local-first.** No third-party requests from the frontend: no CDN, no font host,
+  no favicon service. `src/frontend.test.ts` enforces it.
 - **No telemetry.** Ever.
-- **No new runtime dependencies** without a reason in the PR description. The project ships with
-  exactly one (`hono`) and that is a feature.
-- **Never commit credentials**, and scrub tokens out of test fixtures.
+- **No new runtime dependencies** without a reason in the PR description. Shipping
+  with exactly one (`hono`) is a feature.
+- **Never commit credentials**, and scrub tokens out of test fixtures. A fixture with
+  a real token gets the PR closed, not fixed.
+- **Practitioner voice in docs.** Write what broke and what to do, not what one should
+  consider doing.
+
+## Formatting
+
+- **Prose wraps at 100 columns** in Markdown. Code blocks, tables and unbreakable
+  tokens — URLs, commands — may exceed it; prose may not. Do not break a URL to
+  satisfy the count.
+- **Headings**: ATX (`##`), sentence case, no trailing punctuation. One `#` per file.
+- **Fenced code carries a language** (`ts`, `bash`, `json`) and must be copy-paste
+  runnable, not pseudo-code.
+- **TypeScript, ESM**, imports with the `.js` suffix, as the rest of `src/` does.
+- American English, present tense, imperative mood for rules.
+
+## The sync checklist
+
+Adding, renaming or removing a provider touches more than the adapter:
+
+- [ ] `src/providers/index.ts` — the registry
+- [ ] `README.md` — provider table and the tagline line that lists them
+- [ ] `README.it.md` — the same two spots, in Italian
+- [ ] `package.json` — `description` and `keywords`, if they name providers
+- [ ] `docs/index.html` — the landing page's provider list
+- [ ] `.github/ISSUE_TEMPLATE/bug_report.yml` — the provider dropdown
+- [ ] `public/logos/` — the official mark, self-hosted
+- [ ] `docs/og.jpg` and `docs/dashboard-preview.*` — only if they picture the provider
+      list; regenerate rather than hand-editing
+
+The README is the file readers see first and the one that goes stale fastest — check
+it even when the change "only" touches code.
+
+## Commits and PRs
+
+- **Conventional Commits**, imperative, lowercase after the colon, as the existing
+  history does. Scopes in use: `widget`, `site`, `assets`, `cli`, `ci`. A change that
+  needs a new scope probably needs an issue first.
+- **One concern per PR.** A provider fix and a landing-page tweak are two PRs.
+- **PR title = the commit message** it will be squash-merged as. The body carries: the
+  evidence (response body, failing output), the checks run, and before/after output
+  for anything user-visible.
+- **Every PR closes an issue** (`Closes #N`). No issue, no review: the issue decides
+  "should this exist?"; the PR only decides "is this done right?".
+- **Labels**: `bug` for wrong numbers and broken behavior, `enhancement` for new
+  features, `provider` for adapter work, `documentation` for prose. Maintainers apply
+  them; don't open a PR to ask for one.
 
 ## Localisation
 
-Every user-facing string — dashboard, CLI, widget — is English, hard-coded at its use site.
-There is no i18n layer, and adding one is a design decision rather than a translation task:
-open an issue first if you want to propose it.
+Every user-facing string — dashboard, CLI, widget — is English, hard-coded at its use
+site. There is no i18n layer, and adding one is a design decision rather than a
+translation task: open an issue first if you want to propose it.
 
-One thing to keep consistent when you touch strings: window labels are named the same way
-for every provider (`Session (5h)`, `Weekly (7d)`, `Daily (24h)`), even when the provider
-calls them something else. `normaliseLabel` in `src/providers/gemini.ts` is how Google's
-names get mapped onto that vocabulary.
+One thing to keep consistent when you touch strings: window labels are named the same
+way for every provider (`Session (5h)`, `Weekly (7d)`, `Daily (24h)`), even when the
+provider calls them something else. `normaliseLabel` in `src/providers/gemini.ts` is
+how Google's names get mapped onto that vocabulary.
 
 ## Reporting bugs
 
-Open an issue with your OS, Bun version, the provider involved, and what you expected. If a
-provider shows the wrong number, `bun run cli status --json` output is the most useful thing to
-paste — it is sanitized, but read it before posting anyway.
+Open an issue with your OS, Bun version, the provider involved, and what you expected.
+If a provider shows the wrong number, `bun run cli status --json` output is the most
+useful thing to paste — it is sanitized, but read it before posting anyway.
+
+## What will be rejected
+
+- Provider fixes without the response body they parse
+- New runtime dependencies without a doctrine reason
+- Style-only reformatting (whitespace and line-ending noise)
+- PRs that mix concerns, or that restructure what they were asked to fix
+- Telemetry or third-party requests, in any form, from anywhere
+- Anything that commits a real credential — the PR gets closed and the token treated
+  as leaked: rotate it
 
 ## Security
 
 Found something that leaks credentials? Open a
-[security advisory](https://github.com/SandroHub013/llm-quota/security/advisories/new) rather than
-a public issue.
+[security advisory](https://github.com/SandroHub013/llm-quota/security/advisories/new)
+rather than a public issue.
