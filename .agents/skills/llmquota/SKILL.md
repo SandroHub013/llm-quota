@@ -272,11 +272,19 @@ Rules:
 - **Modality routing:** audio/video input → Kimi K3 or Gemini (the only
   ones that accept them). Image input → any card above except text-only
   free models. Image **output** → Gemini via `agy` only. PDF → Claude.
-  Video **output** → `bytedance/seedance-2.0` via the OpenRouter video
-  API (async: `POST /api/v1/videos`, poll the returned `polling_url`,
-  download from `<polling_url>/content?index=0` — not a chat call, so
-  it does not go through `pi`). Field notes from the first live runs
-  (2026-07-28):
+- **Video output: deterministic first, generative when there is no DOM.**
+  If the shot's source is UI/DOM (a dashboard, a widget, a site), render
+  it with HyperFrames — free, pixel-perfect text by construction, and the
+  composition stays in the repo for free re-renders. Seedance earns its
+  per-second price only for generative/organic content with no DOM
+  source (product beauty shots, scenes, footage-like motion). The first
+  live runs proved the split: Seedance's best UI result was the one
+  where it behaved like a deterministic renderer, and its failures were
+  all text reinvention.
+  When Seedance IS the right tool — `bytedance/seedance-2.0` via the
+  OpenRouter video API (async: `POST /api/v1/videos`, poll the returned
+  `polling_url`, download from `<polling_url>/content?index=0` — not a
+  chat call, so it does not go through `pi`). Field notes (2026-07-28):
   - Image-to-video inputs must be **publicly downloadable URLs**;
     `raw.githubusercontent.com` links work fine.
   - Always pass `"generate_audio": false` for UI/ambient clips — an
