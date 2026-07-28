@@ -143,7 +143,7 @@ def set_window_shape(hwnd, regions):
         if kind == "ellipse":
             region = gdi32.CreateEllipticRgn(left, top, right + 1, bottom + 1)
         else:
-            region = gdi32.CreateRoundRectRgn(left, top, right + 1, bottom + 1, 24, 24)
+            region = gdi32.CreateRoundRectRgn(left, top, right + 1, bottom + 1, 40, 40)
         gdi32.CombineRgn(combined, combined, region, 2)  # RGN_OR
         gdi32.DeleteObject(region)
     user32.SetWindowRgn.argtypes = (wintypes.HWND, wintypes.HANDLE, wintypes.BOOL)
@@ -807,25 +807,25 @@ class Widget(tk.Tk):
             if img:
                 lbl_icon = tk.Label(item, image=img, bg=PANEL)
                 lbl_icon.image = img
-                lbl_icon.pack(side="left", padx=(4, 2), pady=2)
+                lbl_icon.pack(side="left", padx=(3, 1), pady=2)
             else:
-                tk.Label(item, text=initial, bg=color, fg="#fff", font=("Segoe UI", 8, "bold"), width=2).pack(side="left", padx=(4, 2), pady=2)
+                tk.Label(item, text=initial, bg=color, fg="#fff", font=("Segoe UI", 8, "bold"), width=2).pack(side="left", padx=(3, 1), pady=2)
 
             txt = f"{rem}%" if rem is not None else STATUS_LABEL.get(d["status"], d["status"])
             lbl_txt = tk.Label(item, text=txt, bg=PANEL, fg=quota_color(rem) if rem is not None else MUT, font=MONO)
-            lbl_txt.pack(side="left", padx=(2, 2))
+            lbl_txt.pack(side="left", padx=1)
 
             if reset_str:
-                tk.Label(item, text=f"({reset_str})", bg=PANEL, fg=MUT, font=MONO).pack(side="left", padx=(0, 4))
+                tk.Label(item, text=f"({reset_str})", bg=PANEL, fg=MUT, font=MONO).pack(side="left", padx=(0, 2))
 
             # Tooltip al passaggio del mouse
             Tooltip(item, lambda d=d: d.get("details_str"))
 
-            item.pack(side="left", padx=4)
+            item.pack(side="left", padx=2)
 
         # Switch mode button
         btn_switch = tk.Label(self.minibar_frame, text="[ ⇄ Q Logo ]", bg=PANEL, fg=ACCENT, font=UI, cursor="hand2")
-        btn_switch.pack(side="left", padx=(6, 8))
+        btn_switch.pack(side="left", padx=(4, 6))
         btn_switch.bind("<Button-1>", lambda e: self.switch_view_mode())
 
         self.minibar_frame.pack()
