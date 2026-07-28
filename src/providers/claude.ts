@@ -47,7 +47,7 @@ export const claude: Provider = {
       const res: QuotaResult = {
         ...base,
         status: "unauthenticated",
-        message: "Nessun login trovato in ~/.claude/.credentials.json. Esegui `claude` e fai il login.",
+        message: "No login found in ~/.claude/.credentials.json. Run `claude` and sign in.",
       };
       cache = { result: res, timestamp: now };
       return res;
@@ -55,7 +55,7 @@ export const claude: Provider = {
 
     const expired = cred.expiresAt && cred.expiresAt < Date.now();
     const tokenMetric: QuotaMetric = {
-      label: "Token OAuth",
+      label: "OAuth token",
       resetAt: cred.expiresAt ? new Date(cred.expiresAt).toISOString() : undefined,
     };
 
@@ -75,7 +75,7 @@ export const claude: Provider = {
         status: "rate_limited",
         authSource: "~/.claude/.credentials.json",
         metrics: [tokenMetric],
-        message: "Anthropic ha risposto 429 (rate limited). In pausa per 3 minuti per permettere il reset del limit.",
+        message: "Anthropic returned 429 (rate limited). Pausing for 3 minutes to let the limit reset.",
       };
     } else if (res.status === 401 || res.status === 403) {
       result = {
@@ -84,8 +84,8 @@ export const claude: Provider = {
         authSource: "~/.claude/.credentials.json",
         metrics: [tokenMetric],
         message: expired
-          ? "Token OAuth scaduto: rifai il login con `claude`."
-          : "Token presente ma l'endpoint usage ha rifiutato la richiesta (scope insufficienti).",
+          ? "OAuth token expired: sign in again with `claude`."
+          : "Token present but the usage endpoint refused the request (insufficient scopes).",
       };
     } else {
       const metrics = parseUsage(res.body);
@@ -103,7 +103,7 @@ export const claude: Provider = {
           status: "partial",
           authSource: "~/.claude/.credentials.json",
           metrics: [tokenMetric],
-          message: "Login attivo. Endpoint usage raggiunto ma senza finestre di quota leggibili; controlla la console.",
+          message: "Signed in. The usage endpoint responded but with no readable quota windows; check the console.",
           raw: res.body ?? res.text?.slice(0, 300),
         };
       }
@@ -115,8 +115,8 @@ export const claude: Provider = {
 };
 
 const KIND_LABEL: Record<string, string> = {
-  session: "Sessione (5h)",
-  weekly_all: "Settimanale (7g)",
+  session: "Session (5h)",
+  weekly_all: "Weekly (7d)",
 };
 
 // Live shape: body.limits[] = percent-based windows. Verified against the real endpoint.
@@ -125,7 +125,7 @@ export function parseUsage(body: any): QuotaMetric[] {
   return body.limits
     .filter((l: any) => typeof l?.percent === "number")
     .map((l: any) => ({
-      label: KIND_LABEL[l.kind] ?? l.kind ?? "Finestra",
+      label: KIND_LABEL[l.kind] ?? l.kind ?? "Window",
       used: l.percent,
       limit: 100,
       unit: "percent" as const,

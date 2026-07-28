@@ -203,8 +203,9 @@ New provider adapters, bug reports and UI fixes are all welcome — start with
 [CONTRIBUTING.md](CONTRIBUTING.md). Good first issues are tagged
 [`good first issue`](https://github.com/SandroHub013/llm-quota/labels/good%20first%20issue).
 
-**The dashboard UI is currently in Italian.** English localisation is the most useful
-contribution right now, and a great first PR.
+The dashboard, the CLI and the desktop widget are all in English. There is no i18n layer
+yet — if you want the UI in another language, that is an open design question worth an
+issue before a PR.
 
 ## License
 

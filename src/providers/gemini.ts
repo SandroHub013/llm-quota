@@ -99,7 +99,7 @@ export const gemini: Provider = {
         status: "unauthenticated",
         needsKey: true,
         loginUrl: "/api/auth/gemini",
-        message: "Nessun login Gemini. Accedi con Google (usa la tua sub), o incolla una API key AI Studio.",
+        message: "No Gemini login. Sign in with Google to use your subscription, or paste an AI Studio API key.",
       };
     }
 
@@ -150,7 +150,7 @@ export const gemini: Provider = {
           plan: proj.plan,
           loginUrl: "/api/auth/gemini",
           authSource: "~/.gemini/oauth_creds.json",
-          message: "Token da client vecchio: il server rifiuta la lettura quota. Rifai login con Google.",
+          message: "Token from an old client: the server refuses the quota read. Sign in with Google again.",
         };
       }
 
@@ -159,7 +159,7 @@ export const gemini: Provider = {
         status: "partial",
         plan: proj.plan,
         authSource: "~/.gemini/oauth_creds.json",
-        message: "Login attivo, quota non leggibile da Code Assist ora.",
+        message: "Signed in, but Code Assist is not returning quota right now.",
         raw: res.body ?? res.text?.slice(0, 200),
       };
     }
@@ -169,15 +169,15 @@ export const gemini: Provider = {
       `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key!)}`,
     );
     if (res.status === 400 || res.status === 401 || res.status === 403) {
-      return { ...base, status: "unauthenticated", needsKey: true, message: "API key Gemini non valida." };
+      return { ...base, status: "unauthenticated", needsKey: true, message: "Invalid Gemini API key." };
     }
     if (res.ok) {
       return {
         ...base,
         status: "partial",
-        authSource: "chiave LLM Quota",
+        authSource: "LLM Quota key",
         message:
-          "Key valida. Google non espone la quota/rate-limit per key via API: i consumi sono nel Google AI Studio / Cloud console.",
+          "Key is valid. Google does not expose per-key quota or rate limits over the API: usage lives in Google AI Studio / Cloud console.",
         metrics: [],
       };
     }
@@ -188,21 +188,22 @@ export const gemini: Provider = {
 // Real shape (retrieveUserQuotaSummary, antigravity tier): groups[].buckets[] with
 // displayName + remainingFraction + resetTime. Older tiers returned flat buckets with
 // a model field — handle both and keep raw for debugging.
-// Google returns English display names; the rest of the dashboard speaks Italian and
-// names its windows the same way for every provider. Unknown names pass through.
-const IT_LABEL: Record<string, string> = {
-  "five hour limit": "Sessione (5h)",
-  "daily limit": "Giornaliero (24h)",
-  "weekly limit": "Settimanale (7g)",
-  "monthly limit": "Mensile (30g)",
-  "gemini models": "Modelli Gemini",
-  "claude and gpt models": "Modelli Claude e GPT",
+// Google's display names ("Five Hour Limit") do not match how every other provider
+// names the same window, so they are normalised to the dashboard's own vocabulary.
+// Unknown names pass through untouched.
+const WINDOW_LABEL: Record<string, string> = {
+  "five hour limit": "Session (5h)",
+  "daily limit": "Daily (24h)",
+  "weekly limit": "Weekly (7d)",
+  "monthly limit": "Monthly (30d)",
+  "gemini models": "Gemini models",
+  "claude and gpt models": "Claude and GPT models",
 };
 
-export function localiseLabel(name: string): string {
+export function normaliseLabel(name: string): string {
   return name
     .split(" · ")
-    .map((part) => IT_LABEL[part.trim().toLowerCase()] ?? part)
+    .map((part) => WINDOW_LABEL[part.trim().toLowerCase()] ?? part)
     .join(" · ");
 }
 
@@ -210,7 +211,7 @@ export function parseQuota(body: any): QuotaMetric[] {
   const out: QuotaMetric[] = [];
   const push = (label: string, frac: number, reset?: string) =>
     out.push({
-      label: localiseLabel(label),
+      label: normaliseLabel(label),
       used: Math.round((1 - frac) * 100),
       limit: 100,
       unit: "percent",
