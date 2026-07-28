@@ -32,9 +32,8 @@ outranks adding a new one. In priority order:
 
 - **Provider fixes with evidence.** A provider shows wrong numbers, stale resets, or
   its response shape changed. Paste the sanitized output of `bun run cli status
-  --json` (read it before posting) and, when the shape changed, a real response body
-  with credentials scrubbed. A fix without the response it fixes against can't be
-  reviewed — the adapter exists to parse that body.
+  --json` (read it before posting). For parsing or response-shape fixes, include a real
+  response body with credentials scrubbed — the adapter exists to parse that body.
 - **New provider adapters.** The most useful addition and a small contract — see
   "Adding a provider" below. Use the `provider` label and the provider-request
   template.
@@ -53,7 +52,8 @@ outranks adding a new one. In priority order:
 
 - Telemetry, analytics, error reporting. Ever — local-first is the point of the
   project.
-- Translations of the product strings or the READMEs.
+- New translation languages. Keep product strings in English and the existing Italian
+  README in sync.
 - Changelogs, badges, roadmap files. Git history is the changelog.
 - Third-party assets hotlinked into the frontend, in any form.
 
@@ -63,11 +63,13 @@ A provider is one file in `src/providers/` that fetches whatever the service exp
 and returns a `QuotaResult`.
 
 1. Read `src/providers/types.ts` for the shape.
-2. Copy the closest existing adapter — `moonshot.ts` is the simplest (plain API key),
-   `claude.ts` the most complete (OAuth from disk, caching, rate-limit backoff).
+2. Copy the closest existing adapter — `zai.ts` is the simplest (API key, one quota
+   endpoint), `claude.ts` the most complete (OAuth from disk, caching, rate-limit
+   backoff).
 3. Register it in `src/providers/index.ts`.
-4. If the provider needs a logo, add an official mark to `public/logos/` and reference
-   it — do **not** hotlink it. `src/frontend.test.ts` will fail if you do.
+4. If the provider needs a logo, add an official mark to both `public/logos/` and
+   `docs/logos/`, then reference it — do **not** hotlink it. `src/frontend.test.ts`
+   will fail if you do.
 5. Add a test next to the adapter (`*.test.ts`) covering at least the parse of a real
    response body, with any credentials scrubbed.
 6. Run the sync checklist below — a provider is listed in more places than the
@@ -101,14 +103,17 @@ and returns a `QuotaResult`.
 Adding, renaming or removing a provider touches more than the adapter:
 
 - [ ] `src/providers/index.ts` — the registry
-- [ ] `README.md` — provider table and the tagline line that lists them
-- [ ] `README.it.md` — the same two spots, in Italian
+- [ ] `README.md` and `README.it.md` — tables, taglines, fixed provider counts, and
+      asset or trademark lists
 - [ ] `package.json` — `description` and `keywords`, if they name providers
-- [ ] `docs/index.html` — the landing page's provider list
+- [ ] `docs/index.html` — every provider name or count, including the strip, table, and
+      demo data
 - [ ] `.github/ISSUE_TEMPLATE/bug_report.yml` — the provider dropdown
-- [ ] `public/logos/` — the official mark, self-hosted
-- [ ] `docs/og.jpg` and `docs/dashboard-preview.*` — only if they picture the provider
-      list; regenerate rather than hand-editing
+- [ ] `public/logos/` and `docs/logos/` — the official mark, self-hosted in the app and site
+- [ ] `public/og.jpg`, `docs/og.jpg`, and `docs/dashboard-preview.*` — only if they
+      picture the provider list; regenerate rather than hand-editing
+- [ ] Repository-wide search — the provider name and fixed counts such as "six
+      providers"
 
 The README is the file readers see first and the one that goes stale fastest — check
 it even when the change "only" touches code.
@@ -116,8 +121,8 @@ it even when the change "only" touches code.
 ## Commits and PRs
 
 - **Conventional Commits**, imperative, lowercase after the colon, as the existing
-  history does. Scopes in use: `widget`, `site`, `assets`, `cli`, `ci`. A change that
-  needs a new scope probably needs an issue first.
+  history does. Scopes currently in use: `widget`, `site`, `assets`. Use an unscoped
+  commit when none fits.
 - **One concern per PR.** A provider fix and a landing-page tweak are two PRs.
 - **PR title = the commit message** it will be squash-merged as. The body carries: the
   evidence (response body, failing output), the checks run, and before/after output
@@ -130,8 +135,8 @@ it even when the change "only" touches code.
 
 ## Localisation
 
-Every user-facing string — dashboard, CLI, widget — is English, hard-coded at its use
-site. There is no i18n layer, and adding one is a design decision rather than a
+Keep every user-facing string — dashboard, CLI, widget — in English and hard-coded at
+its use site. There is no i18n layer, and adding one is a design decision rather than a
 translation task: open an issue first if you want to propose it.
 
 One thing to keep consistent when you touch strings: window labels are named the same
@@ -147,11 +152,11 @@ useful thing to paste — it is sanitized, but read it before posting anyway.
 
 ## What will be rejected
 
-- Provider fixes without the response body they parse
-- New runtime dependencies without a doctrine reason
+- Provider parsing or response-shape fixes without a representative sanitized body
+- New runtime dependencies without a documented rationale
 - Style-only reformatting (whitespace and line-ending noise)
 - PRs that mix concerns, or that restructure what they were asked to fix
-- Telemetry or third-party requests, in any form, from anywhere
+- Telemetry in any form, or third-party requests from the frontend
 - Anything that commits a real credential — the PR gets closed and the token treated
   as leaked: rotate it
 
