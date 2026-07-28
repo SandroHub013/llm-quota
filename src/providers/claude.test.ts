@@ -13,8 +13,8 @@ const LIVE = {
 test("parseUsage maps percent windows and skips non-numeric", () => {
   const m = parseUsage(LIVE);
   expect(m.map((x) => [x.label, x.used])).toEqual([
-    ["Sessione (5h)", 20],
-    ["Settimanale (7g)", 34],
+    ["Session (5h)", 20],
+    ["Weekly (7d)", 34],
   ]);
 });
 

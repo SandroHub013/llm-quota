@@ -200,13 +200,13 @@ BRAND = {
     "gemini": ("#4285f4", "G"),
     "moonshot": ("#0ea5e9", "K"),
 }
-STATUS_IT = {
-    "ok": "attivo",
-    "partial": "parziale",
+STATUS_LABEL = {
+    "ok": "active",
+    "partial": "partial",
     "rate_limited": "rate limited",
-    "unauthenticated": "login mancante",
+    "unauthenticated": "not signed in",
     "no_endpoint": "no API quota",
-    "error": "errore",
+    "error": "error",
 }
 STATUS_DOT = {
     "ok": "#3fb950",
@@ -282,7 +282,7 @@ def fetch_all():
 
                 lbl = m.get("label", "Quota")
                 if rem is not None:
-                    d_item = f"{lbl}: {rem}% residui"
+                    d_item = f"{lbl}: {rem}% left"
                 elif used is not None and limit:
                     d_item = f"{lbl}: {used}/{limit}"
                 elif m.get("remaining") is not None:
@@ -291,7 +291,7 @@ def fetch_all():
                     d_item = lbl
 
                 if r_str:
-                    d_item += f" (reset tra {r_str})"
+                    d_item += f" (resets in {r_str})"
                 details_list.append(d_item)
 
             rems = [m["rem"] for m in metric_info if m["rem"] is not None]
@@ -304,7 +304,7 @@ def fetch_all():
                 reset_sec = valid_resets[0]["sec"]
 
             reset_str = format_reset(reset_sec)
-            details_str = " • ".join(details_list) if details_list else d.get("message", STATUS_IT.get(d.get("status"), "Nessun dettaglio"))
+            details_str = " • ".join(details_list) if details_list else d.get("message", STATUS_LABEL.get(d.get("status"), "No detail"))
 
             out.append({
                 "id": d["id"],
@@ -580,7 +580,7 @@ class Widget(tk.Tk):
             tk.Label(row, text=rst_txt, bg=BG, fg=MUT,
                      font=MONO, width=9, anchor="w").pack(side="left", padx=(4, 0))
         else:
-            txt = STATUS_IT.get(d["status"], d["status"])
+            txt = STATUS_LABEL.get(d["status"], d["status"])
             tk.Label(row, text=txt, bg=BG, fg=MUT,
                      font=MONO, width=14, anchor="e").pack(side="left")
 
@@ -618,7 +618,7 @@ class Widget(tk.Tk):
             else:
                 tk.Label(item, text=initial, bg=color, fg="#fff", font=("Segoe UI", 8, "bold"), width=2).pack(side="left", padx=(4, 2), pady=2)
 
-            txt = f"{rem}%" if rem is not None else STATUS_IT.get(d["status"], d["status"])
+            txt = f"{rem}%" if rem is not None else STATUS_LABEL.get(d["status"], d["status"])
             lbl_txt = tk.Label(item, text=txt, bg=PANEL, fg=quota_color(rem) if rem is not None else MUT, font=MONO)
             lbl_txt.pack(side="left", padx=(2, 2))
 
@@ -648,11 +648,11 @@ class Widget(tk.Tk):
             n_status = d.get("status")
 
             if p_rem is not None and p_rem > 15 and n_rem is not None and n_rem <= 15:
-                send_win_notification("LLM Quota — Avviso Quota Bassa", f"La quota per {d['name']} è al {n_rem}%!")
+                send_win_notification("LLM Quota — Low Quota Warning", f"{d['name']} is down to {n_rem}%.")
             if p_status != "rate_limited" and n_status == "rate_limited":
-                send_win_notification("LLM Quota — Rate Limit", f"Il provider {d['name']} ha raggiunto il rate limit.")
+                send_win_notification("LLM Quota — Rate Limit", f"{d['name']} has hit its rate limit.")
             if p_rem is not None and p_rem < 50 and n_rem == 100:
-                send_win_notification("LLM Quota — Quota Resettata", f"La quota per {d['name']} è stata resettata al 100%!")
+                send_win_notification("LLM Quota — Quota Reset", f"{d['name']} is back to 100%.")
 
             self.prev_providers[pid] = {"remaining": n_rem, "status": n_status}
 
@@ -692,7 +692,7 @@ class Widget(tk.Tk):
         switch_btn.pack(side="left", padx=(10, 0), pady=(4, 6))
         switch_btn.bind("<Button-1>", lambda e: self.switch_view_mode())
 
-        ref_btn = tk.Label(self.footer_frame, text="↻ Aggiorna", bg=BG, fg=MUT, font=UI, cursor="hand2")
+        ref_btn = tk.Label(self.footer_frame, text="↻ Refresh", bg=BG, fg=MUT, font=UI, cursor="hand2")
         ref_btn.pack(side="right", padx=(0, 8), pady=(4, 6))
         ref_btn.bind("<Button-1>", lambda e: self.refresh())
 

@@ -69,14 +69,14 @@ export const moonshot: Provider = {
         const sess = res.body.limits?.[0]?.detail;
         if (sess)
           metrics.push({
-            label: "Sessione (5h)",
+            label: "Session (5h)",
             used: num(Number(sess.used)),
             limit: num(Number(sess.limit)),
             unit: "percent" as const,
             resetAt: sess.resetTime ? new Date(sess.resetTime).toISOString() : undefined,
           });
         metrics.push({
-          label: "Settimanale (7g)",
+          label: "Weekly (7d)",
           used: num(Number(u.used)),
           limit: num(Number(u.limit)),
           unit: "percent" as const,
@@ -100,8 +100,8 @@ export const moonshot: Provider = {
         consoleUrl: "https://www.kimi.com/coding",
         message:
           res.status === 401
-            ? "Token kimi-code scaduto: rifai `kimi` login."
-            : "Login kimi-code attivo, quota non leggibile ora. Controlla la console Kimi.",
+            ? "kimi-code token expired: run `kimi` login again."
+            : "kimi-code signed in, but quota is not readable right now. Check the Kimi console.",
       };
     }
 
@@ -111,7 +111,7 @@ export const moonshot: Provider = {
         ...base,
         status: "unauthenticated",
         needsKey: true,
-        message: "Login Kimi Code non trovato. In alternativa incolla una API key Moonshot per vedere il credito.",
+        message: "No Kimi Code login found. Alternatively, paste a Moonshot API key to see your credit.",
       };
     }
 
@@ -121,17 +121,17 @@ export const moonshot: Provider = {
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       });
       if (res.status === 401) {
-        return { ...base, status: "unauthenticated", needsKey: true, message: "API key Moonshot non valida." };
+        return { ...base, status: "unauthenticated", needsKey: true, message: "Invalid Moonshot API key." };
       }
       const d = res.body?.data;
       if (res.ok && d) {
         return {
           ...base,
           status: "ok",
-          authSource: "chiave LLM Quota",
+          authSource: "LLM Quota key",
           metrics: [
             {
-              label: "Credito disponibile",
+              label: "Available credit",
               remaining: num(d.available_balance),
               unit: "cny",
             },
@@ -145,7 +145,7 @@ export const moonshot: Provider = {
       ...base,
       status: "error",
       needsKey: true,
-      message: "Impossibile leggere il credito Moonshot (endpoint non raggiungibile o key errata).",
+      message: "Could not read Moonshot credit (endpoint unreachable or wrong key).",
     };
   },
 };

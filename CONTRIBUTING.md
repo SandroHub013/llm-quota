@@ -46,8 +46,14 @@ This is the most useful contribution, and the contract is small. A provider is o
 
 ## Localisation
 
-The dashboard UI is currently Italian. English localisation is welcome and is the highest-value
-open task — see the issues tagged `good first issue`.
+Every user-facing string — dashboard, CLI, widget — is English, hard-coded at its use site.
+There is no i18n layer, and adding one is a design decision rather than a translation task:
+open an issue first if you want to propose it.
+
+One thing to keep consistent when you touch strings: window labels are named the same way
+for every provider (`Session (5h)`, `Weekly (7d)`, `Daily (24h)`), even when the provider
+calls them something else. `normaliseLabel` in `src/providers/gemini.ts` is how Google's
+names get mapped onto that vocabulary.
 
 ## Reporting bugs
 

@@ -5,7 +5,7 @@ import { fetchJson, nowIso } from "./util.js";
 const CONSOLE = "https://opencode.ai/auth";
 
 async function resolveKey(ctx: ProviderContext): Promise<{ key?: string; source?: string }> {
-  if (ctx.userKey) return { key: ctx.userKey, source: "chiave LLM Quota" };
+  if (ctx.userKey) return { key: ctx.userKey, source: "LLM Quota key" };
   const oc = await readOpencode();
   const entry = oc["opencode"] ?? oc["opencode-zen"] ?? oc["zen"];
   if (entry?.key) return { key: entry.key, source: "opencode auth" };
@@ -34,7 +34,7 @@ export const opencodeZen: Provider = {
         ...base,
         status: "unauthenticated",
         needsKey: true,
-        message: "Nessuna key OpenCode Zen. Incollala (console opencode.ai) per vedere i crediti.",
+        message: "No OpenCode Zen key. Paste one (opencode.ai console) to see credits.",
       };
     }
 
@@ -49,7 +49,7 @@ export const opencodeZen: Provider = {
     });
 
     if (res.status === 401 || res.status === 403) {
-      return { ...base, status: "unauthenticated", needsKey: true, message: "Key OpenCode Zen non valida." };
+      return { ...base, status: "unauthenticated", needsKey: true, message: "Invalid OpenCode Zen key." };
     }
 
     const models = Array.isArray(res.body?.data) ? res.body.data.length : undefined;
@@ -58,7 +58,7 @@ export const opencodeZen: Provider = {
         ...base,
         status: "partial",
         authSource: source,
-        message: `Key valida: ${models} modelli disponibili. Zen non espone crediti via API: il saldo è solo su opencode.ai.`,
+        message: `Key is valid: ${models} models available. Zen exposes no credits over the API: the balance lives on opencode.ai.`,
         raw: { models },
       };
     }
@@ -67,7 +67,7 @@ export const opencodeZen: Provider = {
       ...base,
       status: "no_endpoint",
       authSource: source,
-      message: "Key presente ma nessun endpoint crediti leggibile pubblicamente. Controlla la console OpenCode.",
+      message: "Key present but no publicly readable credits endpoint. Check the OpenCode console.",
       raw: res.status ? `HTTP ${res.status}` : res.text?.slice(0, 200),
     };
   },
