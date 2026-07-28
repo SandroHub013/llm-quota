@@ -273,11 +273,26 @@ Rules:
   ones that accept them). Image input → any card above except text-only
   free models. Image **output** → Gemini via `agy` only. PDF → Claude.
   Video **output** → `bytedance/seedance-2.0` via the OpenRouter video
-  API (async: submit task, poll the returned URL — not a chat call, so
-  it does not go through `pi`). Cost discipline: storyboard/draft clips
-  on `seedance-2.0-fast` or 480p, final render at target resolution —
-  billing is per second of output, so every rejected draft at 4K is real
-  money, not quota.
+  API (async: `POST /api/v1/videos`, poll the returned `polling_url`,
+  download from `<polling_url>/content?index=0` — not a chat call, so
+  it does not go through `pi`). Field notes from the first live runs
+  (2026-07-28):
+  - Image-to-video inputs must be **publicly downloadable URLs**;
+    `raw.githubusercontent.com` links work fine.
+  - Always pass `"generate_audio": false` for UI/ambient clips — an
+    audio-generating job can die in moderation ("output audio may
+    contain sensitive information") after burning queue time.
+  - **480p drafts judge motion only, never text fidelity.** At 480p the
+    model reinvents small UI text (invented numbers, morphed names —
+    false negative); at 1080p, matching the first frame's resolution,
+    the same clip keeps text pixel-stable. Judge text at the target
+    resolution or the draft will talk you out of a good shot.
+  - Text-dense inputs survive best when the text is large in frame
+    (upscale small UI onto a brand-dark 16:9 canvas first).
+  - Cost discipline: motion drafts on `seedance-2.0-fast`/480p
+    (~$0.27/5s), final render on `seedance-2.0` at target resolution
+    (~$1.70/5s at 1080p) — billing is per second of output, so every
+    rejected draft at 4K is real money, not quota.
 - **Verify live when a decision hinges on a cell.** Before dispatching a
   task whose point is a modality (audio in, image out, PDF) or a context
   size, confirm against the live source — the CLI's `/status` / `--help`
