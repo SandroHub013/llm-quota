@@ -240,8 +240,11 @@ retried in place.
 
 ## Capability cards (input / output / context)
 
-What each model can receive and emit, and how much it can hold. Fetched
-2026-07-28; re-verify on model bumps.
+What each model can receive and emit, and how much it can hold. This
+table is **hardcoded and dated** — fetched 2026-07-28. It is the default,
+never the source of truth: modality support and context caps drift with
+CLI and model releases, so any routing decision that *hinges* on a cell
+of this table must be verified live first (see the rules below).
 
 | Model | CLI | Input | Output | Context (spec) | Context (effective) |
 |---|---|---|---|---|---|
@@ -268,6 +271,12 @@ Rules:
 - **Modality routing:** audio/video input → Kimi K3 or Gemini (the only
   ones that accept them). Image input → any card above except text-only
   free models. Image **output** → Gemini via `agy` only. PDF → Claude.
+- **Verify live when a decision hinges on a cell.** Before dispatching a
+  task whose point is a modality (audio in, image out, PDF) or a context
+  size, confirm against the live source — the CLI's `/status` / `--help`
+  or the provider's current model card — not this table. If live data
+  contradicts the table, trust live data and update the table in the same
+  session.
 - Free-tier cards (OpenCode Zen / OpenRouter) differ per model: read the
   model card before routing anything but plain text.
 
