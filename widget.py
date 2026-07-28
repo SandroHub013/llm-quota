@@ -438,9 +438,9 @@ class Widget(tk.Tk):
             pass
 
     def _fade(self, a):
-        a = min(1.0, a + 0.08)
+        a = min(0.9, a + 0.08)
         self.attributes("-alpha", a)
-        if a < 1.0:
+        if a < 0.9:
             self.after(16, lambda: self._fade(a))
 
     def _lerp(self, c1, c2, t):
