@@ -5,12 +5,15 @@ description: >
   llm-quota CLI, classifies the incoming task, picks the cheapest worker CLI
   that still has quota (Gemini→agy, Anthropic→Claude Code, GPT→Codex,
   OpenCode Zen/OpenRouter free/Z.AI→pi, Moonshot→kimi), selects model AND
-  effort per task, and reviews/validates every worker result before
-  accepting it. The orchestrator is always a smarter model than its workers
-  — or the same model at higher effort. Sets caveman and ponytail levels
-  per channel to keep inter-agent token spend minimal. Use on /llmquota,
-  "orchestrate with quota", "route by quota", "pick model per quota",
-  "dispatch agents by quota", "multi-agent with review".
+  effort per task from CursorBench/DeepSWE score-vs-token data (low token
+  consumption first, precision as the constraint), degrades gracefully as
+  quotas drain (adaptive glidepath), and reviews/validates every worker
+  result before accepting it. The orchestrator is always a smarter model
+  than its workers — or the same model at higher effort. Sets caveman and
+  ponytail levels per channel to keep inter-agent token spend minimal.
+  Use on /llmquota, "orchestrate with quota", "route by quota",
+  "pick model per quota", "dispatch agents by quota",
+  "multi-agent with review", "benchmark-ranked routing".
 metadata:
   tags: [orchestration, quota, routing, caveman, ponytail, token-economy]
   related_skills: [herdr-orchestration, cavecrew, caveman, ponytail]
@@ -91,20 +94,90 @@ Selection policy, in order:
 6. Everything starved → drop one ambition level (L→M→S decomposition)
    before ever breaching the floor.
 
-### 4. Model and effort selection
+### 4. Model and effort selection (benchmark-ranked, token-first)
 
-Per dispatch, record `(provider, cli, model, effort)`:
+Priority order: **low token consumption first, precision as the
+constraint.** Among the configs that are good enough for the task, pick
+the one that spends the fewest tokens — not the one with the highest
+score.
 
-- Worker effort defaults: scout = low, ship S = low/medium, ship M/L =
-  medium/high. Never max effort on a worker unless the orchestrator itself
-  runs higher.
-- Orchestrator effort = max available, or at minimum one notch above the
-  highest worker.
-- When the orchestrator session model is fixed (e.g. this session *is*
-  Kimi), workers on the same provider must use a weaker model or lower
-  effort — otherwise pick a different provider.
+Ranking data comes from the two boards that publish token counts —
+[CursorBench](https://cursor.com/cursorbench) (3.2, output tokens/task)
+and [DeepSWE](https://deepswe.datacurve.ai/) (pass@1, output tokens,
+long-horizon) — fetched 2026-07-28. Both drift with model releases:
+re-fetch monthly, and treat <2-point gaps as noise (their own caveat).
 
-### 5. Dispatch mechanics
+Reference ladder (CursorBench 3.2 score / output tokens per task):
+
+| Config | Score | Out tok | Note |
+|---|---|---|---|
+| Opus 5 Max | 70.0% | 62k | orchestrator grade (DeepSWE 74%) |
+| GPT-5.6 Sol Max | 67.2% | 28k | orchestrator grade (DeepSWE 73%) |
+| **Opus 5 High** | **66.7%** | **28k** | best near-top ratio |
+| **GPT-5.6 Sol High** | **63.5%** | **14k** | efficiency sweet spot |
+| Kimi K3 Max | 60.8% | 38k | DeepSWE 69% — strong for its cost |
+| **GPT-5.6 Sol Medium** | **60.0%** | **10k** | efficiency sweet spot |
+| Kimi K3 High | 59.7% | 27k | |
+| Sonnet 5 High | 56.9% | 39k | |
+| GPT-5.6 Terra High | 54.2% | 9k | cheap workhorse |
+| GLM 5.2 High | 51.5% | 22k | z.ai via `pi` |
+| Gemini 3.6 Flash High | 53.5% | 30k | vision/image via `agy` |
+| Kimi K3 Low | 50.5% | 13k | floor for real ships |
+| Sonnet 5 Max | 61.5% | **93k** | **dominated** — Opus 5 Low beats it at 18k |
+| Gemini 3.1 Pro High | 12% (DeepSWE) | 196k | **dominated** — never route here |
+
+Selection rules:
+
+1. **Satisfice, don't maximize.** Pick the lowest-token config within
+   Δ=3 points of the best score available for the task class. High-risk
+   tasks: Δ=1. Never chase fractions of a point with 2x tokens (Opus 5
+   High→Max buys 3.3 points for 2.2x the tokens — that is a deliberate
+   choice, not a default).
+2. **Never pick a dominated config** — one where the same provider has a
+   config with both higher score and fewer tokens (Sonnet 5 Max vs Opus 5
+   Low is the canonical trap).
+3. **A too-weak worker wastes more than a strong one.** A failed dispatch
+   burns the whole brief + retry loop. Floors: scout ≥ low effort, ship S
+   ≥ low/medium, ship M/L ≥ medium. Cheap models with low scores
+   (Luna Low 37.6%) lose their savings in retries — avoid below the K3
+   Low / Terra Medium line for ships.
+4. Worker effort defaults: scout = low, ship S = low/medium, ship M/L =
+   medium/high. Never max effort on a worker unless the orchestrator
+   itself runs higher.
+5. Orchestrator effort = max available, or at minimum one notch above the
+   highest worker.
+6. When the orchestrator session model is fixed (e.g. this session *is*
+   Kimi), workers on the same provider must use a weaker model or lower
+   effort — otherwise pick a different provider.
+
+### 5. Adaptive quota glidepath
+
+Routing is not a one-shot decision: re-rank as quota drains, sliding down
+deliberately instead of falling off a cliff mid-task.
+
+- **Re-snapshot triggers** (not per dispatch): a `rate_limited`/`error`
+  status, a mid-task quota failure, every ~5 dispatches, or when a
+  provider crosses a band boundary.
+- **Bands per provider** (`remaining`):
+  - `>50%` normal: policy as above.
+  - `20–50%` conservation: drop worker effort one notch, move all scouts
+    and S-ships to the free tier, batch independent dispatches into one
+    worker run instead of two.
+  - `≤20%` skip: route around the provider entirely (the llm-quota exit
+    code 1 band) unless it is the last one standing — and then tell the
+    user before spending it.
+- **Orchestrator re-check on every band change:** superiority is evaluated
+  against the *current* ladder. If workers slide down, the orchestrator
+  keeps its model/effort; if the orchestrator's own provider enters
+  conservation, say so — review quality is the last thing to degrade.
+- **Near-total depletion:** free tier (`opencode-zen` / `openrouter` via
+  `pi`) + decompose L→M→S + state the expected quality loss to the user.
+  Never silently ship free-tier output as if it were frontier work.
+- **Reset-aware spending:** a provider with `resetAt` close and low
+  `remaining` is for scouts only until it resets; a fresh reset re-opens
+  the normal band.
+
+### 6. Dispatch mechanics
 
 - **S tasks, one-shot:** headless print mode, one process, conclusion back:
   `claude -p`, `codex exec`, `agy -p`, `pi -p`, `kimi -p`. Flags drift —
@@ -120,7 +193,7 @@ Per dispatch, record `(provider, cli, model, effort)`:
 Briefs are narrow: goal, exact `path:line` anchors, constraints, done
 criteria. Never paste file dumps a worker can read itself.
 
-### 6. Review and validation loop
+### 7. Review and validation loop
 
 For every worker result:
 
@@ -170,8 +243,7 @@ Rules:
 - Never relay worker A's raw output into worker B's prompt — the
   orchestrator distills first.
 - Quota snapshots are cached for the session's routing decisions; refresh
-  after any `rate_limited` / `error` status or a mid-task failure, not on
-  every dispatch.
+  on the glidepath triggers (section 5), never on every dispatch.
 
 ## Boundaries with related skills
 
