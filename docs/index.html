@@ -73,7 +73,6 @@
         --accent: #5b8cff;
         --violet: #9b5bff;
         --ok: #3fb950;
-        --warn: #e0a72c;
 
         --r-sm: 8px;
         --r-md: 12px;
@@ -85,6 +84,7 @@
         --mono: "JetBrains Mono", "Mono Fallback", ui-monospace, monospace;
 
         --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+        --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
         --shell: 1120px;
         /* Narrow phones cannot spare 24px a side and still hold a display headline. */
         --gutter: clamp(28px, 7vw, 48px);
@@ -110,11 +110,7 @@
       /* Backdrop: gradients wide enough to be soft on their own. No blur filter —
          it would be a full-viewport pass for something already this diffuse. */
       .aurora { position: fixed; inset: 0; z-index: -2; overflow: hidden; pointer-events: none; }
-      .aurora i {
-        position: absolute;
-        border-radius: 50%;
-        opacity: 0.42;
-      }
+      .aurora i { position: absolute; border-radius: 50%; opacity: 0.42; }
       .aurora i:nth-child(1) {
         width: 62vw; height: 62vw; left: -18vw; top: -26vw;
         background: radial-gradient(circle, rgba(91, 140, 255, 0.3) 0%, rgba(91, 140, 255, 0.11) 38%, transparent 72%);
@@ -132,10 +128,7 @@
         mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, black 20%, transparent 76%);
       }
 
-      .shell {
-        width: min(100% - var(--gutter), var(--shell));
-        margin-inline: auto;
-      }
+      .shell { width: min(100% - var(--gutter), var(--shell)); margin-inline: auto; }
 
       a { color: var(--accent); text-decoration-color: rgba(91, 140, 255, 0.4); text-underline-offset: 3px; }
       a:hover { text-decoration-color: currentColor; }
@@ -156,10 +149,7 @@
         background: rgba(5, 6, 11, 0.86);
         border-bottom: 1px solid var(--line);
       }
-      .site-head .shell {
-        display: flex; align-items: center; gap: 20px;
-        min-height: 62px;
-      }
+      .site-head .shell { display: flex; align-items: center; gap: 20px; min-height: 62px; }
       .mark {
         display: flex; align-items: center; gap: 9px;
         min-height: 44px;
@@ -190,19 +180,15 @@
         color: #fff; background: linear-gradient(135deg, #5b8cff, #7b5bff);
         padding: 0 18px; border-radius: var(--r-md); font-weight: 600;
       }
-      @media (max-width: 720px) {
-        .site-head nav a:not(.cta) { display: none; }
-      }
+      @media (max-width: 780px) { .site-head nav a:not(.cta) { display: none; } }
 
       /* ---------- hero ---------- */
-      .hero { padding: clamp(56px, 9vw, 104px) 0 clamp(40px, 6vw, 64px); text-align: center; }
+      .hero { padding: clamp(48px, 7vw, 88px) 0 clamp(30px, 4vw, 48px); }
+      .hero-top { max-width: 22ch; }
       .eyebrow {
         font-family: var(--mono); font-size: 12px; letter-spacing: 1.6px;
-        text-transform: uppercase; color: var(--dim); margin: 0 0 22px;
+        text-transform: uppercase; color: var(--dim); margin: 0 0 20px;
       }
-      /* The floor has to be low enough that "subscriptions." fits a 320px column, and
-         the tracking has to scale with the size — a flat -2.4px is tuned for the 74px
-         display face and crushes the 30px one. */
       h1 {
         font-family: var(--display); font-weight: 800;
         font-size: clamp(26px, 7.4vw, 74px);
@@ -214,29 +200,41 @@
         background: linear-gradient(96deg, var(--accent) 8%, var(--violet) 92%);
         -webkit-background-clip: text; background-clip: text; color: transparent;
       }
-      .lede {
-        font-size: clamp(16px, 1.6vw, 19px);
-        color: var(--muted);
-        max-width: 62ch; margin: 0 auto 34px;
+      /* One column on phones, and the source order puts the horizon straight after the
+         lede — the signature moment must not sit below a seven-line install command.
+         From 900px the command tucks under the headline and the horizon takes the
+         right half at full height. */
+      .hero-grid {
+        display: grid; gap: clamp(24px, 3.4vw, 48px);
+        grid-template-columns: minmax(0, 1fr);
       }
+      @media (min-width: 900px) {
+        .hero-grid {
+          grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+          grid-template-areas: "top horizon" "cta horizon";
+          align-items: start;
+          row-gap: 26px;
+        }
+        .hero-top { max-width: none; grid-area: top; }
+        .horizon { grid-area: horizon; align-self: center; }
+        .hero-cta { grid-area: cta; }
+      }
+      .lede { font-size: clamp(15.5px, 1.5vw, 18px); color: var(--muted); max-width: 46ch; margin: 0 0 30px; }
       .lede b { color: var(--text); font-weight: 600; }
 
       .snippet {
-        display: flex; align-items: stretch; gap: 0;
-        max-width: 700px; margin: 0 auto;
+        display: flex; align-items: stretch;
         background: var(--surface-solid);
         border: 1px solid var(--line);
         border-radius: var(--r-md);
         overflow: hidden;
-        text-align: left;
       }
       /* Wrap rather than truncate: a command you cannot read in full is worse than
          one that takes two lines, and the Copy button carries the exact text anyway. */
       .snippet code {
-        font-family: var(--mono); font-size: 13px;
-        padding: 14px 16px; flex: 1 1 auto; min-width: 0;
-        white-space: pre-wrap; word-break: break-word;
-        color: var(--text);
+        font-family: var(--mono); font-size: 12.5px;
+        padding: 13px 15px; flex: 1 1 auto; min-width: 0;
+        white-space: pre-wrap; word-break: break-word; color: var(--text);
       }
       .snippet .copy {
         font: inherit; font-size: 13px;
@@ -246,68 +244,213 @@
         transition: background 0.2s, color 0.2s;
       }
       .snippet .copy:hover { background: #1c2740; color: var(--text); }
-      .hero-alt { font-size: 13px; color: var(--dim); margin: 14px 0 0; }
+      .hero-alt { font-size: 13px; color: var(--dim); margin: 13px 0 0; }
 
-      .shot {
-        margin: clamp(40px, 6vw, 68px) auto 0;
+      /* ======================================================================
+         The reset horizon — the one thing this product does that nothing else
+         does, so it is the one thing the page demonstrates rather than describes.
+         Same sqrt(h/168) axis as the real dashboard: near-term resets, which are
+         the ones you can act on, get most of the rail.
+         ====================================================================== */
+      .horizon {
+        margin: 0;
+        background: var(--surface);
         border: 1px solid var(--line);
         border-radius: var(--r-lg);
-        overflow: hidden;
-        box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
-        display: block; max-width: 100%; height: auto;
+        padding: 20px 22px 16px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.42);
+      }
+      .hz-head {
+        display: flex; flex-wrap: wrap; gap: 6px 14px;
+        align-items: baseline; justify-content: space-between;
+        margin-bottom: 20px;
+      }
+      .hz-title {
+        font-family: var(--mono); font-size: 10.5px;
+        letter-spacing: 1.8px; text-transform: uppercase; color: var(--dim);
+      }
+      .hz-next { font-size: 12.5px; color: var(--muted); }
+      .hz-next b { color: var(--text); font-weight: 600; }
+      .hz-next .cd { font-family: var(--mono); color: var(--accent); }
+
+      .hz-rail {
+        position: relative; height: 74px;
+        margin: 0 22px 36px 0;
+        border-bottom: 1px solid var(--line-strong);
+      }
+      .hz-tick {
+        position: absolute; bottom: 0; top: 8px; width: 1px;
+        background: linear-gradient(rgba(120, 150, 200, 0), rgba(120, 150, 200, 0.16));
+        pointer-events: none;
+      }
+      /* Clear of the marker dots, which hang 10px past the baseline. At -22px the
+         label boxes still overlapped them by 3px on a narrow rail, where markers
+         crowd the short end of the axis. */
+      .hz-tick span {
+        position: absolute; bottom: -30px; left: 0; transform: translateX(-50%);
+        font-family: var(--mono); font-size: 9px; letter-spacing: 1.4px;
+        color: var(--dim); white-space: nowrap;
+      }
+      .hz-tick.is-first span { transform: none; }
+      .hz-now {
+        position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+        background: linear-gradient(rgba(91, 140, 255, 0), var(--accent));
+      }
+
+      .hz-mark {
+        position: absolute; bottom: 0; width: 34px; margin-left: -17px;
+        height: 100%; padding: 0; border: none; background: none;
+        cursor: pointer; display: flex; flex-direction: column;
+        justify-content: flex-end; align-items: center;
+      }
+      .hz-stem {
+        width: 2px; height: var(--h, 40%);
+        background: linear-gradient(transparent, var(--c, var(--accent)));
+        opacity: 0.75;
+        transition: opacity 0.25s, transform 0.25s var(--ease-out);
+        transform-origin: bottom;
+      }
+      .hz-dot {
+        position: relative; z-index: 2;
+        width: 21px; height: 21px; border-radius: 50%;
+        display: grid; place-items: center; margin-bottom: -10px;
+        background: var(--c, var(--accent)); color: #fff;
+        box-shadow: 0 0 0 2.5px var(--bg);
+        transition: transform 0.25s var(--ease-out);
+      }
+      .hz-dot svg { width: 13px; height: 13px; }
+      .hz-mark:hover .hz-dot,
+      .hz-mark:focus-visible .hz-dot,
+      .hz-mark.linked .hz-dot { transform: scale(1.35); }
+      .hz-mark:hover .hz-stem,
+      .hz-mark:focus-visible .hz-stem,
+      .hz-mark.linked .hz-stem { opacity: 1; transform: scaleX(2); }
+
+      /* A centred tip on the first or last marker hangs off the rail and widens the
+         document — absolutely positioned boxes still count toward scrollWidth even at
+         opacity 0. The edge markers anchor their tip inward instead. */
+      .hz-mark.at-start .hz-tip { left: 0; transform: none; }
+      .hz-mark.at-end .hz-tip { left: auto; right: 0; transform: none; }
+      .hz-tip {
+        position: absolute; bottom: calc(100% + 14px); left: 50%;
+        transform: translateX(-50%); z-index: 6;
+        padding: 7px 10px; border-radius: var(--r-sm);
+        border: 1px solid var(--line-strong);
+        background: rgba(10, 14, 24, 0.97);
+        font-size: 11.5px; line-height: 1.4; white-space: nowrap;
+        opacity: 0; pointer-events: none; transition: opacity 0.16s;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      }
+      .hz-tip b { display: block; font-weight: 600; }
+      .hz-tip span { color: var(--muted); font-family: var(--mono); font-size: 10.5px; }
+      .hz-mark:hover .hz-tip,
+      .hz-mark:focus-visible .hz-tip,
+      .hz-mark.linked .hz-tip { opacity: 1; }
+
+      /* The chips are the other half of the signature: they and the rail light each
+         other up, which is what makes the horizon read as one object. */
+      .hz-chips {
+        list-style: none; margin: 0; padding: 0;
+        display: flex; flex-wrap: wrap; gap: 7px;
+      }
+      .hz-chip {
+        font: inherit; font-size: 12px;
+        display: inline-flex; align-items: center; gap: 7px;
+        min-height: 34px; padding: 0 11px;
+        border-radius: var(--r-full);
+        border: 1px solid var(--line);
+        background: transparent; color: var(--muted);
+        cursor: pointer;
+        transition: border-color 0.2s, color 0.2s, background 0.2s;
+      }
+      .hz-chip i {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: var(--c, var(--accent)); flex: 0 0 auto;
+      }
+      .hz-chip:hover, .hz-chip.linked {
+        color: var(--text); border-color: var(--line-strong); background: rgba(120, 150, 200, 0.08);
+      }
+      .hz-foot {
+        margin: 14px 0 0; font-size: 11px; color: var(--dim);
+        font-family: var(--mono); letter-spacing: 0.4px;
       }
 
       /* ---------- provider strip ---------- */
       .strip {
         display: flex; flex-wrap: wrap; justify-content: center;
-        align-items: center; gap: clamp(18px, 3.4vw, 42px);
-        padding: clamp(34px, 5vw, 52px) 0;
+        align-items: center; gap: clamp(16px, 3.2vw, 40px);
+        padding: clamp(30px, 4.5vw, 46px) 0;
         border-block: 1px solid var(--line);
       }
-      .strip figure {
-        display: flex; align-items: center; gap: 10px;
-        margin: 0; color: var(--muted); font-size: 14px;
-      }
+      .strip figure { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--muted); font-size: 14px; }
       .strip img { width: 24px; height: 24px; object-fit: contain; border-radius: 5px; }
 
       /* ---------- sections ---------- */
-      section { padding: clamp(56px, 8vw, 96px) 0; }
+      section { padding: clamp(52px, 7.5vw, 92px) 0; }
       h2 {
         font-family: var(--display); font-weight: 800;
-        font-size: clamp(27px, 3.6vw, 40px);
-        letter-spacing: -1.4px; line-height: 1.1;
+        font-size: clamp(25px, 3.4vw, 40px);
+        letter-spacing: -0.035em; line-height: 1.1;
         margin: 0 0 16px;
       }
-      .section-lede { color: var(--muted); max-width: 60ch; margin: 0 0 40px; }
+      .section-lede { color: var(--muted); max-width: 58ch; margin: 0 0 40px; }
 
       .pull {
         font-family: var(--display); font-weight: 800;
-        font-size: clamp(23px, 3vw, 34px);
-        letter-spacing: -1.2px; line-height: 1.2;
+        font-size: clamp(22px, 3vw, 34px);
+        letter-spacing: -0.035em; line-height: 1.2;
         margin: 0; padding-left: 22px;
         border-left: 3px solid var(--accent);
       }
 
+      /* Asymmetric: the heading column is narrower than the content it introduces,
+         so the page stops reading as a stack of centred blocks. */
+      .lead-grid {
+        display: grid; gap: clamp(22px, 3.4vw, 56px);
+        grid-template-columns: minmax(0, 1fr);
+      }
+      @media (min-width: 900px) {
+        .lead-grid { grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr); align-items: start; }
+        .lead-grid .section-lede { margin-bottom: 0; }
+      }
+
       .cards {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-        gap: 18px;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+        gap: 16px;
       }
       .feat {
         background: var(--surface);
         border: 1px solid var(--line);
         border-radius: var(--r-lg);
-        padding: 24px;
+        padding: 22px;
         min-width: 0;
         transition: transform 0.3s var(--ease-out), border-color 0.3s;
       }
       .feat:hover { transform: translateY(-3px); border-color: var(--line-strong); }
       .feat h3 {
-        font-family: var(--display); font-weight: 700; font-size: 17px;
-        letter-spacing: -0.4px; margin: 0 0 9px;
+        font-family: var(--display); font-weight: 700; font-size: 16.5px;
+        letter-spacing: -0.02em; margin: 0 0 8px;
       }
-      .feat p { margin: 0; color: var(--muted); font-size: 14.5px; }
-      .feat .ico { font-size: 20px; display: block; margin-bottom: 12px; }
+      .feat p { margin: 0; color: var(--muted); font-size: 14px; }
+      /* Icons are drawn on the same 24 grid and stroke weight as the dashboard's own
+         glyphs. Emoji used to sit here: they render differently on every OS and are
+         nobody's art direction. */
+      .feat .ico { display: block; width: 24px; height: 24px; margin-bottom: 14px; color: var(--accent); }
+
+      /* ---------- shot ---------- */
+      .shot-grid {
+        display: grid; gap: clamp(24px, 4vw, 52px);
+        grid-template-columns: minmax(0, 1fr); align-items: center;
+      }
+      @media (min-width: 980px) {
+        .shot-grid { grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr); }
+      }
+      .shot {
+        border: 1px solid var(--line); border-radius: var(--r-lg);
+        overflow: hidden; box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
+        display: block; max-width: 100%; height: auto;
+      }
 
       /* ---------- table ---------- */
       .scroller { overflow-x: auto; }
@@ -316,34 +459,16 @@
       th { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); font-weight: 600; }
       td code { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
 
-      /* ---------- code block ---------- */
       pre {
-        background: var(--surface-solid);
-        border: 1px solid var(--line);
-        border-radius: var(--r-md);
-        padding: 18px 20px;
-        overflow-x: auto;
-        margin: 0 0 18px;
+        background: var(--surface-solid); border: 1px solid var(--line);
+        border-radius: var(--r-md); padding: 18px 20px; overflow-x: auto; margin: 0 0 18px;
       }
       pre code { font-family: var(--mono); font-size: 13px; line-height: 1.75; }
       .cmt { color: var(--dim); }
 
-      .split {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-        gap: clamp(24px, 4vw, 48px);
-        align-items: start;
-      }
-
       ul.ticks { list-style: none; padding: 0; margin: 0; }
-      ul.ticks li {
-        position: relative; padding-left: 26px; margin-bottom: 13px;
-        color: var(--muted); font-size: 15px;
-      }
-      ul.ticks li::before {
-        content: "✓"; position: absolute; left: 0; top: 0;
-        color: var(--ok); font-weight: 700;
-      }
+      ul.ticks li { position: relative; padding-left: 26px; margin-bottom: 13px; color: var(--muted); font-size: 15px; }
+      ul.ticks li::before { content: "✓"; position: absolute; left: 0; top: 0; color: var(--ok); font-weight: 700; }
       ul.ticks b { color: var(--text); font-weight: 600; }
 
       /* ---------- closing ---------- */
@@ -351,40 +476,43 @@
       .btnrow { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 26px; }
       .btn {
         font: inherit; font-weight: 600; font-size: 15px;
-        padding: 13px 24px; border-radius: var(--r-md);
-        border: 1px solid var(--line); background: var(--surface-solid);
-        color: var(--text); text-decoration: none;
+        display: inline-flex; align-items: center; min-height: 46px; padding: 0 24px;
+        border-radius: var(--r-md); border: 1px solid var(--line);
+        background: var(--surface-solid); color: var(--text); text-decoration: none;
         transition: transform 0.2s var(--ease-out), background 0.2s, border-color 0.2s;
       }
       .btn:hover { transform: translateY(-2px); background: #1c2740; border-color: var(--line-strong); }
-      .btn.primary {
-        background: linear-gradient(135deg, #5b8cff, #7b5bff);
-        border-color: transparent; color: #fff;
-      }
+      .btn.primary { background: linear-gradient(135deg, #5b8cff, #7b5bff); border-color: transparent; color: #fff; }
 
-      footer {
-        border-top: 1px solid var(--line);
-        padding: 30px 0 44px;
-      }
+      footer { border-top: 1px solid var(--line); padding: 26px 0 40px; }
       footer .shell {
-        display: flex; flex-wrap: wrap; gap: 14px;
+        display: flex; flex-wrap: wrap; gap: 10px 14px;
         justify-content: space-between; align-items: center;
         font-family: var(--mono); font-size: 11.5px;
         letter-spacing: 1.1px; text-transform: uppercase; color: var(--dim);
       }
       /* These two sit side by side, so the WCAG 2.5.8 "inline in a sentence" exemption
-         does not cover them. Padding gives each a comfortable hit area without moving
-         the baseline. (The "Bun" link in the hero is inline prose and stays exempt.) */
-      footer a {
-        display: inline-block; padding: 9px 4px;
-        color: var(--muted); text-decoration: none;
-      }
+         does not cover them. Padding gives each a comfortable hit area. */
+      footer a { display: inline-block; padding: 9px 4px; color: var(--muted); text-decoration: none; }
       footer a:hover { color: var(--text); }
+
+      /* Entrance choreography, and the only looping motion on the page: the nearest
+         reset breathes, because imminence is the one thing worth animating. */
+      @keyframes hz-stem-in { from { transform: scaleY(0); } }
+      @keyframes hz-dot-in { from { opacity: 0; transform: scale(0.4); } }
+      @keyframes breathe { 50% { box-shadow: 0 0 0 3px var(--bg), 0 0 18px 2px var(--c, var(--accent)); } }
+      .hz-mark .hz-stem { animation: hz-stem-in 0.7s var(--ease-expo) backwards; animation-delay: var(--d, 0ms); }
+      .hz-mark .hz-dot { animation: hz-dot-in 0.5s var(--ease-out) backwards; animation-delay: var(--d, 0ms); }
+      .hz-mark.imminent .hz-dot {
+        animation: hz-dot-in 0.5s var(--ease-out) backwards, breathe 2.4s ease-in-out 1.2s infinite;
+        animation-delay: var(--d, 0ms), 1.2s;
+      }
 
       @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
         *, *::before, *::after {
           animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
           transition-duration: 0.01ms !important;
         }
       }
@@ -415,43 +543,39 @@
     <main id="main" tabindex="-1">
       <section class="hero">
         <div class="shell">
-          <p class="eyebrow">Local-first · MIT · Bun</p>
+          <div class="hero-grid">
+            <div class="hero-top">
+              <p class="eyebrow">Local-first · MIT · Bun</p>
+              <h1>Six AI subscriptions.<br /><em>One horizon.</em></h1>
+              <p class="lede">
+                Every provider rate-limits you on its own clock, in its own console. LLM Quota
+                reads the CLI logins already sitting on your disk and puts every reset on
+                <b>one timeline</b>.
+              </p>
+            </div>
 
-          <h1>Six AI subscriptions.<br /><em>One horizon.</em></h1>
+            <figure class="horizon">
+              <div class="hz-head">
+                <span class="hz-title">Reset horizon</span>
+                <span class="hz-next" id="hzNext"></span>
+              </div>
+              <div class="hz-rail" id="hzRail"><span class="hz-now"></span></div>
+              <ul class="hz-chips" id="hzChips"></ul>
+              <figcaption class="hz-foot">
+                Sample data · hover or tab a marker
+              </figcaption>
+            </figure>
 
-          <p class="lede">
-            Every provider rate-limits you on its own clock, in its own console. LLM Quota reads
-            the CLI logins already sitting on your disk and puts every reset on
-            <b>one timeline</b> — so you can see which subscription is free, which is cooling
-            down, and exactly when you are back.
-          </p>
-
-          <div class="snippet">
-            <code id="cmd">git clone https://github.com/SandroHub013/llm-quota &amp;&amp; cd llm-quota &amp;&amp; bun install &amp;&amp; bun start</code>
-            <button type="button" class="copy" data-copy="#cmd">Copy</button>
+            <div class="hero-cta">
+              <div class="snippet">
+                <code id="cmd">git clone https://github.com/SandroHub013/llm-quota &amp;&amp; cd llm-quota &amp;&amp; bun install &amp;&amp; bun start</code>
+                <button type="button" class="copy" data-copy="#cmd">Copy</button>
+              </div>
+              <p class="hero-alt">
+                Needs <a href="https://bun.sh">Bun</a> 1.0+ · then open <code>localhost:4747</code>
+              </p>
+            </div>
           </div>
-          <p class="hero-alt">
-            Needs <a href="https://bun.sh">Bun</a> 1.0+ · then open
-            <code>localhost:4747</code> · nothing else to configure
-          </p>
-
-          <!-- This screenshot is the LCP element, so it carries the page's whole
-               first-paint budget. AVIF is 42% of the JPEG; the JPEG stays as the
-               fallback and as the image the README embeds. -->
-          <picture>
-            <source srcset="./dashboard-preview.avif" type="image/avif" />
-            <source srcset="./dashboard-preview.webp" type="image/webp" />
-            <img
-              class="shot"
-              src="./dashboard-preview.jpg"
-              alt="The LLM Quota dashboard: a reset horizon spanning now to seven days, with markers for each provider, above six cards showing usage percentages and reset times for Claude Code, z.ai, Gemini, Kimi, Codex and OpenCode Zen."
-              width="1600"
-              height="900"
-              loading="eager"
-              decoding="async"
-              fetchpriority="high"
-            />
-          </picture>
         </div>
       </section>
 
@@ -468,13 +592,17 @@
 
       <section id="why">
         <div class="shell">
-          <h2>Percentages answer the wrong question</h2>
-          <p class="section-lede">
-            Claude Code has a 5-hour window <em>and</em> a weekly cap. Codex has its own. Gemini
-            counts per model. When you actually hit a limit, "62% used" tells you nothing you can
-            plan around.
-          </p>
-          <p class="pull">When am I back?</p>
+          <div class="lead-grid">
+            <h2>Percentages answer the wrong question</h2>
+            <div>
+              <p class="section-lede">
+                Claude Code has a 5-hour window <em>and</em> a weekly cap. Codex has its own.
+                Gemini counts per model. When you actually hit a limit, "62% used" tells you
+                nothing you can plan around.
+              </p>
+              <p class="pull">When am I back?</p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -482,7 +610,12 @@
         <div class="shell">
           <div class="cards">
             <article class="feat">
-              <span class="ico" aria-hidden="true">⏳</span>
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M2.5 17h19" /><path d="M6 17v-4.5M12 17V8M18 17v-7" />
+                <circle cx="6" cy="10.5" r="1.6" fill="currentColor" stroke="none" />
+                <circle cx="12" cy="6" r="1.6" fill="currentColor" stroke="none" />
+                <circle cx="18" cy="8" r="1.6" fill="currentColor" stroke="none" />
+              </svg>
               <h3>Reset horizon</h3>
               <p>
                 All six providers' resets on one axis, now to seven days. Hover a marker and its
@@ -490,7 +623,9 @@
               </p>
             </article>
             <article class="feat">
-              <span class="ico" aria-hidden="true">🔑</span>
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <circle cx="8" cy="12" r="4" /><path d="M12 12h9M17.5 12v3.5M20.5 12v2.5" />
+              </svg>
               <h3>Reuses your sessions</h3>
               <p>
                 Reads the OAuth tokens <code>claude</code>, <code>codex</code> and
@@ -498,7 +633,10 @@
               </p>
             </article>
             <article class="feat">
-              <span class="ico" aria-hidden="true">🔒</span>
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <rect x="4" y="10.5" width="16" height="10" rx="2.5" />
+                <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+              </svg>
               <h3>Local-first</h3>
               <p>
                 No cloud, no database, no account. Keys and tokens never leave the machine, and
@@ -506,7 +644,10 @@
               </p>
             </article>
             <article class="feat">
-              <span class="ico" aria-hidden="true">🚫</span>
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M7.5 18.5A4.5 4.5 0 0 1 7 9.6a5.6 5.6 0 0 1 10-1.9 3.9 3.9 0 0 1 2.6 6.6" />
+                <path d="M3.5 3.5l17 17" />
+              </svg>
               <h3>Zero third-party requests</h3>
               <p>
                 Fonts and provider logos ship with the app. No CDN, no font host, no favicon
@@ -514,7 +655,9 @@
               </p>
             </article>
             <article class="feat">
-              <span class="ico" aria-hidden="true">🤖</span>
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 7.5 9.5 12 5 16.5" /><path d="M12.5 16.5H19" />
+              </svg>
               <h3>Built for agents</h3>
               <p>
                 Sanitized JSON and meaningful exit codes, so an agent can check its own budget
@@ -522,7 +665,10 @@
               </p>
             </article>
             <article class="feat">
-              <span class="ico" aria-hidden="true">♿</span>
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
+                <path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10" />
+              </svg>
               <h3>Fits on one screen</h3>
               <p>
                 All six providers visible without scrolling from 1280×800 up. Keyboard navigable,
@@ -533,72 +679,73 @@
         </div>
       </section>
 
+      <section>
+        <div class="shell">
+          <div class="shot-grid">
+            <div>
+              <h2>The whole thing, on one screen</h2>
+              <p class="section-lede">
+                Six cards, six reset clocks, no scrolling. The horizon sits above them, and
+                hovering either one lights up the other.
+              </p>
+              <p class="hero-alt" style="margin: 0">
+                Screenshot from a real session, not a mockup.
+              </p>
+            </div>
+            <!-- Below the fold and lazy: the hero is the live horizon now, so this
+                 no longer has to carry the LCP. -->
+            <picture>
+              <source srcset="./dashboard-preview.avif" type="image/avif" />
+              <source srcset="./dashboard-preview.webp" type="image/webp" />
+              <img
+                class="shot"
+                src="./dashboard-preview.jpg"
+                alt="The LLM Quota dashboard: a reset horizon spanning now to seven days, with markers for each provider, above six cards showing usage percentages and reset times for Claude Code, z.ai, Gemini, Kimi, Codex and OpenCode Zen."
+                width="1600" height="900" loading="lazy" decoding="async"
+              />
+            </picture>
+          </div>
+        </div>
+      </section>
+
       <section id="providers">
         <div class="shell">
-          <h2>What it reads, and from where</h2>
-          <p class="section-lede">
-            Nothing is uploaded. Credentials are read from disk, used to call the provider they
-            belong to, and never written anywhere else.
-          </p>
-          <div class="scroller">
-            <table>
-              <thead>
-                <tr><th>Provider</th><th>Credentials from</th><th>What you get</th></tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Claude Code</td>
-                  <td><code>~/.claude/.credentials.json</code></td>
-                  <td>Live 5h window + weekly quota %, reset time</td>
-                </tr>
-                <tr>
-                  <td>Codex (ChatGPT)</td>
-                  <td><code>~/.codex/auth.json</code></td>
-                  <td>Active plan + usage windows</td>
-                </tr>
-                <tr>
-                  <td>z.ai</td>
-                  <td><code>opencode</code> config or pasted key</td>
-                  <td>Live 5h token + monthly %, web-search status</td>
-                </tr>
-                <tr>
-                  <td>OpenCode Zen</td>
-                  <td><code>opencode</code> config or pasted key</td>
-                  <td>API key validity + model count</td>
-                </tr>
-                <tr>
-                  <td>Gemini</td>
-                  <td>In-app Google login or AI Studio key</td>
-                  <td>Live per-model quota via Code Assist</td>
-                </tr>
-                <tr>
-                  <td>Moonshot</td>
-                  <td>Pasted API key</td>
-                  <td>Live remaining credit and usage</td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="lead-grid">
+            <h2>What it reads, and from where</h2>
+            <div>
+              <p class="section-lede">
+                Nothing is uploaded. Credentials are read from disk, used to call the provider
+                they belong to, and never written anywhere else.
+              </p>
+              <div class="scroller">
+                <table>
+                  <thead>
+                    <tr><th>Provider</th><th>Credentials from</th><th>What you get</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Claude Code</td><td><code>~/.claude/.credentials.json</code></td><td>Live 5h window + weekly quota %, reset time</td></tr>
+                    <tr><td>Codex (ChatGPT)</td><td><code>~/.codex/auth.json</code></td><td>Active plan + usage windows</td></tr>
+                    <tr><td>z.ai</td><td><code>opencode</code> config or pasted key</td><td>Live 5h token + monthly %, web-search status</td></tr>
+                    <tr><td>OpenCode Zen</td><td><code>opencode</code> config or pasted key</td><td>API key validity + model count</td></tr>
+                    <tr><td>Gemini</td><td>In-app Google login or AI Studio key</td><td>Live per-model quota via Code Assist</td></tr>
+                    <tr><td>Moonshot</td><td>Pasted API key</td><td>Live remaining credit and usage</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       <section id="cli">
         <div class="shell">
-          <div class="split">
+          <div class="lead-grid">
+            <h2>A CLI your agent can read</h2>
             <div>
-              <h2>A CLI your agent can read</h2>
               <p class="section-lede">
                 The same data as the dashboard, as sanitized JSON with exit codes that mean
                 something — safe to pipe into a prompt or a shell script.
               </p>
-              <ul class="ticks">
-                <li><b>0</b> — healthy, quota available</li>
-                <li><b>1</b> — warning, at least one quota ≤ 20%</li>
-                <li><b>2</b> — auth error or provider unreachable</li>
-                <li><b>3</b> — server offline or bad arguments</li>
-              </ul>
-            </div>
-            <div>
 <pre><code><span class="cmt"># compact text summary</span>
 bun run cli status
 
@@ -606,14 +753,13 @@ bun run cli status
 bun run cli status --json
 
 <span class="cmt"># one provider only</span>
-bun run cli provider codex
-
-<span class="cmt"># health check</span>
-bun run cli doctor</code></pre>
-              <p class="hero-alt" style="text-align: left">
-                Install it globally with
-                <code>bun add -g github:SandroHub013/llm-quota</code>
-              </p>
+bun run cli provider codex</code></pre>
+              <ul class="ticks">
+                <li><b>0</b> — healthy, quota available</li>
+                <li><b>1</b> — warning, at least one quota ≤ 20%</li>
+                <li><b>2</b> — auth error or provider unreachable</li>
+                <li><b>3</b> — server offline or bad arguments</li>
+              </ul>
             </div>
           </div>
         </div>
@@ -621,30 +767,26 @@ bun run cli doctor</code></pre>
 
       <section id="privacy">
         <div class="shell">
-          <h2>The privacy claim, stated precisely</h2>
-          <p class="section-lede">
-            This is the point of the project, so it is worth being exact rather than
-            reassuring.
-          </p>
-          <ul class="ticks">
-            <li>
-              <b>No telemetry, analytics or crash reporting.</b> There is no server to report to.
-            </li>
-            <li>
-              <b>The frontend makes zero third-party requests.</b> Fonts and the six provider
-              logos are served from the app itself. A test fails the build if any external host
-              creeps back in.
-            </li>
-            <li>
-              <b>Logos are frozen in the repo deliberately.</b> Loading them from the provider —
-              or from a favicon service, as an earlier version did — would tell a third party
-              which AI subscriptions you hold, on every page load.
-            </li>
-            <li>
-              <b>Pasted keys stay in <code>~/.llm-quota/config.json</code>.</b> Local, and never
-              committed.
-            </li>
-          </ul>
+          <div class="lead-grid">
+            <h2>The privacy claim, stated precisely</h2>
+            <ul class="ticks">
+              <li><b>No telemetry, analytics or crash reporting.</b> There is no server to report to.</li>
+              <li>
+                <b>The frontend makes zero third-party requests.</b> Fonts and the six provider
+                logos are served from the app itself. A test fails the build if any external host
+                creeps back in.
+              </li>
+              <li>
+                <b>Logos are frozen in the repo deliberately.</b> Loading them from the provider —
+                or from a favicon service, as an earlier version did — would tell a third party
+                which AI subscriptions you hold, on every page load.
+              </li>
+              <li>
+                <b>Pasted keys stay in <code>~/.llm-quota/config.json</code>.</b> Local, and never
+                committed.
+              </li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -676,7 +818,7 @@ bun run cli doctor</code></pre>
     </footer>
 
     <script>
-      // Copy button. No dependency, and it degrades to a visible command either way.
+      // Copy button. No dependency, and the command stays readable either way.
       document.querySelectorAll("[data-copy]").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const text = document.querySelector(btn.dataset.copy)?.textContent ?? "";
@@ -689,6 +831,181 @@ bun run cli doctor</code></pre>
             btn.textContent = "Select it";
           }
         });
+      });
+
+      /* ====================================================================
+         Reset horizon — the same axis, marks and linking as the dashboard in
+         src/. The numbers below are sample values, fixed at load and counted
+         down live; the page says so, because a marketing page showing
+         invented quotas as if they were yours would be a lie.
+         ==================================================================== */
+      const SPAN_H = 168; // seven days
+      const pos = (h) => Math.sqrt(Math.min(Math.max(h, 0), SPAN_H) / SPAN_H);
+
+      const BRAND = {
+        claude: "#d97757",
+        codex: "#10a37f",
+        zai: "#4f7cff",
+        "opencode-zen": "#9b5bff",
+        gemini: "#4285f4",
+        moonshot: "#0ea5e9",
+      };
+      const S = 'stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"';
+      const GLYPH = {
+        claude: `<g ${S}><path d="M12 3.5v5M12 15.5v5M3.5 12h5M15.5 12h5M6 6l3.5 3.5M14.5 14.5 18 18M18 6l-3.5 3.5M9.5 14.5 6 18"/></g>`,
+        codex: `<g ${S} stroke-linejoin="round"><path d="M5 7.5 9.5 12 5 16.5"/><path d="M12.5 16.5H19"/></g>`,
+        zai: `<path d="M14.5 2.5 6 13.5h4.2L8.5 21.5 18 10h-4.2z" fill="currentColor"/>`,
+        gemini: `<path d="M12 2.2c0 5.4 4.4 9.8 9.8 9.8-5.4 0-9.8 4.4-9.8 9.8 0-5.4-4.4-9.8-9.8-9.8 5.4 0 9.8-4.4 9.8-9.8z" fill="currentColor"/>`,
+        moonshot: `<path d="M20.2 14.8A8.6 8.6 0 0 1 9.2 3.8a8.6 8.6 0 1 0 11 11z" fill="currentColor"/>`,
+      };
+
+      // Minutes from load. Each one has to stay plausible for its own window — a
+      // "Session (5h)" cannot reset in three days — while landing far enough apart on
+      // the sqrt axis that six 21px dots do not collapse into one blob.
+      // `win` is the length of each provider's window. Once a reset elapses the demo
+      // rolls it forward by one window instead of parking it at "in 0m" — which is
+      // what the real thing does, and it keeps the rail honest on a tab left open.
+      const START = Date.now();
+      const EVENTS = [
+        { id: "claude", name: "Claude Code", label: "Session (5h)", min: 72, win: 300, pct: 68 },
+        { id: "gemini", name: "Gemini", label: "Models · Session (5h)", min: 278, win: 300, pct: 24 },
+        { id: "moonshot", name: "Kimi (Moonshot)", label: "Daily (24h)", min: 1145, win: 1440, pct: 12 },
+        { id: "claude", name: "Claude Code", label: "Weekly (7d)", min: 3720, win: 10080, pct: 16 },
+        { id: "codex", name: "Codex", label: "Weekly (7d)", min: 6240, win: 10080, pct: 3 },
+        { id: "zai", name: "z.ai", label: "Tokens (month)", min: 8820, win: 43200, pct: 1 },
+      ];
+
+      const TICKS_FULL = [
+        { h: 0, label: "NOW" }, { h: 1, label: "1h" }, { h: 6, label: "6h" },
+        { h: 24, label: "24h" }, { h: 72, label: "3d" }, { h: 168, label: "7d" },
+      ];
+      // A narrow rail cannot carry six labels without them colliding, so it carries
+      // three. The axis is unchanged — only how densely it is annotated.
+      const TICKS_NARROW = [{ h: 0, label: "NOW" }, { h: 6, label: "6h" }, { h: 168, label: "7d" }];
+
+      const rail = document.getElementById("hzRail");
+      const chips = document.getElementById("hzChips");
+      const nextEl = document.getElementById("hzNext");
+
+      const gap = (ms) => {
+        const m = Math.max(0, Math.round(ms / 6e4));
+        if (m < 60) return m + "m";
+        const h = Math.floor(m / 60);
+        if (h < 48) return h + "h " + (m % 60) + "m";
+        return Math.floor(h / 24) + "d " + (h % 24) + "h";
+      };
+      const left = (e) => {
+        const w = e.win * 6e4;
+        return (((e.min * 6e4 - (Date.now() - START)) % w) + w) % w;
+      };
+
+      function draw() {
+        rail.querySelectorAll(".hz-mark, .hz-tick").forEach((n) => n.remove());
+        // Threshold is lower than the dashboard's 520: this rail lives in a two-column
+        // hero and sits around 500px, and the full axis is the thing worth showing.
+        const ticks = rail.getBoundingClientRect().width < 460 ? TICKS_NARROW : TICKS_FULL;
+
+        for (const [i, t] of ticks.entries()) {
+          const el = document.createElement("div");
+          // The first label is centred on x=0 and would hang off the rail, so it is
+          // left-aligned instead.
+          el.className = "hz-tick" + (i === 0 ? " is-first" : "");
+          el.style.left = pos(t.h) * 100 + "%";
+          el.innerHTML = `<span>${t.label}</span>`;
+          rail.append(el);
+        }
+
+        EVENTS.forEach((e, i) => {
+          const ms = left(e);
+          const p = pos(ms / 3.6e6);
+          const b = document.createElement("button");
+          b.type = "button";
+          // `imminent` is tick()'s to assign — it knows which reset is actually nearest.
+          b.className = "hz-mark" + (p > 0.74 ? " at-end" : p < 0.14 ? " at-start" : "");
+          b.style.left = p * 100 + "%";
+          b.style.setProperty("--c", BRAND[e.id]);
+          b.style.setProperty("--h", 22 + e.pct * 0.6 + "%");
+          b.style.setProperty("--d", 140 + i * 60 + "ms");
+          b.dataset.i = i;
+          b.setAttribute("aria-label", `${e.name}, ${e.label}: resets in ${gap(ms)}, ${e.pct}% used`);
+          b.innerHTML =
+            `<span class="hz-tip"><b>${e.name}</b><span>${e.label} · ${e.pct}% used · in ${gap(ms)}</span></span>` +
+            `<span class="hz-stem"></span>` +
+            `<span class="hz-dot"><svg viewBox="0 0 24 24" aria-hidden="true">${GLYPH[e.id] || ""}</svg></span>`;
+          rail.append(b);
+        });
+      }
+
+      function buildChips() {
+        chips.innerHTML = EVENTS.map(
+          (e, i) =>
+            `<li><button type="button" class="hz-chip" data-i="${i}" style="--c:${BRAND[e.id]}">` +
+            `<i></i>${e.name} · ${e.label}</button></li>`,
+        ).join("");
+      }
+
+      // The link both ways is the point: the rail and the chips are one object seen
+      // from two angles, and touching either end lights the other.
+      function link(i, on) {
+        for (const el of document.querySelectorAll(`[data-i="${i}"]`)) el.classList.toggle("linked", on);
+      }
+      for (const ev of ["pointerover", "focusin"]) {
+        document.addEventListener(ev, (e) => {
+          const t = e.target.closest?.("[data-i]");
+          if (t) link(t.dataset.i, true);
+        });
+      }
+      for (const ev of ["pointerout", "focusout"]) {
+        document.addEventListener(ev, (e) => {
+          const t = e.target.closest?.("[data-i]");
+          if (t) link(t.dataset.i, false);
+        });
+      }
+
+      // Positions move too, not just the text: once a window rolls over, a marker that
+      // was about to reset belongs back at the far end of the rail.
+      function tick() {
+        if (document.hidden) return;
+        let soonest = null;
+
+        for (const b of rail.querySelectorAll(".hz-mark")) {
+          const e = EVENTS[b.dataset.i];
+          const ms = left(e);
+          if (!soonest || ms < soonest.ms) soonest = { e, ms };
+
+          const p = pos(ms / 3.6e6);
+          b.style.left = p * 100 + "%";
+          b.classList.toggle("at-end", p > 0.74);
+          b.classList.toggle("at-start", p < 0.14);
+
+          const t = b.querySelector(".hz-tip span");
+          if (t) t.textContent = `${e.label} · ${e.pct}% used · in ${gap(ms)}`;
+          b.setAttribute(
+            "aria-label",
+            `${e.name}, ${e.label}: resets in ${gap(ms)}, ${e.pct}% used`,
+          );
+          b.classList.toggle("imminent", false);
+        }
+
+        if (!soonest) return;
+        nextEl.innerHTML =
+          `next · <b>${soonest.e.name}</b> ${soonest.e.label} <span class="cd">in ${gap(soonest.ms)}</span>`;
+
+        // Only the nearest reset breathes, so whichever marker that is now gets the class.
+        const idx = EVENTS.indexOf(soonest.e);
+        rail.querySelector(`.hz-mark[data-i="${idx}"]`)?.classList.add("imminent");
+      }
+
+      buildChips();
+      draw();
+      tick();
+      setInterval(tick, 30000);
+
+      // Tick density depends on the rail's width, so it is re-decided on resize.
+      let rt;
+      addEventListener("resize", () => {
+        clearTimeout(rt);
+        rt = setTimeout(() => { draw(); tick(); }, 150);
       });
     </script>
   </body>
