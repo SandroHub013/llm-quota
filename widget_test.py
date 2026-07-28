@@ -89,6 +89,12 @@ class WidgetPositionTest(unittest.TestCase):
             (1586, 783),
         )
 
+    def test_glass_surface_sits_above_and_right_aligned_with_logo(self):
+        self.assertEqual(
+            widget.surface_above_logo_position(1586, 783, 44, 322, 309),
+            (1308, 472),
+        )
+
 
 class PollingTest(unittest.TestCase):
     def test_poll_interval_avoids_provider_endpoint_throttling(self):

@@ -160,6 +160,10 @@ def bottom_right_position(work_area, width, height, margin=12):
     )
 
 
+def surface_above_logo_position(logo_x, logo_y, logo_width, surface_width, surface_height, gap=2):
+    return logo_x + logo_width - surface_width, logo_y - surface_height - gap
+
+
 def windows_work_area(screen_width, screen_height):
     rect = Rect()
     if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):
@@ -419,6 +423,12 @@ class Widget(tk.Tk):
         self.configure(bg=KEY)
         self.attributes("-transparentcolor", KEY)
 
+        self.surface = tk.Toplevel(self)
+        self.surface.overrideredirect(True)
+        self.surface.attributes("-topmost", True)
+        self.surface.configure(bg=BG)
+        self.surface.withdraw()
+
         self.view_mode = "q"  # "q" per tendina Q logo, "bar" per mini bar orizzontale
         self.expanded = True  # Aperto di default per essere subito visibile
         self.rows = []
@@ -433,10 +443,11 @@ class Widget(tk.Tk):
         self._loading = False
         self._glass_attempted = False
 
-        self.bind("<Double-Button-1>", lambda e: self.destroy())
+        for window in (self, self.surface):
+            window.bind("<Double-Button-1>", lambda e: self.destroy())
+            window.bind("<ButtonPress-3>", lambda e: self.destroy())
+            window.bind("<Escape>", lambda e: self.toggle(e) if self.expanded else None)
         self.bind("<B1-Motion>", self.drag)
-        self.bind("<ButtonPress-3>", lambda e: self.destroy())
-        self.bind("<Escape>", lambda e: self.toggle(e) if self.expanded else None)
 
         # Header: Q logo stilizzata
         self.header = tk.Frame(self, bg=KEY, cursor="hand2")
@@ -448,46 +459,51 @@ class Widget(tk.Tk):
             w.bind("<Button-1>", self.toggle)
         self._draw_logo(None)
 
-        self.panel = tk.Frame(self, bg=BG,
+        self.panel = tk.Frame(self.surface, bg=BG,
                               highlightbackground=BORDER, highlightthickness=1)
         if self.expanded:
-            self.panel.pack(before=self.header)
+            self.panel.pack()
+            self.surface.deiconify()
 
         # Posizione iniziale: angolo basso-destra dell'area utile, sopra la taskbar.
         self._place_bottom_right()
 
         self._load_icons()
 
-        # Fade-in all'avvio
-        self.attributes("-alpha", 0.0)
+        # Il logo resta color-keyed e perfettamente trasparente; sfuma solo la superficie glass.
+        self.attributes("-alpha", 1.0)
+        self.surface.attributes("-alpha", 0.0)
         self._fade(0.0)
         self.after_idle(self._apply_window_effects)
         self.refresh()
 
     def _apply_window_effects(self):
         self.update_idletasks()
+        self.surface.update_idletasks()
         user32 = ctypes.windll.user32
         user32.GetParent.argtypes = (wintypes.HWND,)
         user32.GetParent.restype = wintypes.HWND
-        hwnd = user32.GetParent(self.winfo_id()) or self.winfo_id()
-        if not self._glass_attempted:
-            enable_acrylic(hwnd)
-            self._glass_attempted = True
 
-        def bounds(widget, kind):
-            left = widget.winfo_rootx() - self.winfo_rootx()
-            top = widget.winfo_rooty() - self.winfo_rooty()
-            return kind, left, top, left + widget.winfo_width(), top + widget.winfo_height()
+        def handle(window):
+            return user32.GetParent(window.winfo_id()) or window.winfo_id()
 
-        regions = []
-        if self.view_mode == "bar" and self.minibar_frame and self.minibar_frame.winfo_ismapped():
-            regions.append(bounds(self.minibar_frame, "round"))
-        else:
-            if self.expanded and self.panel.winfo_ismapped():
-                regions.append(bounds(self.panel, "round"))
-            if self.logo.winfo_ismapped():
-                regions.append(bounds(self.logo, "ellipse"))
-        set_window_shape(hwnd, regions)
+        logo_bounds = (
+            "ellipse",
+            self.logo.winfo_rootx() - self.winfo_rootx(),
+            self.logo.winfo_rooty() - self.winfo_rooty(),
+            self.logo.winfo_rootx() - self.winfo_rootx() + self.logo.winfo_width(),
+            self.logo.winfo_rooty() - self.winfo_rooty() + self.logo.winfo_height(),
+        )
+        set_window_shape(handle(self), [logo_bounds])
+
+        if self.surface.winfo_ismapped():
+            surface_handle = handle(self.surface)
+            if not self._glass_attempted:
+                enable_acrylic(surface_handle)
+                self._glass_attempted = True
+            set_window_shape(surface_handle, [
+                ("round", 0, 0, self.surface.winfo_width(), self.surface.winfo_height())
+            ])
 
     def _load_icons(self):
         def _fetch(pid, domain):
@@ -523,7 +539,7 @@ class Widget(tk.Tk):
 
     def _fade(self, a):
         a = min(0.9, a + 0.08)
-        self.attributes("-alpha", a)
+        self.surface.attributes("-alpha", a)
         if a < 0.9:
             self.after(16, lambda: self._fade(a))
 
@@ -561,43 +577,50 @@ class Widget(tk.Tk):
 
     def drag(self, e):
         self._user_positioned = True
-        self.geometry(f"+{e.x_root - 22}+{e.y_root - 22}")
+        target = self.surface if self.view_mode == "bar" else self
+        target.geometry(f"+{e.x_root - 22}+{e.y_root - 22}")
+        if self.view_mode == "q":
+            self.after_idle(self._sync_surface_to_logo)
+
+    def _sync_surface_to_logo(self):
+        if self.view_mode != "q" or not self.expanded:
+            return
+        self.update_idletasks()
+        self.surface.update_idletasks()
+        x, y = surface_above_logo_position(
+            self.winfo_x(), self.winfo_y(), self.winfo_width(),
+            self.surface.winfo_width(), self.surface.winfo_height(),
+        )
+        self.surface.geometry(f"+{x}+{max(10, y)}")
 
     def _place_bottom_right(self):
         self.update_idletasks()
+        self.surface.update_idletasks()
         area = windows_work_area(self.winfo_screenwidth(), self.winfo_screenheight())
+        if self.view_mode == "bar":
+            width = max(1, self.surface.winfo_reqwidth())
+            height = max(1, self.surface.winfo_reqheight())
+            x, y = bottom_right_position(area, width, height)
+            self.surface.geometry(f"+{x}+{y}")
+            return
+
         width = max(1, self.winfo_reqwidth())
         height = max(1, self.winfo_reqheight())
         x, y = bottom_right_position(area, width, height)
         self.geometry(f"+{x}+{y}")
-
-    def _anchor_logo(self, lx, ly):
-        if lx is None or ly is None or lx <= 10 or ly <= 10:
-            return
-        self.update_idletasks()
-        cur_x, cur_y = self.logo.winfo_rootx(), self.logo.winfo_rooty()
-        if cur_x <= 10 or cur_y <= 10:
-            return
-        dx = cur_x - lx
-        dy = cur_y - ly
-        if dx or dy:
-            y = max(10, self.winfo_y() - dy)
-            x = max(10, self.winfo_x() - dx)
-            self.geometry(f"+{x}+{y}")
+        self.after_idle(self._sync_surface_to_logo)
 
     def toggle(self, e=None):
         if self.view_mode != "q":
             return
-        lx = self.logo.winfo_rootx() if self._user_positioned else None
-        ly = self.logo.winfo_rooty() if self._user_positioned else None
         self.expanded = not self.expanded
         if self.expanded:
-            self.panel.pack(before=self.header)
+            self.panel.pack()
+            self.surface.deiconify()
+            self.after_idle(self._sync_surface_to_logo)
         else:
-            self.panel.forget()
-        if self._user_positioned:
-            self._anchor_logo(lx, ly)
-        else:
+            self.surface.withdraw()
+        if not self._user_positioned:
             self._place_bottom_right()
         self.after_idle(self._apply_window_effects)
 
@@ -605,32 +628,47 @@ class Widget(tk.Tk):
         self.after(0, self._do_wake_up)
 
     def _do_wake_up(self):
-        self.deiconify()
-        if self.view_mode == "q" and not self.expanded:
-            self.expanded = True
-            self.panel.pack(before=self.header)
+        if self.view_mode == "q":
+            self.deiconify()
+            if not self.expanded:
+                self.expanded = True
+                self.panel.pack()
+            self.surface.deiconify()
+            self.after_idle(self._sync_surface_to_logo)
+        else:
+            self.surface.deiconify()
         self.lift()
+        self.surface.lift()
         self.attributes("-topmost", True)
+        self.surface.attributes("-topmost", True)
         if not self._user_positioned:
             self._place_bottom_right()
         self.refresh()
 
 
     def switch_view_mode(self):
+        logo_anchor = self.winfo_x(), self.winfo_y(), self.winfo_width()
         self.view_mode = "bar" if self.view_mode == "q" else "q"
         if self.view_mode == "bar":
             if self.expanded:
                 self.panel.forget()
                 self.expanded = False
-            self.header.pack_forget()
+            self.withdraw()
+            self.surface.deiconify()
         else:
             if self.minibar_frame:
                 self.minibar_frame.destroy()
                 self.minibar_frame = None
-            self.header.pack(anchor="e")
+            self.surface.withdraw()
+            self.deiconify()
 
         if self.last_data:
             self._render(self.last_data)
+        if self.view_mode == "bar" and self._user_positioned:
+            self.surface.update_idletasks()
+            x = logo_anchor[0] + logo_anchor[2] - self.surface.winfo_width()
+            self.surface.geometry(f"+{max(10, x)}+{max(10, logo_anchor[1])}")
+            self.after_idle(self._apply_window_effects)
 
     def refresh(self):
         if self._refresh_job is not None:
@@ -757,7 +795,7 @@ class Widget(tk.Tk):
         if self.minibar_frame:
             self.minibar_frame.destroy()
 
-        self.minibar_frame = tk.Frame(self, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
+        self.minibar_frame = tk.Frame(self.surface, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
 
         for d in data:
             color, initial = BRAND.get(d["id"], (ACCENT, d["name"][0]))
@@ -857,6 +895,8 @@ class Widget(tk.Tk):
 
         if not self._user_positioned:
             self._place_bottom_right()
+        else:
+            self.after_idle(self._sync_surface_to_logo)
         self.after_idle(self._apply_window_effects)
 
 
