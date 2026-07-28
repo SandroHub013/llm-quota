@@ -25,9 +25,12 @@ import urllib.request
 import webbrowser
 import winreg
 from datetime import datetime, timezone
+from math import sqrt
 
 BASE = "http://localhost:4747"
 POLL_MS = 5 * 60_000
+HORIZON_SEC = 7 * 24 * 60 * 60
+SURFACE_OPACITY = 0.95
 MUTEX_NAME = "Local\\LLMQuotaWidget"
 WAKE_PORT = 51122
 
@@ -93,12 +96,50 @@ class Rect(ctypes.Structure):
     ]
 
 
+def set_window_shape(hwnd, regions):
+    """Clip the borderless window to rounded panels and the circular Q button."""
+    if not regions:
+        return
+    gdi32, user32 = ctypes.windll.gdi32, ctypes.windll.user32
+    gdi32.CreateRectRgn.argtypes = (ctypes.c_int,) * 4
+    gdi32.CreateRoundRectRgn.argtypes = (ctypes.c_int,) * 6
+    gdi32.CreateEllipticRgn.argtypes = (ctypes.c_int,) * 4
+    for name in ("CreateRectRgn", "CreateRoundRectRgn", "CreateEllipticRgn"):
+        getattr(gdi32, name).restype = wintypes.HANDLE
+    gdi32.CombineRgn.argtypes = (wintypes.HANDLE, wintypes.HANDLE, wintypes.HANDLE, ctypes.c_int)
+    gdi32.DeleteObject.argtypes = (wintypes.HANDLE,)
+    combined = gdi32.CreateRectRgn(0, 0, 0, 0)
+    for kind, left, top, right, bottom in regions:
+        if kind == "ellipse":
+            region = gdi32.CreateEllipticRgn(left, top, right + 1, bottom + 1)
+        else:
+            region = gdi32.CreateRoundRectRgn(left, top, right + 1, bottom + 1, 40, 40)
+        gdi32.CombineRgn(combined, combined, region, 2)  # RGN_OR
+        gdi32.DeleteObject(region)
+    user32.SetWindowRgn.argtypes = (wintypes.HWND, wintypes.HANDLE, wintypes.BOOL)
+    user32.SetWindowRgn.restype = ctypes.c_int
+    if not user32.SetWindowRgn(hwnd, combined, True):
+        gdi32.DeleteObject(combined)
+
+
 def bottom_right_position(work_area, width, height, margin=12):
     left, top, right, bottom = work_area
     return (
         max(left + margin, right - width - margin),
         max(top + margin, bottom - height - margin),
     )
+
+
+def bottom_center_position(work_area, width, height, margin=12):
+    left, top, right, bottom = work_area
+    return (
+        max(left + margin, left + (right - left - width) // 2),
+        max(top + margin, bottom - height - margin),
+    )
+
+
+def surface_above_logo_position(logo_x, logo_y, logo_width, surface_width, surface_height, gap=2):
+    return logo_x + logo_width - surface_width, logo_y - surface_height - gap
 
 
 def windows_work_area(screen_width, screen_height):
@@ -189,7 +230,20 @@ def format_reset(sec):
     else:
         days = int(hours // 24)
         h = int((hours % 24))
-        return f"{days}g {h}h" if h > 0 else f"{days}g"
+        return f"{days}d {h}h" if h > 0 else f"{days}d"
+
+
+def horizon_position(sec, width):
+    return round(width * sqrt(min(max(sec, 0), HORIZON_SEC) / HORIZON_SEC))
+
+
+def horizon_events(data):
+    events = []
+    for provider in data:
+        for reset in provider.get("resets", []):
+            if 0 < reset["sec"] <= HORIZON_SEC:
+                events.append({"id": provider["id"], "name": provider["name"], **reset})
+    return sorted(events, key=lambda event: event["sec"])
 
 
 BRAND = {
@@ -225,19 +279,20 @@ UI = ("Segoe UI", 9)
 
 
 class Tooltip:
-    def __init__(self, widget, text_fn):
+    def __init__(self, widget, text_fn, tag=None):
         self.widget = widget
         self.text_fn = text_fn
         self.tipwindow = None
-        self.widget.bind("<Enter>", self.show_tip)
-        self.widget.bind("<Leave>", self.hide_tip)
+        bind = (lambda event, handler: widget.tag_bind(tag, event, handler)) if tag else widget.bind
+        bind("<Enter>", self.show_tip)
+        bind("<Leave>", self.hide_tip)
 
     def show_tip(self, event=None):
         text = self.text_fn() if callable(self.text_fn) else self.text_fn
         if self.tipwindow or not text:
             return
-        x = self.widget.winfo_rootx() + 10
-        y = self.widget.winfo_rooty() - 32
+        x = getattr(event, "x_root", self.widget.winfo_rootx()) + 10
+        y = getattr(event, "y_root", self.widget.winfo_rooty()) - 32
         self.tipwindow = tw = tk.Toplevel(self.widget)
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
@@ -271,6 +326,7 @@ def fetch_all():
             metrics = d.get("metrics", [])
             metric_info = []
             details_list = []
+            resets = []
             for m in metrics:
                 used = m.get("used")
                 limit = m.get("limit")
@@ -278,9 +334,15 @@ def fetch_all():
                 sec = parse_reset_sec(reset_at)
                 r_str = format_reset(sec)
                 rem = 100 - round(100 * used / limit) if used is not None and limit else None
-                metric_info.append({"rem": rem, "sec": sec})
-
                 lbl = m.get("label", "Quota")
+                metric_info.append({"rem": rem, "sec": sec})
+                if sec is not None:
+                    resets.append({
+                        "label": lbl,
+                        "sec": sec,
+                        "used_pct": max(0, min(100, 100 - rem)) if rem is not None else 0,
+                    })
+
                 if rem is not None:
                     d_item = f"{lbl}: {rem}% left"
                 elif used is not None and limit:
@@ -312,6 +374,7 @@ def fetch_all():
                 "status": d.get("status", "error"),
                 "remaining": remaining,
                 "reset_str": reset_str,
+                "resets": resets,
                 "details_str": details_str,
             })
         return out
@@ -338,6 +401,12 @@ class Widget(tk.Tk):
         self.configure(bg=KEY)
         self.attributes("-transparentcolor", KEY)
 
+        self.surface = tk.Toplevel(self)
+        self.surface.overrideredirect(True)
+        self.surface.attributes("-topmost", True)
+        self.surface.configure(bg=BG)
+        self.surface.withdraw()
+
         self.view_mode = "q"  # "q" per tendina Q logo, "bar" per mini bar orizzontale
         self.expanded = True  # Aperto di default per essere subito visibile
         self.rows = []
@@ -345,15 +414,22 @@ class Widget(tk.Tk):
         self.last_data = None
         self.prev_providers = {}
         self.footer_frame = None
+        self.horizon_frame = None
         self.minibar_frame = None
+        self.bar_orientation = "horizontal"
+        self._drag_origin = None
         self._user_positioned = False
         self._refresh_job = None
         self._loading = False
 
-        self.bind("<Double-Button-1>", lambda e: self.destroy())
-        self.bind("<B1-Motion>", self.drag)
-        self.bind("<ButtonPress-3>", lambda e: self.destroy())
-        self.bind("<Escape>", lambda e: self.toggle(e) if self.expanded else None)
+        for window in (self, self.surface):
+            window.bind("<Double-Button-1>", lambda e: self.destroy())
+            window.bind("<ButtonPress-3>", lambda e: self.destroy())
+            window.bind("<Escape>", lambda e: self.toggle(e) if self.expanded else None)
+            # Both windows drag: the panel now lives on `surface`, so binding only the
+            # root left the whole expanded panel as dead space to grab.
+            window.bind("<ButtonPress-1>", self._drag_start, add="+")
+            window.bind("<B1-Motion>", self.drag)
 
         # Header: Q logo stilizzata
         self.header = tk.Frame(self, bg=KEY, cursor="hand2")
@@ -365,20 +441,48 @@ class Widget(tk.Tk):
             w.bind("<Button-1>", self.toggle)
         self._draw_logo(None)
 
-        self.panel = tk.Frame(self, bg=BG,
+        self.panel = tk.Frame(self.surface, bg=BG,
                               highlightbackground=BORDER, highlightthickness=1)
         if self.expanded:
-            self.panel.pack(before=self.header)
+            self.panel.pack()
+            self.surface.deiconify()
 
         # Posizione iniziale: angolo basso-destra dell'area utile, sopra la taskbar.
         self._place_bottom_right()
 
         self._load_icons()
 
-        # Fade-in all'avvio
-        self.attributes("-alpha", 0.0)
+        # Il logo resta color-keyed e perfettamente trasparente; sfuma solo la superficie glass.
+        self.attributes("-alpha", 1.0)
+        self.surface.attributes("-alpha", 0.0)
         self._fade(0.0)
+        self.after_idle(self._apply_window_effects)
         self.refresh()
+
+    def _apply_window_effects(self):
+        self.update_idletasks()
+        self.surface.update_idletasks()
+        user32 = ctypes.windll.user32
+        user32.GetParent.argtypes = (wintypes.HWND,)
+        user32.GetParent.restype = wintypes.HWND
+
+        def handle(window):
+            return user32.GetParent(window.winfo_id()) or window.winfo_id()
+
+        logo_bounds = (
+            "ellipse",
+            self.logo.winfo_rootx() - self.winfo_rootx(),
+            self.logo.winfo_rooty() - self.winfo_rooty(),
+            self.logo.winfo_rootx() - self.winfo_rootx() + self.logo.winfo_width(),
+            self.logo.winfo_rooty() - self.winfo_rooty() + self.logo.winfo_height(),
+        )
+        set_window_shape(handle(self), [logo_bounds])
+
+        if self.surface.winfo_ismapped():
+            surface_handle = handle(self.surface)
+            set_window_shape(surface_handle, [
+                ("round", 0, 0, self.surface.winfo_width(), self.surface.winfo_height())
+            ])
 
     def _load_icons(self):
         def _fetch(pid, domain):
@@ -413,9 +517,9 @@ class Widget(tk.Tk):
             pass
 
     def _fade(self, a):
-        a = min(1.0, a + 0.08)
-        self.attributes("-alpha", a)
-        if a < 1.0:
+        a = min(SURFACE_OPACITY, a + 0.08)
+        self.surface.attributes("-alpha", a)
+        if a < SURFACE_OPACITY:
             self.after(16, lambda: self._fade(a))
 
     def _lerp(self, c1, c2, t):
@@ -450,57 +554,83 @@ class Widget(tk.Tk):
                           x1 + (x2 - x1) * t1, y1 + (y2 - y1) * t1,
                           fill=col, width=w, capstyle=tk.ROUND)
 
+    def _drag_start(self, e):
+        target = self.surface if self.view_mode == "bar" else self
+        self._drag_origin = (e.x_root, e.y_root, target.winfo_x(), target.winfo_y())
+
     def drag(self, e):
+        # Move by the pointer delta, not to the pointer. The old code snapped the
+        # window's corner under the cursor, which is tolerable when you grab a 44px
+        # logo and unusable once you can grab a 300px panel or an 800px mini bar:
+        # the thing you grabbed would jump out from under you.
+        if not self._drag_origin:
+            return
         self._user_positioned = True
-        self.geometry(f"+{e.x_root - 22}+{e.y_root - 22}")
+        target = self.surface if self.view_mode == "bar" else self
+        press_x, press_y, origin_x, origin_y = self._drag_origin
+        target.geometry(f"+{origin_x + e.x_root - press_x}+{origin_y + e.y_root - press_y}")
+        if self.view_mode == "q":
+            self.after_idle(self._sync_surface_to_logo)
+
+    def _sync_surface_to_logo(self):
+        if self.view_mode != "q" or not self.expanded:
+            return
+        self.update_idletasks()
+        self.surface.update_idletasks()
+        x, y = surface_above_logo_position(
+            self.winfo_x(), self.winfo_y(), self.winfo_width(),
+            self.surface.winfo_width(), self.surface.winfo_height(),
+        )
+        self.surface.geometry(f"+{x}+{max(10, y)}")
 
     def _place_bottom_right(self):
         self.update_idletasks()
+        self.surface.update_idletasks()
         area = windows_work_area(self.winfo_screenwidth(), self.winfo_screenheight())
+        if self.view_mode == "bar":
+            width = max(1, self.surface.winfo_reqwidth())
+            height = max(1, self.surface.winfo_reqheight())
+            x, y = bottom_center_position(area, width, height)
+            self.surface.geometry(f"+{x}+{y}")
+            return
+
         width = max(1, self.winfo_reqwidth())
         height = max(1, self.winfo_reqheight())
         x, y = bottom_right_position(area, width, height)
         self.geometry(f"+{x}+{y}")
-
-    def _anchor_logo(self, lx, ly):
-        if lx is None or ly is None or lx <= 10 or ly <= 10:
-            return
-        self.update_idletasks()
-        cur_x, cur_y = self.logo.winfo_rootx(), self.logo.winfo_rooty()
-        if cur_x <= 10 or cur_y <= 10:
-            return
-        dx = cur_x - lx
-        dy = cur_y - ly
-        if dx or dy:
-            y = max(10, self.winfo_y() - dy)
-            x = max(10, self.winfo_x() - dx)
-            self.geometry(f"+{x}+{y}")
+        self.after_idle(self._sync_surface_to_logo)
 
     def toggle(self, e=None):
         if self.view_mode != "q":
             return
-        lx = self.logo.winfo_rootx() if self._user_positioned else None
-        ly = self.logo.winfo_rooty() if self._user_positioned else None
         self.expanded = not self.expanded
         if self.expanded:
-            self.panel.pack(before=self.header)
+            self.panel.pack()
+            self.surface.deiconify()
+            self.after_idle(self._sync_surface_to_logo)
         else:
-            self.panel.forget()
-        if self._user_positioned:
-            self._anchor_logo(lx, ly)
-        else:
+            self.surface.withdraw()
+        if not self._user_positioned:
             self._place_bottom_right()
+        self.after_idle(self._apply_window_effects)
 
     def wake_up(self):
         self.after(0, self._do_wake_up)
 
     def _do_wake_up(self):
-        self.deiconify()
-        if self.view_mode == "q" and not self.expanded:
-            self.expanded = True
-            self.panel.pack(before=self.header)
+        if self.view_mode == "q":
+            self.deiconify()
+            if not self.expanded:
+                self.expanded = True
+                self.panel.pack()
+            self.surface.deiconify()
+            self.after_idle(self._sync_surface_to_logo)
+        else:
+            self.surface.deiconify()
         self.lift()
+        self.surface.lift()
         self.attributes("-topmost", True)
+        self.surface.attributes("-topmost", True)
         if not self._user_positioned:
             self._place_bottom_right()
         self.refresh()
@@ -512,15 +642,27 @@ class Widget(tk.Tk):
             if self.expanded:
                 self.panel.forget()
                 self.expanded = False
-            self.header.pack_forget()
+            self.withdraw()
+            self.surface.deiconify()
         else:
             if self.minibar_frame:
                 self.minibar_frame.destroy()
                 self.minibar_frame = None
-            self.header.pack(anchor="e")
+            self.surface.withdraw()
+            self.deiconify()
 
         if self.last_data:
             self._render(self.last_data)
+        if self.view_mode == "bar":
+            self._place_bottom_right()
+            self.after_idle(self._apply_window_effects)
+
+    def toggle_bar_orientation(self):
+        self.bar_orientation = "vertical" if self.bar_orientation == "horizontal" else "horizontal"
+        if self.last_data:
+            self._render_minibar(self.last_data)
+            self._place_bottom_right()
+            self.after_idle(self._apply_window_effects)
 
     def refresh(self):
         if self._refresh_job is not None:
@@ -598,11 +740,57 @@ class Widget(tk.Tk):
         row.bind("<Leave>", lambda e, r=row: self._hover(r, False))
         return row
 
+    def _render_horizon(self, data):
+        if self.horizon_frame:
+            self.horizon_frame.destroy()
+
+        self.horizon_frame = tk.Frame(self.panel, bg=BG)
+        events = horizon_events(data)
+        tk.Label(self.horizon_frame, text="RESET HORIZON", bg=BG, fg=MUT,
+                 font=("Cascadia Mono", 8), anchor="w").pack(fill="x", padx=8, pady=(6, 0))
+        if events:
+            first = events[0]
+            next_text = f"next · {first['name']} {first['label']} in {format_reset(first['sec'])}"
+        else:
+            next_text = "No resets in the next 7 days"
+        tk.Label(self.horizon_frame, text=next_text, bg=BG, fg=FG,
+                 font=("Segoe UI", 8), anchor="w").pack(fill="x", padx=8)
+
+        width, height, left, right, baseline = 300, 62, 8, 292, 43
+        canvas = tk.Canvas(self.horizon_frame, width=width, height=height, bg=BG,
+                           highlightthickness=0)
+        canvas.create_line(left, baseline, right, baseline, fill=BORDER)
+        for sec, label in ((0, "NOW"), (6 * 3600, "6h"), (24 * 3600, "24h"),
+                           (72 * 3600, "3d"), (HORIZON_SEC, "7d")):
+            x = left + horizon_position(sec, right - left)
+            canvas.create_line(x, 8, x, baseline, fill=BORDER)
+            canvas.create_text(x, 54, text=label, fill=MUT, font=("Cascadia Mono", 7),
+                               anchor="w" if sec == 0 else "center")
+
+        for index, event in enumerate(events):
+            x = left + horizon_position(event["sec"], right - left)
+            stem = 10 + round(event["used_pct"] * 0.24)
+            y = baseline - stem
+            color, initial = BRAND.get(event["id"], (ACCENT, event["name"][0]))
+            tag = f"horizon-{index}"
+            canvas.create_line(x, baseline, x, y, fill=color, width=2, tags=tag)
+            canvas.create_oval(x - 7, y - 7, x + 7, y + 7, fill=color, outline=BG,
+                               width=2, tags=tag)
+            canvas.create_text(x, y, text=initial, fill="#fff",
+                               font=("Segoe UI", 6, "bold"), tags=tag)
+            Tooltip(canvas,
+                    f"{event['name']} · {event['label']}\nresets in {format_reset(event['sec'])}",
+                    tag=tag)
+
+        canvas.pack(fill="x", padx=4)
+        self.horizon_frame.pack(fill="x")
+
     def _render_minibar(self, data):
         if self.minibar_frame:
             self.minibar_frame.destroy()
 
-        self.minibar_frame = tk.Frame(self, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
+        self.minibar_frame = tk.Frame(self.surface, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
+        vertical = self.bar_orientation == "vertical"
 
         for d in data:
             color, initial = BRAND.get(d["id"], (ACCENT, d["name"][0]))
@@ -614,26 +802,44 @@ class Widget(tk.Tk):
             if img:
                 lbl_icon = tk.Label(item, image=img, bg=PANEL)
                 lbl_icon.image = img
-                lbl_icon.pack(side="left", padx=(4, 2), pady=2)
+                lbl_icon.pack(side="left", padx=(3, 1), pady=2)
             else:
-                tk.Label(item, text=initial, bg=color, fg="#fff", font=("Segoe UI", 8, "bold"), width=2).pack(side="left", padx=(4, 2), pady=2)
+                tk.Label(item, text=initial, bg=color, fg="#fff", font=("Segoe UI", 8, "bold"), width=2).pack(side="left", padx=(3, 1), pady=2)
 
             txt = f"{rem}%" if rem is not None else STATUS_LABEL.get(d["status"], d["status"])
             lbl_txt = tk.Label(item, text=txt, bg=PANEL, fg=quota_color(rem) if rem is not None else MUT, font=MONO)
-            lbl_txt.pack(side="left", padx=(2, 2))
+            lbl_txt.pack(side="left", padx=1)
 
             if reset_str:
-                tk.Label(item, text=f"({reset_str})", bg=PANEL, fg=MUT, font=MONO).pack(side="left", padx=(0, 4))
+                tk.Label(item, text=f"({reset_str})", bg=PANEL, fg=MUT, font=MONO).pack(side="left", padx=(0, 2))
 
             # Tooltip al passaggio del mouse
             Tooltip(item, lambda d=d: d.get("details_str"))
 
-            item.pack(side="left", padx=4)
+            if vertical:
+                item.pack(fill="x", padx=3, pady=1)
+            else:
+                item.pack(side="left", padx=2)
 
-        # Switch mode button
-        btn_switch = tk.Label(self.minibar_frame, text="[ ⇄ Q Logo ]", bg=PANEL, fg=ACCENT, font=UI, cursor="hand2")
-        btn_switch.pack(side="left", padx=(6, 8))
+        controls = tk.Frame(self.minibar_frame, bg=PANEL)
+        orientation_text = "[ ↔ ]" if vertical else "[ ↕ ]"
+        orientation_tip = "Switch to horizontal mini bar" if vertical else "Switch to vertical mini bar"
+        btn_orientation = tk.Label(controls, text=orientation_text, bg=PANEL, fg=VIOLET,
+                                   font=UI, cursor="hand2")
+        btn_orientation.pack(side="left", padx=(4, 2), pady=2)
+        btn_orientation.bind("<Button-1>", lambda e: self.toggle_bar_orientation())
+        Tooltip(btn_orientation, orientation_tip)
+
+        btn_switch = tk.Label(controls, text="[ Q Logo ]", bg=PANEL, fg=ACCENT,
+                              font=UI, cursor="hand2")
+        btn_switch.pack(side="left", padx=(2, 6), pady=2)
         btn_switch.bind("<Button-1>", lambda e: self.switch_view_mode())
+        Tooltip(btn_switch, "Switch to Q logo")
+
+        if vertical:
+            controls.pack(fill="x")
+        else:
+            controls.pack(side="left")
 
         self.minibar_frame.pack()
         self.minibar_frame.bind("<B1-Motion>", self.drag)
@@ -672,10 +878,12 @@ class Widget(tk.Tk):
             self._render_minibar(data)
             if not self._user_positioned:
                 self._place_bottom_right()
+            self.after_idle(self._apply_window_effects)
             return
 
         for w in self.rows:
             w.destroy()
+        self._render_horizon(data)
         if self.footer_frame:
             self.footer_frame.destroy()
             self.footer_frame = None
@@ -700,6 +908,9 @@ class Widget(tk.Tk):
 
         if not self._user_positioned:
             self._place_bottom_right()
+        else:
+            self.after_idle(self._sync_surface_to_logo)
+        self.after_idle(self._apply_window_effects)
 
 
 if __name__ == "__main__":
