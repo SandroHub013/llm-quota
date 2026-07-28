@@ -422,8 +422,11 @@
         width: 3px;
         height: var(--h, 40%);
         border-radius: 2px 2px 0 0;
-        background: linear-gradient(transparent, var(--c, var(--accent)));
-        opacity: 0.55;
+        /* The candle has to survive the dot's own glow sitting right on top of it.
+           At 0.55 the stem washed out entirely and the marks read as dots floating
+           at arbitrary heights, which threw away the one thing the height encodes. */
+        background: linear-gradient(rgba(255, 255, 255, 0.06), var(--c, var(--accent)));
+        opacity: 0.85;
         transform-origin: bottom;
         transform: scaleX(0.667);
         animation: stem 0.7s var(--ease-expo) backwards;
@@ -431,9 +434,15 @@
         transition: opacity 0.25s, transform 0.25s var(--ease-out);
       }
       @keyframes stem { from { transform: scaleX(0.667) scaleY(0); } }
-      .hz-dot {
+      /* Scoped to .hz-mark on purpose: the shared `.avatar, .hz-dot` plate rule below
+         sets `position: relative`, and being later in the sheet it used to win. The
+         dot then sat in flex flow with the stem stacked *above* it, so the candle
+         floated clear of the axis instead of growing out of it. */
+      .hz-mark .hz-dot {
         position: absolute;
-        bottom: calc(var(--h, 40%) - 9px);
+        /* Overlap the stem tip by a few px, not by half the dot: at low usage the
+           candle is shorter than the dot is tall, and centring swallowed it whole. */
+        bottom: calc(var(--h, 40%) - 4px);
         width: 20px;
         height: 20px;
         border-radius: 50%;

@@ -310,10 +310,17 @@
         transition: opacity 0.25s, transform 0.25s var(--ease-out);
         transform-origin: bottom;
       }
+      /* The mark rides the head of its own candle, exactly as in the dashboard: the
+         stem's height is how much of that window is already burnt, so putting the
+         logo on top makes the vertical position carry that reading too. Absolute,
+         but a flex container still centres it on the cross axis. */
       .hz-dot {
-        position: relative; z-index: 2;
+        position: absolute; z-index: 2;
+        /* Overlap the stem tip by a few px, not by half the dot: at low usage the
+           candle is shorter than the dot is tall, and centring swallowed it whole. */
+        bottom: calc(var(--h, 40%) - 5px);
         width: 21px; height: 21px; border-radius: 50%;
-        display: grid; place-items: center; margin-bottom: -10px;
+        display: grid; place-items: center;
         background: var(--c, var(--accent)); color: #fff;
         box-shadow: 0 0 0 2.5px var(--bg);
         transition: transform 0.25s var(--ease-out);
