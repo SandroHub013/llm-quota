@@ -30,6 +30,7 @@ from math import sqrt
 BASE = "http://localhost:4747"
 POLL_MS = 5 * 60_000
 HORIZON_SEC = 7 * 24 * 60 * 60
+SURFACE_OPACITY = 0.95
 MUTEX_NAME = "Local\\LLMQuotaWidget"
 WAKE_PORT = 51122
 
@@ -125,6 +126,14 @@ def bottom_right_position(work_area, width, height, margin=12):
     left, top, right, bottom = work_area
     return (
         max(left + margin, right - width - margin),
+        max(top + margin, bottom - height - margin),
+    )
+
+
+def bottom_center_position(work_area, width, height, margin=12):
+    left, top, right, bottom = work_area
+    return (
+        max(left + margin, left + (right - left - width) // 2),
         max(top + margin, bottom - height - margin),
     )
 
@@ -407,6 +416,7 @@ class Widget(tk.Tk):
         self.footer_frame = None
         self.horizon_frame = None
         self.minibar_frame = None
+        self.bar_orientation = "horizontal"
         self._user_positioned = False
         self._refresh_job = None
         self._loading = False
@@ -503,9 +513,9 @@ class Widget(tk.Tk):
             pass
 
     def _fade(self, a):
-        a = min(0.9, a + 0.08)
+        a = min(SURFACE_OPACITY, a + 0.08)
         self.surface.attributes("-alpha", a)
-        if a < 0.9:
+        if a < SURFACE_OPACITY:
             self.after(16, lambda: self._fade(a))
 
     def _lerp(self, c1, c2, t):
@@ -565,7 +575,7 @@ class Widget(tk.Tk):
         if self.view_mode == "bar":
             width = max(1, self.surface.winfo_reqwidth())
             height = max(1, self.surface.winfo_reqheight())
-            x, y = bottom_right_position(area, width, height)
+            x, y = bottom_center_position(area, width, height)
             self.surface.geometry(f"+{x}+{y}")
             return
 
@@ -612,7 +622,6 @@ class Widget(tk.Tk):
 
 
     def switch_view_mode(self):
-        logo_anchor = self.winfo_x(), self.winfo_y(), self.winfo_width()
         self.view_mode = "bar" if self.view_mode == "q" else "q"
         if self.view_mode == "bar":
             if self.expanded:
@@ -629,10 +638,15 @@ class Widget(tk.Tk):
 
         if self.last_data:
             self._render(self.last_data)
-        if self.view_mode == "bar" and self._user_positioned:
-            self.surface.update_idletasks()
-            x = logo_anchor[0] + logo_anchor[2] - self.surface.winfo_width()
-            self.surface.geometry(f"+{max(10, x)}+{max(10, logo_anchor[1])}")
+        if self.view_mode == "bar":
+            self._place_bottom_right()
+            self.after_idle(self._apply_window_effects)
+
+    def toggle_bar_orientation(self):
+        self.bar_orientation = "vertical" if self.bar_orientation == "horizontal" else "horizontal"
+        if self.last_data:
+            self._render_minibar(self.last_data)
+            self._place_bottom_right()
             self.after_idle(self._apply_window_effects)
 
     def refresh(self):
@@ -761,6 +775,7 @@ class Widget(tk.Tk):
             self.minibar_frame.destroy()
 
         self.minibar_frame = tk.Frame(self.surface, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
+        vertical = self.bar_orientation == "vertical"
 
         for d in data:
             color, initial = BRAND.get(d["id"], (ACCENT, d["name"][0]))
@@ -786,12 +801,30 @@ class Widget(tk.Tk):
             # Tooltip al passaggio del mouse
             Tooltip(item, lambda d=d: d.get("details_str"))
 
-            item.pack(side="left", padx=2)
+            if vertical:
+                item.pack(fill="x", padx=3, pady=1)
+            else:
+                item.pack(side="left", padx=2)
 
-        # Switch mode button
-        btn_switch = tk.Label(self.minibar_frame, text="[ ⇄ Q Logo ]", bg=PANEL, fg=ACCENT, font=UI, cursor="hand2")
-        btn_switch.pack(side="left", padx=(4, 6))
+        controls = tk.Frame(self.minibar_frame, bg=PANEL)
+        orientation_text = "[ ↔ ]" if vertical else "[ ↕ ]"
+        orientation_tip = "Switch to horizontal mini bar" if vertical else "Switch to vertical mini bar"
+        btn_orientation = tk.Label(controls, text=orientation_text, bg=PANEL, fg=VIOLET,
+                                   font=UI, cursor="hand2")
+        btn_orientation.pack(side="left", padx=(4, 2), pady=2)
+        btn_orientation.bind("<Button-1>", lambda e: self.toggle_bar_orientation())
+        Tooltip(btn_orientation, orientation_tip)
+
+        btn_switch = tk.Label(controls, text="[ Q Logo ]", bg=PANEL, fg=ACCENT,
+                              font=UI, cursor="hand2")
+        btn_switch.pack(side="left", padx=(2, 6), pady=2)
         btn_switch.bind("<Button-1>", lambda e: self.switch_view_mode())
+        Tooltip(btn_switch, "Switch to Q logo")
+
+        if vertical:
+            controls.pack(fill="x")
+        else:
+            controls.pack(side="left")
 
         self.minibar_frame.pack()
         self.minibar_frame.bind("<B1-Motion>", self.drag)

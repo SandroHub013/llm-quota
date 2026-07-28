@@ -95,6 +95,12 @@ class WidgetPositionTest(unittest.TestCase):
             (1308, 472),
         )
 
+    def test_minibar_is_centered_above_the_taskbar(self):
+        self.assertEqual(
+            widget.bottom_center_position((0, 0, 1920, 1040), 800, 36, margin=12),
+            (560, 992),
+        )
+
 
 class PollingTest(unittest.TestCase):
     def test_poll_interval_avoids_provider_endpoint_throttling(self):
