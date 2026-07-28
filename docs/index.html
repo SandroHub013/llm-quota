@@ -202,8 +202,10 @@
       }
       /* One column on phones, and the source order puts the horizon straight after the
          lede — the signature moment must not sit below a seven-line install command.
-         From 900px the command tucks under the headline and the horizon takes the
-         right half at full height. */
+         From 900px the headline takes the full row: at display size the word
+         "subscriptions." needs ~780px, more than any half-column the grid can give it,
+         and a minmax(0, …) track lets overflowing text slide under the horizon card.
+         The command and the horizon split the row below it. */
       .hero-grid {
         display: grid; gap: clamp(24px, 3.4vw, 48px);
         grid-template-columns: minmax(0, 1fr);
@@ -211,7 +213,7 @@
       @media (min-width: 900px) {
         .hero-grid {
           grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
-          grid-template-areas: "top horizon" "cta horizon";
+          grid-template-areas: "top top" "cta horizon";
           align-items: start;
           row-gap: 26px;
         }
