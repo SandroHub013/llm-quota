@@ -1,3 +1,4 @@
+import { readdir } from "node:fs/promises";
 import { expect, test } from "bun:test";
 import { normaliseLabel } from "./providers/gemini.js";
 
@@ -28,6 +29,20 @@ test("the frontend makes no third-party requests", async () => {
   expect(frontend).not.toContain("s2/favicons");
 });
 
+test("the documentation site loads no third-party assets", async () => {
+  const site = await read("docs/index.html");
+  const resources = [
+    ...site.matchAll(/\b(?:src|srcset)\s*=\s*["']([^"']+)/gi),
+    ...site.matchAll(/\burl\(\s*["']?([^"')]+)/gi),
+    ...site.matchAll(/<link\b[^>]*\bhref\s*=\s*["']([^"']+)/gi),
+  ].map((match) => match[1]).join("\n");
+  const remote = [...resources.matchAll(/\bhttps?:\/\/([^\s/"',)]+)/g)]
+    .map((match) => match[1])
+    .filter((host) => host !== "sandrohub013.github.io" && host !== "www.w3.org");
+
+  expect(remote).toEqual([]);
+});
+
 // Official provider marks, but frozen in the repo. Loading them from the provider
 // (or from Google's favicon service, as this used to) would tell a third party which
 // AI subscriptions the user holds, on every single page load.
@@ -49,13 +64,16 @@ test("provider logos are local files with no external references", async () => {
     expect(asset.size).toBeGreaterThan(500);
   }
 
-  // An SVG can pull in a remote image or stylesheet of its own; these must not.
-  for (const file of ["zai.svg", "gemini.svg"]) {
-    const svg = await read(`public/logos/${file}`);
-    const remote = [...svg.matchAll(/https?:\/\/[^\s"')]+/g)]
-      .map((m) => m[0])
-      .filter((u) => !u.startsWith("http://www.w3.org"));
-    expect(remote).toEqual([]);
+  // An SVG can pull in a remote image or stylesheet of its own; neither surface may.
+  for (const dir of ["public/logos", "docs/logos"]) {
+    for (const file of await readdir(dir)) {
+      if (!file.endsWith(".svg")) continue;
+      const svg = await read(`${dir}/${file}`);
+      const remote = [...svg.matchAll(/https?:\/\/[^\s"')]+/g)]
+        .map((m) => m[0])
+        .filter((u) => !u.startsWith("http://www.w3.org"));
+      expect(remote).toEqual([]);
+    }
   }
 });
 

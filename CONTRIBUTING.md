@@ -20,8 +20,15 @@ bun test
 bun run typecheck
 ```
 
-Both must pass — CI (`.github/workflows/ci.yml`) runs exactly these two commands. A
-red CI run is a red PR; fix it before asking for review.
+For Windows widget changes, also run:
+
+```powershell
+python -m unittest widget_test.py
+```
+
+The Bun checks must pass for every PR and run in CI. Before review, widget changes must
+also pass the Python suite on Windows. A red CI run is a red PR; fix it before asking
+for review.
 
 ## Where to contribute
 
@@ -109,7 +116,8 @@ Adding, renaming or removing a provider touches more than the adapter:
 - [ ] `docs/index.html` — every provider name or count, including the strip, table, and
       demo data
 - [ ] `public/app.js` and `public/index.html` — lineup, branding, and skeleton cards
-- [ ] `src/frontend.test.ts` — logo map, provider IDs, and frontend request guard
+- [ ] `src/frontend.test.ts` and `src/brand.test.ts` — logo map, provider IDs or paths,
+      and frontend request guard
 - [ ] `widget.py` — provider domains and brand metadata
 - [ ] `.github/ISSUE_TEMPLATE/bug_report.yml` — the provider dropdown
 - [ ] `public/logos/` and `docs/logos/` — the official mark, self-hosted in the app and site
