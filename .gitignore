@@ -22,3 +22,9 @@ reports/
 .DS_Store
 Thumbs.db
 Desktop.ini
+video-test/*.mp4
+video-test/capture*/
+video-test/screen-full.png
+video-test/job-*.json
+video-test/final-*.json
+video-test/hf/snapshots/

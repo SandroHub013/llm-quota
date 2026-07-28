@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>LLM Quota — widget ambient loop</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      /* OS-bundled fonts on the render host; local() declarations satisfy the
+         font contract without shipping files. */
+      @font-face { font-family: "Cascadia Mono"; src: local("Cascadia Mono"); }
+      @font-face { font-family: "Segoe UI"; src: local("Segoe UI"); }
+      body { margin: 0; background: #05060b; }
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+      }
+      /* The widget mini bar, rebuilt in HTML so text renders razor sharp. */
+      #bar {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 26px;
+        padding: 18px 30px;
+        background: #101522;
+        border: 1px solid #1d2740;
+        border-radius: 14px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+        overflow: hidden;
+        font-family: "Cascadia Mono", "JetBrains Mono", monospace;
+        font-size: 26px;
+        color: #8d9cb3;
+      }
+      .item { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+      .chip {
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        font-size: 18px;
+        font-weight: 700;
+        color: #fff;
+      }
+      .pct { color: #3fb950; }
+      .pct.warn { color: #d29922; }
+      .pct.crit { color: #f85149; }
+      .pct.idle { color: #6e7681; }
+      .reset { color: #8d9cb3; font-size: 23px; }
+      #switch {
+        font-family: "Segoe UI", system-ui, sans-serif;
+        font-size: 22px;
+        color: #5b8cff;
+        padding-left: 8px;
+      }
+      /* Light sweep, clipped by the bar's rounded box */
+      #sweep {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 340px;
+        height: 100%;
+        background: linear-gradient(100deg, rgba(0,0,0,0) 0%, rgba(150, 190, 255, 0.13) 45%, rgba(190, 215, 255, 0.22) 55%, rgba(0,0,0,0) 100%);
+        transform: skewX(-12deg);
+        opacity: 0;
+        pointer-events: none;
+      }
+      /* Soft breathing shadow under the bar */
+      #halo {
+        position: absolute;
+        width: 1200px;
+        height: 160px;
+        border-radius: 50%;
+        background: radial-gradient(ellipse, rgba(91, 140, 255, 0.14) 0%, rgba(0,0,0,0) 65%);
+        opacity: 0.7;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="widget-loop"
+      data-width="1920"
+      data-height="1080"
+      data-duration="6"
+      data-start="0"
+    >
+      <section id="scene" class="clip" data-start="0" data-duration="6" data-track-index="1">
+        <div id="halo"></div>
+        <div id="bar">
+          <div class="item"><span class="chip" style="background:#d97757">C</span><span class="pct crit">0%</span><span class="reset">(1h 23m)</span></div>
+          <div class="item"><span class="chip" style="background:#10a37f">C</span><span class="pct">100%</span><span class="reset">(6d 23h)</span></div>
+          <div class="item"><span class="chip" style="background:#4f7cff">Z</span><span class="pct">99%</span><span class="reset">(4d 4h)</span></div>
+          <div class="item"><span class="chip" style="background:#9b5bff">Z</span><span class="pct idle">partial</span></div>
+          <div class="item"><span class="chip" style="background:#4285f4">G</span><span class="pct">76%</span><span class="reset">(8h 7m)</span></div>
+          <div class="item" id="k-item"><span class="chip" style="background:#0ea5e9">K</span><span class="pct warn">27%</span><span class="reset">(2d)</span></div>
+          <span id="switch">[ = Q Logo ]</span>
+          <div id="sweep"></div>
+        </div>
+      </section>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      // Gentle float: down-up over the full 6s (finite, seekable).
+      tl.fromTo("#bar", { y: 5 }, { y: -5, duration: 3, ease: "sine.inOut" }, 0);
+      tl.to("#bar", { y: 5, duration: 3, ease: "sine.inOut" }, 3);
+
+      // Halo breathing with the float.
+      tl.fromTo("#halo", { opacity: 0.5, scale: 0.96 }, { opacity: 0.85, scale: 1.04, duration: 3, ease: "sine.inOut" }, 0);
+      tl.to("#halo", { opacity: 0.5, scale: 0.96, duration: 3, ease: "sine.inOut" }, 3);
+
+      // Light sweep left to right, once, fading at the edges.
+      tl.fromTo("#sweep", { x: -380, opacity: 0 }, { x: -120, opacity: 1, duration: 0.7, ease: "sine.in" }, 0.6);
+      tl.to("#sweep", { x: 1500, opacity: 1, duration: 3.6, ease: "none" }, 1.3);
+      tl.to("#sweep", { x: 1750, opacity: 0, duration: 0.7, ease: "sine.out" }, 4.9);
+
+      // Attention pulse on the low-quota item (27%): 1.2s cycle, finite count.
+      tl.fromTo("#k-item", { opacity: 0.55 }, { opacity: 1, duration: 0.6, ease: "sine.inOut", yoyo: true, repeat: 9 }, 0);
+
+      window.__timelines["widget-loop"] = tl;
+    </script>
+  </body>
+</html>

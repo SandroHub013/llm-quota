@@ -452,7 +452,15 @@
       }
       @media (min-width: 980px) {
         .shot-grid { grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr); }
+        .shot-grid--flip { grid-template-columns: minmax(0, 1.22fr) minmax(0, 0.78fr); }
       }
+      .shot-grid--flip > video:first-of-type,
+      .shot-grid--flip > picture:first-of-type { order: -1; }
+      @media (max-width: 979px) {
+        .shot-grid--flip > video:first-of-type,
+        .shot-grid--flip > picture:first-of-type { order: 0; }
+      }
+      video.shot { width: 100%; background: #05060b; }
       .shot {
         border: 1px solid var(--line); border-radius: var(--r-lg);
         overflow: hidden; box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55);
@@ -700,17 +708,42 @@
               </p>
             </div>
             <!-- Below the fold and lazy: the hero is the live horizon now, so this
-                 no longer has to carry the LCP. -->
-            <picture>
-              <source srcset="./dashboard-preview.avif" type="image/avif" />
-              <source srcset="./dashboard-preview.webp" type="image/webp" />
-              <img
-                class="shot"
-                src="./dashboard-preview.jpg"
-                alt="The LLM Quota dashboard: a reset horizon spanning now to seven days, with markers for each provider, above six cards showing usage percentages and reset times for Claude Code, z.ai, Gemini, Kimi, Codex and OpenCode Zen."
-                width="1600" height="800" loading="lazy" decoding="async"
-              />
-            </picture>
+                 no longer has to carry the LCP. Ambient loop rendered deterministically
+                 from the real dashboard UI (HyperFrames), poster = static shot. -->
+            <video
+              class="shot ambient"
+              src="./media/dashboard-loop.mp4"
+              poster="./dashboard-preview.jpg"
+              width="1600" height="800"
+              autoplay muted loop playsinline preload="none"
+              aria-label="Ambient loop of the LLM Quota dashboard: a slow push-in over the reset horizon and the six provider cards, with a soft glow drifting across them."
+            ></video>
+          </div>
+        </div>
+      </section>
+
+      <section id="widget">
+        <div class="shell">
+          <div class="shot-grid shot-grid--flip">
+            <div>
+              <h2>And in the corner of your screen</h2>
+              <p class="section-lede">
+                The desktop widget keeps every quota in sight without a tab: an always-on-top
+                mini bar or the Q-logo panel, per-provider reset countdowns, a red pulse
+                at 15%, and a Windows toast when a quota runs low or comes back.
+              </p>
+              <p class="hero-alt" style="margin: 0">
+                Rendered from the real widget UI, not a mockup.
+              </p>
+            </div>
+            <video
+              class="shot ambient"
+              src="./media/widget-loop.mp4"
+              poster="./media/widget-loop-poster.jpg"
+              width="1600" height="350"
+              autoplay muted loop playsinline preload="none"
+              aria-label="Ambient loop of the LLM Quota desktop widget mini bar: six providers with usage percentages and reset countdowns, a light sweep travelling across the bar."
+            ></video>
           </div>
         </div>
       </section>
@@ -839,6 +872,27 @@ bun run cli provider codex</code></pre>
           }
         });
       });
+
+      // Ambient video loops: play only while in view; under reduced motion the
+      // poster frame is the content and the video never starts.
+      const ambientVideos = document.querySelectorAll("video.ambient");
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        ambientVideos.forEach((v) => {
+          v.removeAttribute("autoplay");
+          v.pause();
+        });
+      } else if ("IntersectionObserver" in window) {
+        const io = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (entry.isIntersecting) entry.target.play().catch(() => {});
+              else entry.target.pause();
+            }
+          },
+          { rootMargin: "120px" },
+        );
+        ambientVideos.forEach((v) => io.observe(v));
+      }
 
       /* ====================================================================
          Reset horizon — the same axis, marks and linking as the dashboard in
