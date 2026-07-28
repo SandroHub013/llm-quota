@@ -150,6 +150,35 @@ Selection rules:
    Kimi), workers on the same provider must use a weaker model or lower
    effort — otherwise pick a different provider.
 
+### 4b. Benchmark source hierarchy
+
+Not every board measures what routing needs. Weight them like this:
+
+1. **Token economics — CursorBench + DeepSWE (primary).** The only two
+   that publish tokens/task, so they alone can rank `(model, effort)` on
+   score-per-token. All ladder numbers above come from them.
+2. **Agentic-CLI cross-check — Terminal-Bench 2.0.** Closest to how
+   workers actually run (shell, multi-step, long horizon). Sanity-check a
+   config here before handing it high-risk ships.
+3. **Contamination cross-check — LiveCodeBench, SWE-bench Verified.**
+   LiveCodeBench refreshes problems; SWE-bench Verified is human-validated
+   but saturated at the frontier (~88–95%), so it separates little —
+   a model missing from the top band there is a red flag, a model topping
+   it is not proof of superiority.
+4. **Non-coding tie-break — LMArena ([arena.ai](https://arena.ai/leaderboard/)).**
+   Human-preference Elo over chat/writing/research. It measures taste,
+   not throughput, and publishes no token counts, so it **never overrides
+   token economics** — use it only to break ties for writing, research,
+   and review tasks. Snapshot 2026-07-28 (overall rank): fable-5 #1,
+   opus-4.6-thinking #2, opus-5-max #5, opus-5-high #7, kimi-k3-max #11,
+   gpt-5.6-sol-xhigh #13, glm-5.2-max #31, sonnet-5-high #43.
+
+Known biases, all four sources: Grok is contaminated on CursorBench
+(their own disclosure — discount it); arena Elo rewards answer style
+over correctness; vendor-launch numbers (any board's day-0 posts) are
+claims until independent runs land; <2-point gaps are noise everywhere.
+Re-fetch the primaries monthly and after any flagship launch.
+
 ### 5. Adaptive quota glidepath
 
 Routing is not a one-shot decision: re-rank as quota drains, sliding down
