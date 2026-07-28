@@ -57,7 +57,7 @@ export const moonshot: Provider = {
           plan: kimi.scope,
           authSource: "~/.kimi-code",
           consoleUrl: "https://www.kimi.com/coding",
-          message: `Token kimi-code scaduto e refresh fallito (${token.error}). Rifai \`kimi\` login.`,
+          message: `Kimi Code token expired and refresh failed (${token.error}). Run \`kimi\` login again.`,
         };
       }
       const res = await fetchJson("https://api.kimi.com/coding/v1/usages", {

@@ -111,7 +111,7 @@ export const gemini: Provider = {
           status: "unauthenticated",
           loginUrl: "/api/auth/gemini",
           authSource: "~/.gemini/oauth_creds.json",
-          message: `Token Google scaduto e refresh fallito (${token.error}). Rifai login.`,
+          message: `Google token expired and refresh failed (${token.error}). Sign in again.`,
         };
       }
 
@@ -121,7 +121,7 @@ export const gemini: Provider = {
           ...base,
           status: "partial",
           authSource: "~/.gemini/oauth_creds.json",
-          message: `Login Google attivo ma Code Assist non risponde con un progetto (${proj.error}).`,
+          message: `Google login is active, but Code Assist returned no project (${proj.error}).`,
         };
       }
 
@@ -181,7 +181,7 @@ export const gemini: Provider = {
         metrics: [],
       };
     }
-    return { ...base, status: "error", needsKey: true, message: `Errore Gemini (HTTP ${res.status}).` };
+    return { ...base, status: "error", needsKey: true, message: `Gemini error (HTTP ${res.status}).` };
   },
 };
 
