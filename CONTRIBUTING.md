@@ -42,7 +42,7 @@ outranks adding a new one. In priority order:
 
 **Open an issue first — these are rejected as drive-by PRs:**
 
-- An i18n layer. Strings are hard-coded English by design; see "Localisation".
+- An i18n layer. Strings are hard-coded English by design; see "Localization".
 - New runtime dependencies. The project ships with exactly one (`hono`); adding a
   second is a design decision.
 - New surfaces: dashboard pages, widget features, output formats.
@@ -108,6 +108,9 @@ Adding, renaming or removing a provider touches more than the adapter:
 - [ ] `package.json` — `description` and `keywords`, if they name providers
 - [ ] `docs/index.html` — every provider name or count, including the strip, table, and
       demo data
+- [ ] `public/app.js` and `public/index.html` — lineup, branding, and skeleton cards
+- [ ] `src/frontend.test.ts` — logo map, provider IDs, and frontend request guard
+- [ ] `widget.py` — provider domains and brand metadata
 - [ ] `.github/ISSUE_TEMPLATE/bug_report.yml` — the provider dropdown
 - [ ] `public/logos/` and `docs/logos/` — the official mark, self-hosted in the app and site
 - [ ] `public/og.jpg`, `docs/og.jpg`, and `docs/dashboard-preview.*` — only if they
@@ -133,16 +136,16 @@ it even when the change "only" touches code.
   features, `provider` for adapter work, `documentation` for prose. Maintainers apply
   them; don't open a PR to ask for one.
 
-## Localisation
+## Localization
 
 Keep every user-facing string — dashboard, CLI, widget — in English and hard-coded at
 its use site. There is no i18n layer, and adding one is a design decision rather than a
 translation task: open an issue first if you want to propose it.
 
-One thing to keep consistent when you touch strings: window labels are named the same
-way for every provider (`Session (5h)`, `Weekly (7d)`, `Daily (24h)`), even when the
-provider calls them something else. `normaliseLabel` in `src/providers/gemini.ts` is
-how Google's names get mapped onto that vocabulary.
+Keep equivalent generic windows consistent (`Session (5h)`, `Weekly (7d)`, `Daily
+(24h)`) even when a provider calls them something else. Provider-specific labels may
+name the resource, as in `Tokens (5h)`. `normaliseLabel` in
+`src/providers/gemini.ts` maps Google's names onto that vocabulary.
 
 ## Reporting bugs
 

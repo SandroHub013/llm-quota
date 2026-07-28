@@ -15,14 +15,14 @@ test("the frontend makes no third-party requests", async () => {
   ]);
   const frontend = [html, app, api, ui].join("\n");
 
-  const remote = [...frontend.matchAll(/\bhttps?:\/\/([^\s"'`)]+)/g)].map((m) => m[1]);
-  const fetched = remote.filter(
-    // Links a user clicks (provider consoles, the OAuth consent page) are fine —
-    // what must not appear is a host the page itself loads from.
-    (host) => !/^(claude\.ai|chatgpt\.com|platform\.openai|z\.ai|opencode\.ai|gemini\.google|aistudio\.google|kimi\.com|platform\.moonshot|accounts\.google|console\.|www\.w3\.org)/.test(host),
-  );
+  // Console links arrive from the API at runtime. A literal remote URL in these files
+  // can be used by a resource-bearing element, so reject it; the W3C SVG namespace is
+  // metadata and causes no request.
+  const remote = [...frontend.matchAll(/\bhttps?:\/\/([^\s"'`)]+)/g)]
+    .map((m) => m[1])
+    .filter((host) => !host.startsWith("www.w3.org"));
 
-  expect(fetched).toEqual([]);
+  expect(remote).toEqual([]);
   expect(frontend).not.toContain("fonts.googleapis.com");
   expect(frontend).not.toContain("fonts.gstatic.com");
   expect(frontend).not.toContain("s2/favicons");
