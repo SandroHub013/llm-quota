@@ -95,6 +95,63 @@ class Rect(ctypes.Structure):
     ]
 
 
+class AccentPolicy(ctypes.Structure):
+    _fields_ = [
+        ("state", ctypes.c_int),
+        ("flags", ctypes.c_int),
+        ("color", ctypes.c_uint),
+        ("animation", ctypes.c_int),
+    ]
+
+
+class WindowCompositionData(ctypes.Structure):
+    _fields_ = [
+        ("attribute", ctypes.c_int),
+        ("data", ctypes.c_void_p),
+        ("size", ctypes.c_size_t),
+    ]
+
+
+def enable_acrylic(hwnd):
+    """Enable the native Windows acrylic backdrop when available."""
+    try:
+        policy = AccentPolicy(4, 2, 0xCC221510, 0)  # acrylic, dark blue-black tint (ABGR)
+        data = WindowCompositionData(
+            19, ctypes.cast(ctypes.pointer(policy), ctypes.c_void_p), ctypes.sizeof(policy)
+        )
+        setter = ctypes.windll.user32.SetWindowCompositionAttribute
+        setter.argtypes = (wintypes.HWND, ctypes.POINTER(WindowCompositionData))
+        return bool(setter(hwnd, ctypes.byref(data)))
+    except (AttributeError, OSError):
+        return False
+
+
+def set_window_shape(hwnd, regions):
+    """Clip the borderless window to rounded panels and the circular Q button."""
+    if not regions:
+        return
+    gdi32, user32 = ctypes.windll.gdi32, ctypes.windll.user32
+    gdi32.CreateRectRgn.argtypes = (ctypes.c_int,) * 4
+    gdi32.CreateRoundRectRgn.argtypes = (ctypes.c_int,) * 6
+    gdi32.CreateEllipticRgn.argtypes = (ctypes.c_int,) * 4
+    for name in ("CreateRectRgn", "CreateRoundRectRgn", "CreateEllipticRgn"):
+        getattr(gdi32, name).restype = wintypes.HANDLE
+    gdi32.CombineRgn.argtypes = (wintypes.HANDLE, wintypes.HANDLE, wintypes.HANDLE, ctypes.c_int)
+    gdi32.DeleteObject.argtypes = (wintypes.HANDLE,)
+    combined = gdi32.CreateRectRgn(0, 0, 0, 0)
+    for kind, left, top, right, bottom in regions:
+        if kind == "ellipse":
+            region = gdi32.CreateEllipticRgn(left, top, right + 1, bottom + 1)
+        else:
+            region = gdi32.CreateRoundRectRgn(left, top, right + 1, bottom + 1, 24, 24)
+        gdi32.CombineRgn(combined, combined, region, 2)  # RGN_OR
+        gdi32.DeleteObject(region)
+    user32.SetWindowRgn.argtypes = (wintypes.HWND, wintypes.HANDLE, wintypes.BOOL)
+    user32.SetWindowRgn.restype = ctypes.c_int
+    if not user32.SetWindowRgn(hwnd, combined, True):
+        gdi32.DeleteObject(combined)
+
+
 def bottom_right_position(work_area, width, height, margin=12):
     left, top, right, bottom = work_area
     return (
@@ -374,6 +431,7 @@ class Widget(tk.Tk):
         self._user_positioned = False
         self._refresh_job = None
         self._loading = False
+        self._glass_attempted = False
 
         self.bind("<Double-Button-1>", lambda e: self.destroy())
         self.bind("<B1-Motion>", self.drag)
@@ -403,7 +461,33 @@ class Widget(tk.Tk):
         # Fade-in all'avvio
         self.attributes("-alpha", 0.0)
         self._fade(0.0)
+        self.after_idle(self._apply_window_effects)
         self.refresh()
+
+    def _apply_window_effects(self):
+        self.update_idletasks()
+        user32 = ctypes.windll.user32
+        user32.GetParent.argtypes = (wintypes.HWND,)
+        user32.GetParent.restype = wintypes.HWND
+        hwnd = user32.GetParent(self.winfo_id()) or self.winfo_id()
+        if not self._glass_attempted:
+            enable_acrylic(hwnd)
+            self._glass_attempted = True
+
+        def bounds(widget, kind):
+            left = widget.winfo_rootx() - self.winfo_rootx()
+            top = widget.winfo_rooty() - self.winfo_rooty()
+            return kind, left, top, left + widget.winfo_width(), top + widget.winfo_height()
+
+        regions = []
+        if self.view_mode == "bar" and self.minibar_frame and self.minibar_frame.winfo_ismapped():
+            regions.append(bounds(self.minibar_frame, "round"))
+        else:
+            if self.expanded and self.panel.winfo_ismapped():
+                regions.append(bounds(self.panel, "round"))
+            if self.logo.winfo_ismapped():
+                regions.append(bounds(self.logo, "ellipse"))
+        set_window_shape(hwnd, regions)
 
     def _load_icons(self):
         def _fetch(pid, domain):
@@ -515,6 +599,7 @@ class Widget(tk.Tk):
             self._anchor_logo(lx, ly)
         else:
             self._place_bottom_right()
+        self.after_idle(self._apply_window_effects)
 
     def wake_up(self):
         self.after(0, self._do_wake_up)
@@ -742,6 +827,7 @@ class Widget(tk.Tk):
             self._render_minibar(data)
             if not self._user_positioned:
                 self._place_bottom_right()
+            self.after_idle(self._apply_window_effects)
             return
 
         for w in self.rows:
@@ -771,6 +857,7 @@ class Widget(tk.Tk):
 
         if not self._user_positioned:
             self._place_bottom_right()
+        self.after_idle(self._apply_window_effects)
 
 
 if __name__ == "__main__":
