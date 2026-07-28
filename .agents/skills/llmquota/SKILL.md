@@ -253,6 +253,7 @@ of this table must be verified live first (see the rules below).
 | Kimi K3 | `kimi` | text, image, audio, video | text | confirm `/status` | same |
 | GLM 5.2 | `pi` | text (vision on 5V variants) | text | 1M | provider-dependent |
 | Gemini 3.6 Flash | `agy` | text, image, audio, video | text, **image** | 1M, 64K out | full 1M |
+| Seedance 2.0 (`bytedance/seedance-2.0`) | OpenRouter video API | text, image, audio, video | **video** (+native audio) | 480p–4K, 4–15s clips | pay-per-second |
 | OpenCode Zen / OpenRouter free | `pi` | varies, mostly text | text | per model | per model |
 
 Rules:
@@ -271,6 +272,12 @@ Rules:
 - **Modality routing:** audio/video input → Kimi K3 or Gemini (the only
   ones that accept them). Image input → any card above except text-only
   free models. Image **output** → Gemini via `agy` only. PDF → Claude.
+  Video **output** → `bytedance/seedance-2.0` via the OpenRouter video
+  API (async: submit task, poll the returned URL — not a chat call, so
+  it does not go through `pi`). Cost discipline: storyboard/draft clips
+  on `seedance-2.0-fast` or 480p, final render at target resolution —
+  billing is per second of output, so every rejected draft at 4K is real
+  money, not quota.
 - **Verify live when a decision hinges on a cell.** Before dispatching a
   task whose point is a modality (audio in, image out, PDF) or a context
   size, confirm against the live source — the CLI's `/status` / `--help`
