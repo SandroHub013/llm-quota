@@ -90,6 +90,12 @@ PORT=8080 bun start    # porta personalizzata
 
 ## Provider supportati
 
+> [!WARNING]
+> Alcuni adapter usano endpoint privati o non documentati e credenziali emesse per CLI ufficiali.
+> Sono oggetto di una verifica di conformità e non vanno considerati integrazioni approvate dai
+> provider. Vedi [l'analisi](docs/provider-compliance.md) e
+> [l'issue #10](https://github.com/SandroHub013/llm-quota/issues/10).
+
 | Provider | Credenziali lette da | Cosa ottieni |
 |---|---|---|
 | **Claude Code** | `~/.claude/.credentials.json` (OAuth) | Live: finestra 5h + quota settimanale %, orario reset |
@@ -154,7 +160,9 @@ widget Tk flottante sul desktop.
 - I loghi sono congelati nel repository di proposito: caricarli dal provider — o da un servizio di
   favicon, come faceva una versione precedente — direbbe a terzi quali abbonamenti AI possiedi, a
   ogni caricamento di pagina.
-- Le credenziali vengono lette da disco, usate per chiamare il provider, e mai scritte altrove.
+- Le credenziali restano in locale, ma i flussi OAuth attuali per Codex, Gemini e Kimi possono
+  aggiornare gli stessi file di credenziali delle CLI ufficiali. La loro sostituzione è tracciata
+  nell'[analisi di conformità](docs/provider-compliance.md).
 
 ---
 

@@ -105,6 +105,12 @@ PORT=8080 bun start    # custom port
 
 ## Supported providers
 
+> [!WARNING]
+> Several adapters currently rely on private or undocumented endpoints and credentials issued to
+> first-party CLIs. They are under a provider-compliance audit and must not be treated as
+> provider-approved integrations. See [the assessment](docs/provider-compliance.md) and
+> [issue #10](https://github.com/SandroHub013/llm-quota/issues/10).
+
 | Provider | Credentials read from | What you get |
 |---|---|---|
 | **Claude Code** | `~/.claude/.credentials.json` (OAuth) | Live 5h window + weekly quota %, reset time |
@@ -169,7 +175,9 @@ This is the point of the project, so it is worth being precise:
 - Provider logos are frozen in the repo deliberately: loading them from the provider — or from a
   favicon service, as an earlier version did — would tell a third party which AI subscriptions
   you hold, on every page load.
-- Credentials are read from disk, used to call the provider, and never written anywhere else.
+- Credentials stay local, but the current Codex, Gemini and Kimi OAuth paths can refresh and
+  rewrite the same first-party credential files. Their replacement is tracked in the
+  [provider-compliance audit](docs/provider-compliance.md).
 
 ---
 
