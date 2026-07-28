@@ -25,9 +25,11 @@ import urllib.request
 import webbrowser
 import winreg
 from datetime import datetime, timezone
+from math import sqrt
 
 BASE = "http://localhost:4747"
 POLL_MS = 5 * 60_000
+HORIZON_SEC = 7 * 24 * 60 * 60
 MUTEX_NAME = "Local\\LLMQuotaWidget"
 WAKE_PORT = 51122
 
@@ -192,6 +194,19 @@ def format_reset(sec):
         return f"{days}g {h}h" if h > 0 else f"{days}g"
 
 
+def horizon_position(sec, width):
+    return round(width * sqrt(min(max(sec, 0), HORIZON_SEC) / HORIZON_SEC))
+
+
+def horizon_events(data):
+    events = []
+    for provider in data:
+        for reset in provider.get("resets", []):
+            if 0 < reset["sec"] <= HORIZON_SEC:
+                events.append({"id": provider["id"], "name": provider["name"], **reset})
+    return sorted(events, key=lambda event: event["sec"])
+
+
 BRAND = {
     "claude": ("#d97757", "C"),
     "codex": ("#10a37f", "C"),
@@ -225,19 +240,20 @@ UI = ("Segoe UI", 9)
 
 
 class Tooltip:
-    def __init__(self, widget, text_fn):
+    def __init__(self, widget, text_fn, tag=None):
         self.widget = widget
         self.text_fn = text_fn
         self.tipwindow = None
-        self.widget.bind("<Enter>", self.show_tip)
-        self.widget.bind("<Leave>", self.hide_tip)
+        bind = (lambda event, handler: widget.tag_bind(tag, event, handler)) if tag else widget.bind
+        bind("<Enter>", self.show_tip)
+        bind("<Leave>", self.hide_tip)
 
     def show_tip(self, event=None):
         text = self.text_fn() if callable(self.text_fn) else self.text_fn
         if self.tipwindow or not text:
             return
-        x = self.widget.winfo_rootx() + 10
-        y = self.widget.winfo_rooty() - 32
+        x = getattr(event, "x_root", self.widget.winfo_rootx()) + 10
+        y = getattr(event, "y_root", self.widget.winfo_rooty()) - 32
         self.tipwindow = tw = tk.Toplevel(self.widget)
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
@@ -271,6 +287,7 @@ def fetch_all():
             metrics = d.get("metrics", [])
             metric_info = []
             details_list = []
+            resets = []
             for m in metrics:
                 used = m.get("used")
                 limit = m.get("limit")
@@ -278,9 +295,15 @@ def fetch_all():
                 sec = parse_reset_sec(reset_at)
                 r_str = format_reset(sec)
                 rem = 100 - round(100 * used / limit) if used is not None and limit else None
-                metric_info.append({"rem": rem, "sec": sec})
-
                 lbl = m.get("label", "Quota")
+                metric_info.append({"rem": rem, "sec": sec})
+                if sec is not None:
+                    resets.append({
+                        "label": lbl,
+                        "sec": sec,
+                        "used_pct": max(0, min(100, 100 - rem)) if rem is not None else 0,
+                    })
+
                 if rem is not None:
                     d_item = f"{lbl}: {rem}% left"
                 elif used is not None and limit:
@@ -312,6 +335,7 @@ def fetch_all():
                 "status": d.get("status", "error"),
                 "remaining": remaining,
                 "reset_str": reset_str,
+                "resets": resets,
                 "details_str": details_str,
             })
         return out
@@ -345,6 +369,7 @@ class Widget(tk.Tk):
         self.last_data = None
         self.prev_providers = {}
         self.footer_frame = None
+        self.horizon_frame = None
         self.minibar_frame = None
         self._user_positioned = False
         self._refresh_job = None
@@ -598,6 +623,51 @@ class Widget(tk.Tk):
         row.bind("<Leave>", lambda e, r=row: self._hover(r, False))
         return row
 
+    def _render_horizon(self, data):
+        if self.horizon_frame:
+            self.horizon_frame.destroy()
+
+        self.horizon_frame = tk.Frame(self.panel, bg=BG)
+        events = horizon_events(data)
+        tk.Label(self.horizon_frame, text="RESET HORIZON", bg=BG, fg=MUT,
+                 font=("Cascadia Mono", 8), anchor="w").pack(fill="x", padx=8, pady=(6, 0))
+        if events:
+            first = events[0]
+            next_text = f"next · {first['name']} {first['label']} in {format_reset(first['sec'])}"
+        else:
+            next_text = "No resets in the next 7 days"
+        tk.Label(self.horizon_frame, text=next_text, bg=BG, fg=FG,
+                 font=("Segoe UI", 8), anchor="w").pack(fill="x", padx=8)
+
+        width, height, left, right, baseline = 300, 62, 8, 292, 43
+        canvas = tk.Canvas(self.horizon_frame, width=width, height=height, bg=BG,
+                           highlightthickness=0)
+        canvas.create_line(left, baseline, right, baseline, fill=BORDER)
+        for sec, label in ((0, "NOW"), (6 * 3600, "6h"), (24 * 3600, "24h"),
+                           (72 * 3600, "3d"), (HORIZON_SEC, "7d")):
+            x = left + horizon_position(sec, right - left)
+            canvas.create_line(x, 8, x, baseline, fill=BORDER)
+            canvas.create_text(x, 54, text=label, fill=MUT, font=("Cascadia Mono", 7),
+                               anchor="w" if sec == 0 else "center")
+
+        for index, event in enumerate(events):
+            x = left + horizon_position(event["sec"], right - left)
+            stem = 10 + round(event["used_pct"] * 0.24)
+            y = baseline - stem
+            color, initial = BRAND.get(event["id"], (ACCENT, event["name"][0]))
+            tag = f"horizon-{index}"
+            canvas.create_line(x, baseline, x, y, fill=color, width=2, tags=tag)
+            canvas.create_oval(x - 7, y - 7, x + 7, y + 7, fill=color, outline=BG,
+                               width=2, tags=tag)
+            canvas.create_text(x, y, text=initial, fill="#fff",
+                               font=("Segoe UI", 6, "bold"), tags=tag)
+            Tooltip(canvas,
+                    f"{event['name']} · {event['label']}\nresets in {format_reset(event['sec'])}",
+                    tag=tag)
+
+        canvas.pack(fill="x", padx=4)
+        self.horizon_frame.pack(fill="x")
+
     def _render_minibar(self, data):
         if self.minibar_frame:
             self.minibar_frame.destroy()
@@ -676,6 +746,7 @@ class Widget(tk.Tk):
 
         for w in self.rows:
             w.destroy()
+        self._render_horizon(data)
         if self.footer_frame:
             self.footer_frame.destroy()
             self.footer_frame = None

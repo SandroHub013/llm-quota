@@ -29,11 +29,11 @@ class FetchAllTest(unittest.TestCase):
             [
                 {
                     "id": "codex", "name": "Codex", "status": "ok", "remaining": 75,
-                    "reset_str": None, "details_str": "Quota: 75% left",
+                    "reset_str": None, "resets": [], "details_str": "Quota: 75% left",
                 },
                 {
                     "id": "moonshot", "name": "Moonshot", "status": "ok", "remaining": None,
-                    "reset_str": None, "details_str": "Quota: 10 cny",
+                    "reset_str": None, "resets": [], "details_str": "Quota: 10 cny",
                 },
             ],
         )
@@ -42,6 +42,36 @@ class FetchAllTest(unittest.TestCase):
     @patch("widget.get_json", return_value={"providers": [{"id": "broken"}]})
     def test_malformed_provider_payload_marks_widget_offline(self, _get_json):
         self.assertIsNone(widget.fetch_all())
+
+    @patch("widget.parse_reset_sec", side_effect=[3600, widget.HORIZON_SEC + 1])
+    @patch("widget.get_json")
+    def test_preserves_every_metric_reset_for_the_horizon(self, get_json, _parse_reset_sec):
+        get_json.return_value = {
+            "providers": [{
+                "id": "claude",
+                "name": "Claude",
+                "status": "ok",
+                "metrics": [
+                    {"label": "Session (5h)", "used": 25, "limit": 100, "resetAt": "soon"},
+                    {"label": "Weekly (7d)", "used": 60, "limit": 100, "resetAt": "later"},
+                ],
+            }]
+        }
+
+        result = widget.fetch_all()
+
+        self.assertEqual(result[0]["resets"], [
+            {"label": "Session (5h)", "sec": 3600, "used_pct": 25},
+            {"label": "Weekly (7d)", "sec": widget.HORIZON_SEC + 1, "used_pct": 60},
+        ])
+        self.assertEqual([event["label"] for event in widget.horizon_events(result)], ["Session (5h)"])
+
+
+class ResetHorizonTest(unittest.TestCase):
+    def test_uses_dashboard_sqrt_scale(self):
+        self.assertEqual(widget.horizon_position(0, 300), 0)
+        self.assertEqual(widget.horizon_position(42 * 3600, 300), 150)
+        self.assertEqual(widget.horizon_position(widget.HORIZON_SEC, 300), 300)
 
 
 class ProtocolRegistrationTest(unittest.TestCase):
