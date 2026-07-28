@@ -24,7 +24,7 @@ export const codex: Provider = {
 
     const auth = await readCodex();
     if (!auth?.tokens?.access_token || !auth.tokens.refresh_token) {
-      return { ...base, status: "unauthenticated", message: "Nessun login in ~/.codex/auth.json. Esegui `codex login`." };
+      return { ...base, status: "unauthenticated", message: "No login in ~/.codex/auth.json. Run `codex login`." };
     }
 
     const plan = readPlan(auth);
@@ -37,7 +37,7 @@ export const codex: Provider = {
         plan,
         authSource: "~/.codex/auth.json",
         message: stale
-          ? "Token Codex scaduto e refresh già consumato. Esegui `codex login` una volta per rinnovarlo."
+          ? "Codex token expired and the refresh token is spent. Run `codex login` once to renew it."
           : `Refresh token fallito (${token.error}).`,
       };
     }
@@ -57,7 +57,7 @@ export const codex: Provider = {
     }
 
     if (res.status === 429) {
-      return { ...base, status: "rate_limited", plan, authSource: "~/.codex/auth.json", message: "ChatGPT ha risposto 429." };
+      return { ...base, status: "rate_limited", plan, authSource: "~/.codex/auth.json", message: "ChatGPT returned 429." };
     }
 
     const metrics = parseUsage(res.body);
@@ -70,7 +70,7 @@ export const codex: Provider = {
       status: plan ? "partial" : "no_endpoint",
       plan,
       authSource: "~/.codex/auth.json",
-      message: "Login attivo, ma l'endpoint usage non ha restituito finestre leggibili. Controlla la console.",
+      message: "Signed in, but the usage endpoint returned no readable windows. Check the console.",
       raw: res.body ?? res.text?.slice(0, 200),
     };
   },
@@ -134,9 +134,9 @@ export function parseUsage(body: any): QuotaMetric[] {
 }
 
 function windowLabel(secs?: number): string {
-  if (!secs) return "Finestra";
-  if (secs <= 6 * 3600) return "Sessione (5h)";
-  if (secs <= 8 * 86400) return "Settimanale (7g)";
+  if (!secs) return "Window";
+  if (secs <= 6 * 3600) return "Session (5h)";
+  if (secs <= 8 * 86400) return "Weekly (7d)";
   return `Finestra (${Math.round(secs / 86400)}g)`;
 }
 

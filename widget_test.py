@@ -29,7 +29,7 @@ class FetchAllTest(unittest.TestCase):
             [
                 {
                     "id": "codex", "name": "Codex", "status": "ok", "remaining": 75,
-                    "reset_str": None, "details_str": "Quota: 75% residui",
+                    "reset_str": None, "details_str": "Quota: 75% left",
                 },
                 {
                     "id": "moonshot", "name": "Moonshot", "status": "ok", "remaining": None,

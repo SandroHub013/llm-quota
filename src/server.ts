@@ -22,7 +22,7 @@ async function fetchOne(id: string): Promise<QuotaResult> {
       status: "error",
       consoleUrl: p.consoleUrl,
       metrics: [],
-      message: `Errore interno: ${String(e?.message ?? e)}`,
+      message: `Internal error: ${String(e?.message ?? e)}`,
       updatedAt: new Date().toISOString(),
     };
   }
@@ -94,13 +94,13 @@ async function exchangeGeminiCode(code: string, verifier: string) {
     token_type: body.token_type,
     expiry_date: Date.now() + Number(body.expires_in ?? 3600) * 1000,
   });
-  console.log("gemini login: credenziali salvate in ~/.gemini/oauth_creds.json");
+  console.log("gemini login: credentials saved to ~/.gemini/oauth_creds.json");
 }
 
 app.get("/api/auth/gemini", async (c) => {
-  // Loopback listener richiede Bun in locale: su serverless non esiste localhost dell'utente.
+  // The loopback listener needs Bun locally: on serverless there is no user localhost.
   if (typeof Bun === "undefined") {
-    return c.json({ error: "Login OAuth disponibile solo sull'istanza locale (localhost:4747)." }, 501);
+    return c.json({ error: "OAuth login is only available on the local instance (localhost:4747)." }, 501);
   }
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
@@ -114,8 +114,8 @@ app.get("/api/auth/gemini", async (c) => {
       const err = u.searchParams.get("error");
       setTimeout(() => srv.stop(true), 1000);
       if (code) exchangeGeminiCode(code, verifier);
-      else console.error("gemini login negato:", err ?? "nessun codice");
-      const msg = code ? "Login ricevuto — puoi chiudere questa scheda." : `Login fallito: ${err ?? "nessun codice"}`;
+      else console.error("gemini login denied:", err ?? "no code");
+      const msg = code ? "Login received — you can close this tab." : `Login failed: ${err ?? "no code"}`;
       return new Response(`<h1 style="font-family:sans-serif">${msg}</h1>`, {
         headers: { "Content-Type": "text/html; charset=utf-8" },
       });

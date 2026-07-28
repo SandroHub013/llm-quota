@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { localiseLabel } from "./providers/gemini.js";
+import { normaliseLabel } from "./providers/gemini.js";
 
 const read = (path: string) => Bun.file(path).text();
 
@@ -81,10 +81,10 @@ test("every provider ships a static skeleton card", async () => {
 });
 
 test("gemini quota windows are named like every other provider's", () => {
-  expect(localiseLabel("Gemini Models · Weekly Limit")).toBe("Modelli Gemini · Settimanale (7g)");
-  expect(localiseLabel("Claude and GPT models · Five Hour Limit")).toBe(
-    "Modelli Claude e GPT · Sessione (5h)",
+  expect(normaliseLabel("Gemini Models · Weekly Limit")).toBe("Gemini models · Weekly (7d)");
+  expect(normaliseLabel("Claude and GPT models · Five Hour Limit")).toBe(
+    "Claude and GPT models · Session (5h)",
   );
   // Anything Google adds later passes through untouched instead of being dropped.
-  expect(localiseLabel("Something New · Hourly Limit")).toBe("Something New · Hourly Limit");
+  expect(normaliseLabel("Something New · Hourly Limit")).toBe("Something New · Hourly Limit");
 });

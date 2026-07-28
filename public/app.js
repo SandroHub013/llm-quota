@@ -8,12 +8,12 @@ const latest = new Map(); // id -> QuotaResult, the horizon reads from here
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 
 const STATUS_LABEL = {
-  ok: "attivo",
-  partial: "parziale",
+  ok: "active",
+  partial: "partial",
   rate_limited: "rate limited",
-  unauthenticated: "login mancante",
+  unauthenticated: "not signed in",
   no_endpoint: "no API quota",
-  error: "errore",
+  error: "error",
 };
 
 // Brand look per provider: avatar gradient + card accent + horizon marker colour.
@@ -73,7 +73,7 @@ function markHtml(id, cls) {
 const LINEUP = ["claude", "codex", "zai", "opencode-zen", "gemini", "moonshot"];
 const orderOf = (id) => Math.max(0, LINEUP.indexOf(id));
 
-// Lineup provider: nome, contesto, effort. Valori dei cataloghi provider/CLI.
+// Provider lineup: name, context, effort. Values from the provider/CLI catalogues.
 const MODELS = {
   claude: [
     { n: "Claude Fable 5", ctx: "1M", eff: "low · medium · high · xhigh · max" },
@@ -124,7 +124,7 @@ function fmt(n, unit) {
   return n.toLocaleString("it-IT");
 }
 
-// "tra 4h 55m" / "tra 39m" — always relative, because the whole product is about
+// "in 4h 55m" / "in 39m" — always relative, because the whole product is about
 // how much time is left, never about wall-clock instants.
 function humanGap(ms) {
   const m = Math.max(0, Math.round(ms / 6e4));
@@ -132,13 +132,13 @@ function humanGap(ms) {
   const h = Math.floor(m / 60);
   if (h < 48) return h + "h " + (m % 60) + "m";
   const d = Math.floor(h / 24);
-  return d + "g " + (h % 24) + "h";
+  return d + "d " + (h % 24) + "h";
 }
 
 function resetText(iso) {
   if (!iso) return "";
   const diff = new Date(iso).getTime() - Date.now();
-  return diff <= 0 ? "reset scaduto" : "reset tra " + humanGap(diff);
+  return diff <= 0 ? "reset due" : "resets in " + humanGap(diff);
 }
 
 function donutHtml(pct) {
@@ -166,9 +166,9 @@ function metricHtml(m) {
   // Say what the number means. "0% / 100%" told the user nothing.
   const right =
     m.remaining != null
-      ? fmt(m.remaining, m.unit) + " residui"
+      ? fmt(m.remaining, m.unit) + " left"
       : pct != null
-        ? pct + "% usato"
+        ? pct + "% used"
         : m.used != null
           ? fmt(m.used, m.unit)
           : "";
@@ -198,18 +198,18 @@ function cardHtml(p) {
       ${markHtml(p.id, "avatar")}
       <div class="titles">
         <h2 class="name">${escapeHtml(p.name)}</h2>
-        ${p.plan ? `<div class="plan">piano: ${escapeHtml(p.plan)}</div>` : src ? `<div class="plan">${src}</div>` : ""}
+        ${p.plan ? `<div class="plan">plan: ${escapeHtml(p.plan)}</div>` : src ? `<div class="plan">${src}</div>` : ""}
       </div>
       <span class="badge b-${st}">${STATUS_LABEL[st] || st}</span>
     </div>
     ${metrics}
-    ${models ? `<details class="models"><summary>Modelli · contesto · effort</summary>${models}<div class="mnote">valori indicativi</div></details>` : ""}
+    ${models ? `<details class="models"><summary>Models · context · effort</summary>${models}<div class="mnote">indicative values</div></details>` : ""}
     ${p.message ? `<div class="msg">${escapeHtml(p.message)}</div>` : ""}
-    ${p.loginUrl ? `<button class="login-btn" data-login="${escapeHtml(p.loginUrl)}" data-provider="${id}">⬢ Accedi con Google</button>` : ""}
-    ${p.needsKey ? `<div class="keyrow"><input type="password" placeholder="Incolla API key…" aria-label="API key ${escapeHtml(p.name)}" data-key="${id}" /><button data-save="${id}">Salva</button></div>` : ""}
+    ${p.loginUrl ? `<button class="login-btn" data-login="${escapeHtml(p.loginUrl)}" data-provider="${id}">⬢ Sign in with Google</button>` : ""}
+    ${p.needsKey ? `<div class="keyrow"><input type="password" placeholder="Paste API key…" aria-label="API key ${escapeHtml(p.name)}" data-key="${id}" /><button data-save="${id}">Save</button></div>` : ""}
     <div class="card-foot">
-      <a href="${escapeHtml(p.consoleUrl)}" target="_blank" rel="noreferrer">Apri console ↗</a>
-      <button class="mini" data-refresh="${id}">↻ aggiorna</button>
+      <a href="${escapeHtml(p.consoleUrl)}" target="_blank" rel="noreferrer">Open console ↗</a>
+      <button class="mini" data-refresh="${id}">↻ refresh</button>
     </div>`;
 }
 
@@ -281,19 +281,19 @@ const hzTip = document.getElementById("hzTip");
 
 const hzPos = (h) => Math.sqrt(Math.min(Math.max(h, 0), HZ_SPAN_H) / HZ_SPAN_H);
 const HZ_TICKS_FULL = [
-  { h: 0, label: "ADESSO" },
+  { h: 0, label: "NOW" },
   { h: 1, label: "1h" },
   { h: 6, label: "6h" },
   { h: 24, label: "24h" },
-  { h: 72, label: "3g" },
-  { h: 168, label: "7g" },
+  { h: 72, label: "3d" },
+  { h: 168, label: "7d" },
 ];
 // A narrow rail cannot carry six labels without them colliding, so it carries
 // three. The axis is unchanged — only how densely it is annotated.
 const HZ_TICKS_NARROW = [
-  { h: 0, label: "ADESSO" },
+  { h: 0, label: "NOW" },
   { h: 6, label: "6h" },
-  { h: 168, label: "7g" },
+  { h: 168, label: "7d" },
 ];
 const hzTicks = () =>
   hzRail.getBoundingClientRect().width < 520 ? HZ_TICKS_NARROW : HZ_TICKS_FULL;
@@ -337,10 +337,10 @@ function drawHorizon() {
     b.style.setProperty("--h", 22 + e.pct * 0.6 + "%");
     b.style.setProperty("--d", 120 + i * 55 + "ms");
     b.dataset.provider = e.id;
-    b.dataset.tip = `${e.provider} · ${e.label}|${e.pct}% usato|tra ${humanGap(e.ms)}`;
+    b.dataset.tip = `${e.provider} · ${e.label}|${e.pct}% used|in ${humanGap(e.ms)}`;
     b.setAttribute(
       "aria-label",
-      `${e.provider}, ${e.label}: reset tra ${humanGap(e.ms)}, ${e.pct}% usato`,
+      `${e.provider}, ${e.label}: resets in ${humanGap(e.ms)}, ${e.pct}% used`,
     );
     // The marker carries the provider's mark, so the rail is readable as a lineup
     // of brands before any hovering happens.
@@ -349,15 +349,15 @@ function drawHorizon() {
   });
 
   if (!events.length) {
-    hzNext.textContent = "Nessun reset nei prossimi 7 giorni.";
+    hzNext.textContent = "No resets in the next 7 days.";
     hzText.textContent = "";
     return;
   }
   const n = events[0];
-  hzNext.innerHTML = `prossimo reset · <b>${escapeHtml(n.provider)}</b> ${escapeHtml(n.label)} <span class="cd">tra ${humanGap(n.ms)}</span>`;
+  hzNext.innerHTML = `next reset · <b>${escapeHtml(n.provider)}</b> ${escapeHtml(n.label)} <span class="cd">in ${humanGap(n.ms)}</span>`;
   hzText.textContent =
-    `${events.length} reset nei prossimi 7 giorni. ` +
-    events.map((e) => `${e.provider} ${e.label} tra ${humanGap(e.ms)}`).join("; ") + ".";
+    `${events.length} resets in the next 7 days. ` +
+    events.map((e) => `${e.provider} ${e.label} in ${humanGap(e.ms)}`).join("; ") + ".";
 }
 
 // Marker ⇄ card. Pointing at either end lights the other: that is the whole idea
@@ -445,7 +445,7 @@ setInterval(() => {
 
 async function loadAll() {
   const btn = document.getElementById("refreshAll");
-  btn.innerHTML = '<span class="spin">↻</span> Aggiorno…';
+  btn.innerHTML = '<span class="spin">↻</span> Refreshing…';
   try {
     const providers = await loadQuota();
     providers.forEach(render);
@@ -455,10 +455,10 @@ async function loadAll() {
       if (!live.has(id)) { el.remove(); cards.delete(id); latest.delete(id); }
     }
   } catch (error) {
-    btn.textContent = `✗ ${error instanceof Error ? error.message : "errore"}`;
+    btn.textContent = `✗ ${error instanceof Error ? error.message : "error"}`;
     return;
   } finally {
-    if (!btn.textContent.startsWith("✗")) btn.textContent = "↻ Aggiorna tutto";
+    if (!btn.textContent.startsWith("✗")) btn.textContent = "↻ Refresh all";
   }
 }
 
@@ -478,7 +478,7 @@ async function saveKey(id) {
   try {
     render(await saveProviderKey(id, key));
   } catch (error) {
-    if (btn) btn.textContent = "Riprova";
+    if (btn) btn.textContent = "Retry";
     showError(id, error);
   }
 }
@@ -492,7 +492,7 @@ function showError(id, error) {
     message.className = "msg request-error";
     card.querySelector(".card-foot")?.before(message);
   }
-  message.textContent = `Errore richiesta: ${error instanceof Error ? error.message : "errore"}`;
+  message.textContent = `Request error: ${error instanceof Error ? error.message : "error"}`;
 }
 
 // A logo that fails to decode drops out and reveals the drawn glyph beneath it.
@@ -527,12 +527,12 @@ async function startLogin(btn) {
     j = await beginLogin(url);
   } catch (error) {
     btn.disabled = false;
-    btn.textContent = `Riprova: ${error instanceof Error ? error.message : "errore"}`;
+    btn.textContent = `Retry: ${error instanceof Error ? error.message : "error"}`;
     return;
   }
   if (j.error || !j.url) {
     btn.disabled = false;
-    btn.textContent = "Errore: " + (j.error ?? "no url");
+    btn.textContent = "Error: " + (j.error ?? "no url");
     return;
   }
   window.open(j.url, "_blank");
@@ -545,7 +545,7 @@ async function startLogin(btn) {
     } catch {}
   }
   btn.disabled = false;
-  btn.textContent = "Riprova login";
+  btn.textContent = "Retry sign-in";
   refreshOne(provider);
 }
 
@@ -555,7 +555,7 @@ document.getElementById("refreshAll").addEventListener("click", loadAll);
 document.getElementById("openWidget").addEventListener("click", (e) => {
   const b = e.currentTarget;
   b.disabled = true;
-  b.textContent = "Apro…";
+  b.textContent = "Opening…";
   window.location.href = "llmquota://widget";
   setTimeout(() => {
     b.disabled = false;
