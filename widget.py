@@ -95,37 +95,6 @@ class Rect(ctypes.Structure):
     ]
 
 
-class AccentPolicy(ctypes.Structure):
-    _fields_ = [
-        ("state", ctypes.c_int),
-        ("flags", ctypes.c_int),
-        ("color", ctypes.c_uint),
-        ("animation", ctypes.c_int),
-    ]
-
-
-class WindowCompositionData(ctypes.Structure):
-    _fields_ = [
-        ("attribute", ctypes.c_int),
-        ("data", ctypes.c_void_p),
-        ("size", ctypes.c_size_t),
-    ]
-
-
-def enable_acrylic(hwnd):
-    """Enable the native Windows acrylic backdrop when available."""
-    try:
-        policy = AccentPolicy(4, 2, 0xCC221510, 0)  # acrylic, dark blue-black tint (ABGR)
-        data = WindowCompositionData(
-            19, ctypes.cast(ctypes.pointer(policy), ctypes.c_void_p), ctypes.sizeof(policy)
-        )
-        setter = ctypes.windll.user32.SetWindowCompositionAttribute
-        setter.argtypes = (wintypes.HWND, ctypes.POINTER(WindowCompositionData))
-        return bool(setter(hwnd, ctypes.byref(data)))
-    except (AttributeError, OSError):
-        return False
-
-
 def set_window_shape(hwnd, regions):
     """Clip the borderless window to rounded panels and the circular Q button."""
     if not regions:
@@ -441,7 +410,6 @@ class Widget(tk.Tk):
         self._user_positioned = False
         self._refresh_job = None
         self._loading = False
-        self._glass_attempted = False
 
         for window in (self, self.surface):
             window.bind("<Double-Button-1>", lambda e: self.destroy())
@@ -498,9 +466,6 @@ class Widget(tk.Tk):
 
         if self.surface.winfo_ismapped():
             surface_handle = handle(self.surface)
-            if not self._glass_attempted:
-                enable_acrylic(surface_handle)
-                self._glass_attempted = True
             set_window_shape(surface_handle, [
                 ("round", 0, 0, self.surface.winfo_width(), self.surface.winfo_height())
             ])
