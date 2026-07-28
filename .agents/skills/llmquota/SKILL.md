@@ -209,6 +209,39 @@ the next provider up the ladder; on third, stop and report to the user
 with what is known. A worker that fails quota mid-task is re-routed, not
 retried in place.
 
+## Capability cards (input / output / context)
+
+What each model can receive and emit, and how much it can hold. Fetched
+2026-07-28; re-verify on model bumps.
+
+| Model | CLI | Input | Output | Context (spec) | Context (effective) |
+|---|---|---|---|---|---|
+| Opus 5 / Sonnet 5 | `claude` | text, image, PDF | text | Sonnet 5: 1M | confirm `/status` |
+| GPT-5.6 Sol/Terra/Luna | `codex` | text, image | text | 1.05M, 128K out | **~272K** — see below |
+| Kimi K3 | `kimi` | text, image, audio, video | text | confirm `/status` | same |
+| GLM 5.2 | `pi` | text (vision on 5V variants) | text | 1M | provider-dependent |
+| Gemini 3.6 Flash | `agy` | text, image, audio, video | text, **image** | 1M, 64K out | full 1M |
+| OpenCode Zen / OpenRouter free | `pi` | varies, mostly text | text | per model | per model |
+
+Rules:
+
+- **Trust the effective window, never the spec.** GPT-5.6 advertises
+  1.05M, but the Codex CLI catalog caps it: 372K until OpenAI silently
+  cut it to **272K on 2026-07-18** (some `codex exec` versions reported
+  ~258K). Interactive `/status` shows the real number — check it at
+  dispatch time, because these caps drift without announcement
+  (openai/codex#31860, #32806, #33478; oh-my-pi#6371).
+- **Briefs must fit the effective window** minus the output budget (128K
+  on GPT-5.6, 64K on Gemini Flash). A task whose input exceeds the
+  effective window is a decompose-or-reroute decision: monorepo-wide
+  audits and long-document work go to a provider whose *effective* window
+  is 1M (Sonnet 5, Kimi K3, GLM 5.2, Gemini), not to Codex at 272K.
+- **Modality routing:** audio/video input → Kimi K3 or Gemini (the only
+  ones that accept them). Image input → any card above except text-only
+  free models. Image **output** → Gemini via `agy` only. PDF → Claude.
+- Free-tier cards (OpenCode Zen / OpenRouter) differ per model: read the
+  model card before routing anything but plain text.
+
 ## Verbosity: caveman and ponytail levels
 
 The orchestrator sets compression per channel, based on the verbosity the
