@@ -73,6 +73,14 @@ class ResetHorizonTest(unittest.TestCase):
         self.assertEqual(widget.horizon_position(42 * 3600, 300), 150)
         self.assertEqual(widget.horizon_position(widget.HORIZON_SEC, 300), 300)
 
+    def test_countdown_units_match_the_axis_labels(self):
+        # The horizon axis is labelled 3d / 7d, so the countdown beside it cannot
+        # read "5g 14h". This used to be the last Italian string in the widget.
+        self.assertEqual(widget.format_reset(5 * 86400 + 14 * 3600), "5d 14h")
+        self.assertEqual(widget.format_reset(3 * 86400), "3d")
+        self.assertEqual(widget.format_reset(5 * 3600), "5h")
+        self.assertEqual(widget.format_reset(90), "1m")
+
 
 class ProtocolRegistrationTest(unittest.TestCase):
     def test_protocol_command_quotes_python_and_widget_paths(self):

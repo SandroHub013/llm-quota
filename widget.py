@@ -230,7 +230,7 @@ def format_reset(sec):
     else:
         days = int(hours // 24)
         h = int((hours % 24))
-        return f"{days}g {h}h" if h > 0 else f"{days}g"
+        return f"{days}d {h}h" if h > 0 else f"{days}d"
 
 
 def horizon_position(sec, width):
@@ -417,6 +417,7 @@ class Widget(tk.Tk):
         self.horizon_frame = None
         self.minibar_frame = None
         self.bar_orientation = "horizontal"
+        self._drag_origin = None
         self._user_positioned = False
         self._refresh_job = None
         self._loading = False
@@ -425,7 +426,10 @@ class Widget(tk.Tk):
             window.bind("<Double-Button-1>", lambda e: self.destroy())
             window.bind("<ButtonPress-3>", lambda e: self.destroy())
             window.bind("<Escape>", lambda e: self.toggle(e) if self.expanded else None)
-        self.bind("<B1-Motion>", self.drag)
+            # Both windows drag: the panel now lives on `surface`, so binding only the
+            # root left the whole expanded panel as dead space to grab.
+            window.bind("<ButtonPress-1>", self._drag_start, add="+")
+            window.bind("<B1-Motion>", self.drag)
 
         # Header: Q logo stilizzata
         self.header = tk.Frame(self, bg=KEY, cursor="hand2")
@@ -550,10 +554,21 @@ class Widget(tk.Tk):
                           x1 + (x2 - x1) * t1, y1 + (y2 - y1) * t1,
                           fill=col, width=w, capstyle=tk.ROUND)
 
+    def _drag_start(self, e):
+        target = self.surface if self.view_mode == "bar" else self
+        self._drag_origin = (e.x_root, e.y_root, target.winfo_x(), target.winfo_y())
+
     def drag(self, e):
+        # Move by the pointer delta, not to the pointer. The old code snapped the
+        # window's corner under the cursor, which is tolerable when you grab a 44px
+        # logo and unusable once you can grab a 300px panel or an 800px mini bar:
+        # the thing you grabbed would jump out from under you.
+        if not self._drag_origin:
+            return
         self._user_positioned = True
         target = self.surface if self.view_mode == "bar" else self
-        target.geometry(f"+{e.x_root - 22}+{e.y_root - 22}")
+        press_x, press_y, origin_x, origin_y = self._drag_origin
+        target.geometry(f"+{origin_x + e.x_root - press_x}+{origin_y + e.y_root - press_y}")
         if self.view_mode == "q":
             self.after_idle(self._sync_surface_to_logo)
 
