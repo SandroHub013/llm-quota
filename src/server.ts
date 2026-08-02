@@ -7,6 +7,7 @@ import type { QuotaResult } from "./providers/types.js";
 import { readConfig, writeConfig, writeGeminiOauth } from "./credentials.js";
 import { GEMINI_CLIENT_ID, GEMINI_CLIENT_SECRET, GEMINI_REDIRECT, GEMINI_SCOPES, GEMINI_TOKEN_URL } from "./gemini-oauth.js";
 import { collectUsage } from "./usage.js";
+import { collectGitHubContributions } from "./github-contributions.prototype.js";
 
 const app = new Hono();
 const PUBLIC = resolve(dirname(fileURLToPath(import.meta.url)), "..", "public");
@@ -45,6 +46,12 @@ let usageRequest: Promise<Awaited<ReturnType<typeof collectUsage>>> | undefined;
 app.get("/api/usage", async (c) => {
   usageRequest ??= collectUsage().finally(() => { usageRequest = undefined; });
   return c.json(await usageRequest, 200, { "Cache-Control": "no-store" });
+});
+
+// PROTOTYPE: read the authenticated viewer's one-year contribution calendar through
+// the official GitHub CLI. No token reaches this process or the browser.
+app.get("/api/prototype/github-contributions", async (c) => {
+  return c.json(await collectGitHubContributions(), 200, { "Cache-Control": "no-store" });
 });
 
 // Single provider (used by per-card refresh).

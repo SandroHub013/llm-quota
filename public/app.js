@@ -1,5 +1,6 @@
 import { beginLogin, loadProvider, loadQuota, loadUsage, saveProviderKey } from "./api.js";
 import { escapeHtml } from "./ui.js";
+import { mountGitHubContributionPrototype } from "./github-contributions.prototype.js";
 
 const grid = document.getElementById("grid");
 const cards = new Map(); // id -> element
@@ -311,7 +312,9 @@ function metricHtml(m) {
   const cls = pct == null ? "" : pct >= 90 ? "crit" : pct >= 70 ? "hot" : "";
   // Say what the number means. "0% / 100%" told the user nothing.
   const right =
-    m.remaining != null
+    m.availability === "listed"
+      ? "free · fair use"
+      : m.remaining != null
       ? fmt(m.remaining, m.unit) + " left"
       : pct != null
         ? pct + "% used"
@@ -320,6 +323,9 @@ function metricHtml(m) {
           : "";
   const reset = m.resetAt ? `<div class="reset">${resetText(m.resetAt)}</div>` : "";
   const head = `<div class="metric-head"><span>${escapeHtml(m.label)}</span><span class="val">${right}</span></div>`;
+  if (m.availability === "listed") {
+    return `<div class="metric metric-availability"><div class="availability-orb" aria-hidden="true"></div><div class="metric-body">${head}<div class="reset">No numeric quota published</div></div></div>`;
+  }
   if (pct != null) {
     return `<div class="metric">${donutHtml(pct)}<div class="metric-body">${head}${reset}</div></div>`;
   }
@@ -798,3 +804,4 @@ if (fine) {
 
 loadAll();
 loadUsageSummary();
+mountGitHubContributionPrototype();
