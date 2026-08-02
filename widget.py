@@ -5,7 +5,7 @@ Supporta 2 modalità di visualizzazione:
 2. Modalità Mini Bar (barra orizzontale sempre visibile a schermo)
 
 Caratteristiche avanzate:
-- Loghi reali dei provider (Claude, ChatGPT/Codex, Z.ai, OpenCode, Gemini, Kimi)
+- Loghi reali dei provider (Claude, ChatGPT/Codex, Z.ai, Gemini, Kimi)
 - Ore/tempo mancante al reset in ciascuna quota
 - Tooltip al passaggio del mouse con il dettaglio di tutte le finestre
 - Avviso visivo (anello rosso pulsante sulla Q) quando la quota è <= 15% o rate_limited
@@ -180,10 +180,11 @@ DOMAIN_MAP = {
     "claude": "claude.ai",
     "codex": "chatgpt.com",
     "zai": "z.ai",
-    "opencode-zen": "opencode.ai",
     "gemini": "gemini.google.com",
     "moonshot": "kimi.com",
 }
+
+WIDGET_HIDDEN_PROVIDER_IDS = frozenset({"opencode-zen"})
 
 
 def send_win_notification(title, message):
@@ -281,7 +282,6 @@ BRAND = {
     "claude": ("#d97757", "C"),
     "codex": ("#10a37f", "C"),
     "zai": ("#4f7cff", "Z"),
-    "opencode-zen": ("#9b5bff", "Z"),
     "gemini": ("#4285f4", "G"),
     "moonshot": ("#0ea5e9", "K"),
 }
@@ -363,6 +363,8 @@ def fetch_all():
     try:
         out = []
         for d in providers:
+            if d.get("id") in WIDGET_HIDDEN_PROVIDER_IDS:
+                continue
             metrics = d.get("metrics", [])
             metric_info = []
             details_list = []
