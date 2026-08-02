@@ -210,14 +210,17 @@ def apply_native_acrylic(hwnd, tint=GLASS_TINT, alpha=GLASS_TINT_ALPHA):
         applied = bool(setter(hwnd, ctypes.byref(data)))
 
         dark_mode = ctypes.c_int(1)
-        rounded_corners = ctypes.c_int(2)
+        # The GDI window region already owns the exact rounded silhouette. Asking
+        # DWM to round it again uses a different radius and leaves tinted wedges
+        # inside every corner, especially on the compact mini bars.
+        corner_preference = ctypes.c_int(1)  # DWMWCP_DONOTROUND
         dwm = ctypes.windll.dwmapi
         dwm.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark_mode), ctypes.sizeof(dark_mode))
         dwm.DwmSetWindowAttribute(
             hwnd,
             33,
-            ctypes.byref(rounded_corners),
-            ctypes.sizeof(rounded_corners),
+            ctypes.byref(corner_preference),
+            ctypes.sizeof(corner_preference),
         )
         return applied
     except (AttributeError, OSError, ValueError):
