@@ -22,3 +22,7 @@ reports/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Temporary video test outputs
+video-test/
+

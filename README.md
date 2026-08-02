@@ -41,6 +41,9 @@ glance which subscription is free, which is cooling down, and exactly when to co
   lights up; hover a card, its marker lights up.
 - 🔑 **Reuses the sessions you already have** — reads the OAuth tokens the official CLIs
   (`claude`, `codex`, `opencode`) already wrote to disk. No new logins for most providers.
+- 💶 **Local token ledger** — totals Codex, Claude Code, OpenCode and Kimi Code history by
+  model, effort and main/subagent, with an estimated API-equivalent value in euros and a
+  context-reuse efficiency index.
 - 🔒 **Local-first** — no cloud, no database, no account. Keys and tokens never leave the machine.
 - 🚫 **Zero third-party requests** — fonts and provider logos ship in `public/`. The page loads
   nothing from a CDN, a font host, or a favicon service. [Enforced by a test.](src/frontend.test.ts)

@@ -6,6 +6,7 @@ import { getProvider, providers } from "./providers/index.js";
 import type { QuotaResult } from "./providers/types.js";
 import { readConfig, writeConfig, writeGeminiOauth } from "./credentials.js";
 import { GEMINI_CLIENT_ID, GEMINI_CLIENT_SECRET, GEMINI_REDIRECT, GEMINI_SCOPES, GEMINI_TOKEN_URL } from "./gemini-oauth.js";
+import { collectUsage } from "./usage.js";
 
 const app = new Hono();
 const PUBLIC = resolve(dirname(fileURLToPath(import.meta.url)), "..", "public");
@@ -35,6 +36,15 @@ app.get("/api/providers", (c) => c.json(providers.map((p) => ({ id: p.id, name: 
 app.get("/api/quota", async (c) => {
   const results = await Promise.all(providers.map((p) => fetchOne(p.id)));
   return c.json({ providers: results, generatedAt: new Date().toISOString() });
+});
+
+// Local CLI histories expose token detail that quota endpoints do not. Compute this
+// lazily: the first dashboard visit scans the histories, then per-file metadata keeps
+// subsequent requests cheap. Concurrent tabs share the same in-flight scan.
+let usageRequest: Promise<Awaited<ReturnType<typeof collectUsage>>> | undefined;
+app.get("/api/usage", async (c) => {
+  usageRequest ??= collectUsage().finally(() => { usageRequest = undefined; });
+  return c.json(await usageRequest, 200, { "Cache-Control": "no-store" });
 });
 
 // Single provider (used by per-card refresh).

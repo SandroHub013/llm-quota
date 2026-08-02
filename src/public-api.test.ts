@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { loadProvider, loadQuota, requestJson } from "../public/api.js";
+import { loadProvider, loadQuota, loadUsage, requestJson } from "../public/api.js";
 
 test("dashboard refresh loads every provider with one aggregate request", async () => {
   const urls: string[] = [];
@@ -16,6 +16,19 @@ test("dashboard refresh loads every provider with one aggregate request", async 
 
 test("dashboard refresh exposes HTTP failures instead of swallowing them", async () => {
   expect(loadQuota(async () => new Response("fail", { status: 503 }))).rejects.toThrow("http_503");
+});
+
+test("usage detail validates the aggregate response", async () => {
+  const request = async () => Response.json({
+    estimatedCostEur: 12.34,
+    tokens: { total: 42 },
+    rows: [],
+  });
+
+  expect((await loadUsage(request)).estimatedCostEur).toBe(12.34);
+  expect(loadUsage(async () => Response.json({ estimatedCostEur: 1 }))).rejects.toThrow(
+    "invalid_usage_response",
+  );
 });
 
 test("single-provider refresh encodes ids and rejects malformed responses", async () => {

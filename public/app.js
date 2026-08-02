@@ -1,9 +1,16 @@
-import { beginLogin, loadProvider, loadQuota, saveProviderKey } from "./api.js";
+import { beginLogin, loadProvider, loadQuota, loadUsage, saveProviderKey } from "./api.js";
 import { escapeHtml } from "./ui.js";
 
 const grid = document.getElementById("grid");
 const cards = new Map(); // id -> element
 const latest = new Map(); // id -> QuotaResult, the horizon reads from here
+
+const usageDialog = document.getElementById("usageDialog");
+const usageBody = document.getElementById("usageBody");
+const usageAmount = document.getElementById("usageAmount");
+const usageButton = document.getElementById("openUsage");
+const refreshUsageButton = document.getElementById("refreshUsage");
+let usageLoad;
 
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -122,6 +129,145 @@ function fmt(n, unit) {
   if (unit === "cny") return "¥" + n.toFixed(2);
   if (unit === "percent") return n + "%";
   return n.toLocaleString("it-IT");
+}
+
+const eur = new Intl.NumberFormat("it-IT", {
+  style: "currency",
+  currency: "EUR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const compactTokens = new Intl.NumberFormat("it-IT", {
+  notation: "compact",
+  maximumFractionDigits: 2,
+});
+const exactTokens = new Intl.NumberFormat("it-IT");
+const oneDecimal = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
+const efficiencyFormula = "Cache read / (input + cache read + cache write). Measures context reuse, not answer quality.";
+
+function fmtEur(value) {
+  if (value > 0 && value < 0.01) return "< " + eur.format(0.01);
+  return eur.format(value || 0);
+}
+
+function fmtToken(value) {
+  return compactTokens.format(value || 0);
+}
+
+function tokenTitle(value) {
+  return `${exactTokens.format(value || 0)} tokens`;
+}
+
+function fmtPct(value) {
+  return value == null ? "—" : `${oneDecimal.format(value)}%`;
+}
+
+function usageStat(label, value, cls = "") {
+  return `<div class="usage-stat ${cls}" title="${escapeHtml(tokenTitle(value))}">
+    <span>${escapeHtml(label)}</span><b>${escapeHtml(fmtToken(value))}</b>
+  </div>`;
+}
+
+function usageEfficiencyStat(value) {
+  const title = value == null ? "No input context recorded." : efficiencyFormula;
+  return `<div class="usage-stat efficiency" title="${escapeHtml(title)}">
+    <span>Token efficiency</span><b>${escapeHtml(fmtPct(value))}</b>
+  </div>`;
+}
+
+function renderUsage(summary) {
+  const coverage = `${summary.pricingCoveragePct.toLocaleString("it-IT", { maximumFractionDigits: 1 })}% priced`;
+  const sourceChips = (summary.sources || []).map((source) => {
+    const detail = source.message || (source.files != null ? `${source.files} local file${source.files === 1 ? "" : "s"}` : source.status);
+    return `<span class="source-chip is-${escapeHtml(source.status)}" title="${escapeHtml(detail)}">
+      ${escapeHtml(source.name)}
+    </span>`;
+  }).join("");
+  const rows = (summary.rows || []).filter((row) => row.total > 0).map((row) => {
+    const cache = row.cacheWrite
+      ? `${fmtToken(row.cacheRead)} / ${fmtToken(row.cacheWrite)}`
+      : fmtToken(row.cacheRead);
+    const cacheDetail = row.cacheWrite
+      ? `${tokenTitle(row.cacheRead)} read, ${tokenTitle(row.cacheWrite)} written`
+      : `${tokenTitle(row.cacheRead)} read`;
+    const reasoning = row.reasoning
+      ? `<small title="${escapeHtml(tokenTitle(row.reasoning))}">${escapeHtml(fmtToken(row.reasoning))} reasoning</small>`
+      : "";
+    const efficiency = row.contextReusePct == null
+      ? `<span title="No input context recorded">—</span>`
+      : `<span title="${escapeHtml(efficiencyFormula)}">${escapeHtml(fmtPct(row.contextReusePct))}</span>`;
+    const cost = row.costEur == null
+      ? `<span title="No public price found">—</span>`
+      : `<span title="${escapeHtml(row.costBasis === "recorded" ? "Recorded by the CLI" : "Public API list price")}">${escapeHtml(fmtEur(row.costEur))}</span>`;
+    return `<tr>
+      <td class="usage-model"><strong title="${escapeHtml(row.model)}">${escapeHtml(row.model)}</strong><span>${escapeHtml(row.sourceName)}</span></td>
+      <td class="usage-mode"><span>${escapeHtml(row.effort)}</span><br /><span class="agent-pill${row.agent === "subagent" ? " is-subagent" : ""}">${escapeHtml(row.agent)}</span></td>
+      <td title="${escapeHtml(tokenTitle(row.input))}">${escapeHtml(fmtToken(row.input))}</td>
+      <td title="${escapeHtml(cacheDetail)}">${escapeHtml(cache)}</td>
+      <td title="${escapeHtml(tokenTitle(row.output))}">${escapeHtml(fmtToken(row.output))}${reasoning}</td>
+      <td class="usage-efficiency">${efficiency}</td>
+      <td class="usage-cost">${cost}</td>
+    </tr>`;
+  }).join("");
+  const unpriced = summary.unpricedModels?.length
+    ? `<br /><b>Not priced:</b> ${escapeHtml(summary.unpricedModels.join(", "))}. Their tokens remain in every token total.`
+    : "";
+
+  usageBody.innerHTML = `
+    <section class="usage-total">
+      <div>
+        <span class="usage-total-label">Estimated API equivalent</span>
+        <strong>${escapeHtml(fmtEur(summary.estimatedCostEur))}</strong>
+        <small>${escapeHtml(summary.pricing.note)}</small>
+      </div>
+      <span class="coverage-pill">${escapeHtml(coverage)}</span>
+    </section>
+    <div class="usage-stats">
+      ${usageStat("All tokens", summary.tokens.total)}
+      ${usageEfficiencyStat(summary.contextReusePct)}
+      ${usageStat("Input", summary.tokens.input)}
+      ${usageStat("Cache read", summary.tokens.cacheRead)}
+      ${usageStat("Cache write", summary.tokens.cacheWrite)}
+      ${usageStat("Output", summary.tokens.output)}
+      ${usageStat("Reasoning", summary.tokens.reasoning, "reasoning")}
+    </div>
+    <div class="usage-section-head usage-coverage-head"><h3>Local coverage</h3><div class="source-chips">${sourceChips}</div></div>
+    <div class="usage-section-head"><h3>Models &amp; effort</h3><span>reasoning is included in output</span></div>
+    <div class="usage-table-wrap">
+      <table class="usage-table">
+        <thead><tr><th>Model / source</th><th>Effort / agent</th><th>Input</th><th>Cache R / W</th><th>Output</th><th>Efficiency</th><th>Estimate</th></tr></thead>
+        <tbody>${rows || `<tr><td class="usage-model" colspan="7">No local token records found.</td></tr>`}</tbody>
+      </table>
+    </div>
+    <p class="usage-note">
+      <b>Token efficiency</b> = cache read / (input + cache read + cache write). It measures context reuse only;
+      it does not rate answer quality, and reasoning does not lower the score.<br />
+      Current public API list prices as of <b>${escapeHtml(summary.pricing.asOf)}</b>.
+      USD converted with the ECB reference rate <b>1 EUR = ${escapeHtml(summary.pricing.usdPerEur)} USD</b>
+      (${escapeHtml(summary.pricing.fxAsOf)}). Subscription fees, taxes, discounts and provider credits are not included.${unpriced}
+    </p>`;
+}
+
+async function loadUsageSummary() {
+  if (usageLoad) return usageLoad;
+  usageButton.classList.add("is-loading");
+  refreshUsageButton.disabled = true;
+  usageLoad = (async () => {
+    try {
+      const summary = await loadUsage();
+      renderUsage(summary);
+      usageAmount.textContent = "≈ " + fmtEur(summary.estimatedCostEur);
+      usageButton.title = `Open local token usage · ${summary.pricingCoveragePct}% priced`;
+    } catch (error) {
+      usageAmount.textContent = "€ ?";
+      usageBody.innerHTML = `<div class="usage-loading usage-error"><div>Could not read local token usage.<br /><small>${escapeHtml(error instanceof Error ? error.message : "error")}</small></div></div>`;
+    } finally {
+      usageButton.classList.remove("is-loading");
+      refreshUsageButton.disabled = false;
+      usageLoad = undefined;
+    }
+  })();
+  return usageLoad;
 }
 
 // "in 4h 55m" / "in 39m" — always relative, because the whole product is about
@@ -549,7 +695,17 @@ async function startLogin(btn) {
   refreshOne(provider);
 }
 
-document.getElementById("refreshAll").addEventListener("click", loadAll);
+document.getElementById("refreshAll").addEventListener("click", () => {
+  loadAll();
+  loadUsageSummary();
+});
+
+usageButton.addEventListener("click", () => usageDialog.showModal());
+document.getElementById("closeUsage").addEventListener("click", () => usageDialog.close());
+refreshUsageButton.addEventListener("click", loadUsageSummary);
+usageDialog.addEventListener("click", (event) => {
+  if (event.target === usageDialog) usageDialog.close();
+});
 
 // Let the browser/Windows shell launch Tk on the interactive desktop.
 document.getElementById("openWidget").addEventListener("click", (e) => {
@@ -641,3 +797,4 @@ if (fine) {
 }
 
 loadAll();
+loadUsageSummary();

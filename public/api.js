@@ -14,6 +14,14 @@ export async function loadQuota(request = fetch) {
   return body.providers;
 }
 
+export async function loadUsage(request = fetch) {
+  const body = await requestJson("/api/usage", undefined, request);
+  if (!Array.isArray(body?.rows) || !body?.tokens || !Number.isFinite(body?.estimatedCostEur)) {
+    throw new Error("invalid_usage_response");
+  }
+  return body;
+}
+
 export async function loadProvider(id, request = fetch) {
   return provider(await requestJson(`/api/quota/${encodeURIComponent(id)}`, undefined, request));
 }
