@@ -22,6 +22,15 @@ export async function loadUsage(request = fetch) {
   return body;
 }
 
+export async function loadGitHubContributions(request = fetch) {
+  const body = await requestJson("/api/prototype/github-contributions", undefined, request);
+  if (body?.status === "unavailable" && typeof body.message === "string") return body;
+  if (body?.status !== "ok" || !Array.isArray(body.weeks) || !Number.isFinite(body.total)) {
+    throw new Error("invalid_github_contributions_response");
+  }
+  return body;
+}
+
 export async function loadProvider(id, request = fetch) {
   return provider(await requestJson(`/api/quota/${encodeURIComponent(id)}`, undefined, request));
 }

@@ -11,6 +11,8 @@ export interface QuotaMetric {
   used?: number;
   limit?: number;
   remaining?: number;
+  /** Catalog availability without a numeric allowance, such as Zen fair-use models. */
+  availability?: "listed";
   unit?: "requests" | "tokens" | "usd" | "cny" | "percent" | "credits";
   resetAt?: string; // ISO timestamp when the window resets
 }

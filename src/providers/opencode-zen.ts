@@ -4,6 +4,23 @@ import { fetchJson, nowIso } from "./util.js";
 
 const CONSOLE = "https://opencode.ai/auth";
 
+const FREE_MODEL_NAMES: Record<string, string> = {
+  "deepseek-v4-flash": "DeepSeek V4 Flash",
+  "mimo-v2.5": "MiMo V2.5",
+  "ling-3.0-flash": "Ling 3.0 Flash",
+  "nemotron-3-ultra": "Nemotron 3 Ultra",
+  "north-mini-code": "North Mini Code",
+  "laguna-s-2.1": "Laguna S 2.1",
+};
+
+const freeModelName = (id: string): string => {
+  const key = id.replace(/-free$/, "");
+  return FREE_MODEL_NAMES[key] ?? key
+    .split("-")
+    .map((part) => part ? part[0]!.toUpperCase() + part.slice(1) : part)
+    .join(" ");
+};
+
 async function resolveKey(ctx: ProviderContext): Promise<{ key?: string; source?: string }> {
   if (ctx.userKey) return { key: ctx.userKey, source: "LLM Quota key" };
   const oc = await readOpencode();
@@ -58,19 +75,14 @@ export const opencodeZen: Provider = {
     const totalCount = allModels.length;
 
     if (res.ok && totalCount > 0) {
-      const freeNames = freeModels.map((m: any) => m.id.replace("-free", "")).join(", ");
       return {
         ...base,
         status: "ok",
         authSource: source,
-        metrics: [
-          {
-            label: "Stato Modelli Free",
-            remaining: 100,
-            unit: "percent",
-          },
-        ],
-        message: `${freeCount} modelli FREE attivi (${freeNames}). OpenCode non fornisce un contatore numerico a scalare per i modelli gratuiti: l'accesso è regolato da un rate-limit dinamico (Fair Use).`,
+        metrics: freeModels
+          .map((model: any) => ({ label: freeModelName(model.id), availability: "listed" as const }))
+          .sort((a, b) => a.label.localeCompare(b.label)),
+        message: `${freeCount} free models listed. Zen does not publish numeric free-model quotas or reset times; availability is governed by dynamic fair use.`,
         raw: { totalModels: totalCount, freeModels: freeModels.map((m: any) => m.id) },
       };
     }
