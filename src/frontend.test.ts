@@ -4,7 +4,7 @@ import { normaliseLabel } from "./providers/gemini.js";
 
 const read = (path: string) => Bun.file(path).text();
 
-// The footer and the README both promise "zero telemetria · zero CDN". This test is
+// The footer and the README both promise "zero telemetry · zero CDN". This test is
 // what makes that promise true rather than aspirational: the dashboard must not
 // reference any host it does not serve itself.
 test("the frontend makes no third-party requests", async () => {
@@ -140,7 +140,52 @@ test("dashboard data refreshes silently and the spend total counts to each new v
   expect(github).toContain('data-activity-view="github"');
   expect(github).toContain('data-activity-view="usage"');
   expect(github).toContain("buildUsageCalendar");
+  expect(github).toContain('source.status === "ok"');
+  expect(github).toContain('names.join(" · ")');
+  expect(github).not.toContain("Codex · Claude Code · OpenCode · Kimi Code");
   expect(html).toContain("column-span: all");
+  expect(html).toContain("transform: translate3d(-100px, -100px, 0)");
+});
+
+test("personal activity comes from each downloader's local sessions", async () => {
+  const [backend, frontend] = await Promise.all([
+    read("src/github-contributions.prototype.ts"),
+    read("public/github-contributions.prototype.js"),
+  ]);
+
+  expect(backend).toContain("viewer {");
+  expect(backend).toContain('["gh", "api", "graphql"');
+  expect(backend).not.toContain("SandroHub013");
+  expect(frontend).not.toContain("SandroHub013");
+});
+
+test("runtime and marketing surfaces stay English and describe synthetic previews", async () => {
+  const [app, dashboard, site, widget, credentials, generator] = await Promise.all([
+    read("public/app.js"),
+    read("public/index.html"),
+    read("docs/index.html"),
+    read("widget.py"),
+    read("src/credentials.ts"),
+    read("scripts/capture_previews.py"),
+  ]);
+  const surfaces = [app, dashboard, site, widget, credentials, generator].join("\n");
+
+  expect(surfaces).not.toContain('"it-IT"');
+  expect(surfaces).not.toMatch(/\b(?:modalità|caratteristiche|giorni|dinamico|fallita|telemetria|spesa|avviso)\b/i);
+  expect(site).toContain("Current interface rendered with synthetic sample data.");
+  expect(site).toContain("Live without reloads");
+  expect(site).not.toContain("Six providers");
+  expect(site).not.toContain("Six cards");
+  expect(generator).toContain("It never reads the developer's credentials");
+  expect(generator).not.toContain("SandroHub013");
+});
+
+test("social preview copies stay identical and within GitHub's upload limit", async () => {
+  const [sitePreview, appPreview] = [Bun.file("docs/og.jpg"), Bun.file("public/og.jpg")];
+  expect(sitePreview.size).toBeGreaterThan(100_000);
+  expect(sitePreview.size).toBeLessThan(1_000_000);
+  expect(appPreview.size).toBe(sitePreview.size);
+  expect(Buffer.from(await appPreview.arrayBuffer()).equals(Buffer.from(await sitePreview.arrayBuffer()))).toBe(true);
 });
 
 test("gemini quota windows are named like every other provider's", () => {

@@ -32,7 +32,8 @@ test("widget button delegates GUI launch to the registered Windows protocol", as
     read("widget.py"),
   ]);
 
-  expect(app).toContain('window.location.href = "llmquota://widget"');
+  expect(app).toContain('new URL("llmquota://widget")');
+  expect(app).toContain('widgetUrl.searchParams.set("server", location.origin)');
   expect(app).not.toContain('/api/widget');
   expect(server).not.toContain('app.post("/api/widget"');
   expect(widget).toContain("def register_protocol");

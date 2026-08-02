@@ -3,20 +3,27 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>LLM Quota — one horizon for five measurable AI subscriptions</title>
+    <title>LLM Quota — live AI quotas, spend, and reset times</title>
     <meta
       name="description"
-      content="Local-first dashboard that reads the CLI logins already on your disk and shows, on a single timeline, when your Claude Code, Codex, z.ai, Gemini and Kimi quotas reset."
+      content="Local-first live dashboard for five measurable AI quotas, local token spend, optional GitHub activity, and a Windows widget. Automatic updates, zero telemetry."
     />
     <meta name="theme-color" content="#05060b" />
     <meta name="color-scheme" content="dark" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="LLM Quota — one horizon for five measurable AI subscriptions" />
+    <meta property="og:title" content="LLM Quota — live quotas without refreshing" />
     <meta
       property="og:description"
-      content="How long you have before your AI quotas reset. All local, zero telemetry."
+      content="Five measurable AI quotas, local token spend, and a Windows widget that update automatically. All local, zero telemetry."
     />
     <meta property="og:image" content="/og.jpg" />
+    <meta property="og:image:alt" content="LLM Quota live dashboard with five quota cards, a reset horizon, local token spend, and live status." />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="640" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="LLM Quota — live quotas without refreshing" />
+    <meta name="twitter:description" content="Five measurable AI quotas, local token spend, and a Windows widget that update automatically." />
+    <meta name="twitter:image" content="/og.jpg" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
 
     <link rel="preload" as="font" type="font/woff2" href="/fonts/schibsted-var-latin.woff2" crossorigin />
@@ -214,7 +221,7 @@
         input, textarea { cursor: text; }
         /* Own compositor layer each: JS rewrites these transforms every frame the
            pointer moves, and without the hint that is a paint, not just a composite. */
-        .cur, .cur-ring { position: fixed; top: 0; left: 0; z-index: 70; pointer-events: none; border-radius: 50%; will-change: transform; }
+        .cur, .cur-ring { position: fixed; top: 0; left: 0; z-index: 70; pointer-events: none; border-radius: 50%; will-change: transform; transform: translate3d(-100px, -100px, 0); }
         .cur { width: 7px; height: 7px; background: #fff; mix-blend-mode: difference; }
         /* JS drives the wrapper's translate; the ring itself only ever scales. */
         .cur-ring { width: 54px; height: 54px; }
@@ -629,7 +636,7 @@
          perform, plotted on a single non-linear time axis: now → 7 days.
          Hovering a marker lights its card; hovering a card lights its
          markers. It answers the question the percentages cannot:
-         "quando torno operativo?"
+         "when am I back?"
          ================================================================ */
       .horizon {
         border-bottom: 1px solid var(--line);

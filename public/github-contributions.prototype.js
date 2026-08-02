@@ -12,7 +12,7 @@ const variants = {
 };
 const integers = new Intl.NumberFormat("en");
 const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
-const euro = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
+const euro = new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
 const CONTRIBUTION_REFRESH_MS = 10 * 60_000;
 let contributionData;
 let contributionSignature;
@@ -175,9 +175,17 @@ function usageHeatmap(calendar, showLegend = true) {
   </div>`;
 }
 
-function usageHeader(title, kicker = "Local token ledger") {
+function usageSourceLine(summary) {
+  const names = (summary?.sources || [])
+    .filter((source) => source.status === "ok")
+    .map((source) => source.name)
+    .filter(Boolean);
+  return names.length ? names.join(" · ") : "No local token sources found";
+}
+
+function usageHeader(title, summary, kicker = "Local token ledger") {
   return `<div class="gh-head">
-    <div><span class="gh-kicker usage-kicker">${escapeHtml(kicker)}</span><h2 class="gh-title">${escapeHtml(title)}</h2><span class="gh-account">Codex · Claude Code · OpenCode · Kimi Code</span></div>
+    <div><span class="gh-kicker usage-kicker">${escapeHtml(kicker)}</span><h2 class="gh-title">${escapeHtml(title)}</h2><span class="gh-account">${escapeHtml(usageSourceLine(summary))}</span></div>
     <div class="gh-head-actions"><a class="gh-profile" href="#usageDialog" data-open-usage>Ledger</a><button class="gh-view-toggle" type="button" data-activity-view="github">GitHub</button></div>
   </div>`;
 }
@@ -239,7 +247,7 @@ function variantA(data, usage) {
   const calendar = buildUsageCalendar(usage);
   const busiest = calendar.busiest?.usage?.tokens?.total || 0;
   return `<article class="gh-card gh-card-a" data-github-variant="A" data-activity-view="usage">
-    ${usageHeader("Token spend calendar")}
+    ${usageHeader("Token spend calendar", usage)}
     <div class="gh-a-summary">
       <div class="gh-total-number usage-total-number">${escapeHtml(fmtEur(calendar.costEur))}<small>API equivalent · ${escapeHtml(compact.format(calendar.totalTokens))} tokens</small></div>
       ${usageHeatmap(calendar)}

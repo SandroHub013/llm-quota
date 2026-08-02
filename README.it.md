@@ -2,7 +2,10 @@
 
 # LLM Quota
 
-**Una sola dashboard per tutti gli abbonamenti AI che paghi.**
+> Questa è la traduzione italiana della documentazione. Dashboard, CLI e widget hanno
+> intenzionalmente un'interfaccia in inglese.
+
+**Una sola dashboard live per tutti gli abbonamenti AI che paghi.**
 
 Claude Code · Codex · Gemini · z.ai · Moonshot — su un unico asse dei reset.
 Gira sulla tua macchina. Non parla con nessuno tranne i provider.
@@ -13,7 +16,7 @@ Gira sulla tua macchina. Non parla con nessuno tranne i provider.
 
 **[→ Sito llm-quota](https://sandrohub013.github.io/llm-quota/)**
 
-[Avvio rapido](#avvio-rapido) · [Provider](#provider-supportati) · [CLI](#cli-per-terminale-e-agenti-ai) · [Privacy](#privacy) · [🇬🇧 English](README.md)
+[Avvio rapido](#avvio-rapido) · [Personalizzazione](#la-tua-installazione-i-tuoi-dati) · [Provider](#provider-supportati) · [CLI](#cli-per-terminale-e-agenti-ai) · [Privacy](#privacy) · [🇬🇧 English](README.md)
 
 ![Dashboard LLM Quota](docs/dashboard-preview.jpg)
 
@@ -37,12 +40,15 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
 
 - ⏳ **Orizzonte reset** — i reset dei cinque provider misurabili su un solo asse temporale. Passando su un
   marcatore si illumina la card corrispondente, e viceversa.
+- ⚡ **Live senza ricaricare** — le quote si aggiornano silenziosamente ogni minuto, la spesa locale
+  ogni cinque secondi e i countdown continuano tra una richiesta e l'altra. I dati invariati non ridisegnano l'interfaccia.
 - 🔑 **Riusa le sessioni che hai già** — legge i token OAuth che le CLI ufficiali (`claude`,
   `codex`, `opencode`) hanno già scritto su disco. Per quasi tutti i provider, zero login nuovi.
 - 💶 **Registro token locale** — somma la cronologia di Codex, Claude Code, OpenCode e Kimi
   Code per modello, effort e main/subagent, stimandone in euro il valore API equivalente e
   mostrando un indice di efficienza basato sul riuso del contesto. Un calendario giornaliero in
-  stile GitHub mostra quando sono stati usati token ed euro; il tasto GitHub passa al calendario contribution.
+  stile GitHub mostra quando sono stati usati token ed euro; la vista GitHub opzionale usa sempre
+  l'account autenticato localmente con `gh`.
 - 🔒 **Local-first** — nessun cloud, nessun database, nessun account. Chiavi e token non lasciano
   mai la macchina.
 - 🚫 **Zero richieste di terze parti** — font e loghi sono serviti da `public/`. La pagina non
@@ -70,8 +76,8 @@ bun install
 bun start          # → http://localhost:4747
 ```
 
-È tutta l'installazione. Se già usi Claude Code, Codex o OpenCode, quei provider si accendono
-subito: la dashboard raccoglie i token che quelle CLI hanno già salvato.
+È tutta l'installazione. Le sessioni Claude Code e Codex esistenti popolano le rispettive card quota;
+le cronologie CLI supportate alimentano automaticamente il registro token locale.
 
 <details>
 <summary>Installare la CLI globalmente</summary>
@@ -88,9 +94,29 @@ Vengono registrati sia `llm-quota` sia `webquota`.
 
 ```bash
 bun run dev            # hot reload
-PORT=8080 bun start    # porta personalizzata
+PORT=8080 bun start    # porta personalizzata su macOS / Linux
+```
+
+```powershell
+$env:PORT=8080; bun start    # porta personalizzata su Windows
 ```
 </details>
+
+---
+
+## La tua installazione, i tuoi dati
+
+Nessun account, username, valore quota o totale di spesa runtime è legato all'autore del progetto:
+
+- Le card provider leggono credenziali e chiavi API della macchina corrente.
+- Il registro token analizza la cronologia locale dell'utente per Codex, Claude Code, OpenCode e Kimi Code.
+- Il calendario contribution opzionale interroga l'utente autenticato nella CLI ufficiale GitHub.
+  Esegui `gh auth login` per abilitarlo; senza `gh`, il calendario della spesa locale continua a funzionare.
+- Una dashboard su una porta locale personalizzata passa automaticamente la propria origine al widget Windows.
+  CLI e widget avviato manualmente accettano anche `LLM_QUOTA_URL`; il widget accetta inoltre `--server-url`.
+
+Screenshot e anteprime social usano dati campione sintetici: non contengono account del maintainer,
+credenziali o cronologie d'uso reali.
 
 ---
 
@@ -136,7 +162,7 @@ Gli exit code la rendono scriptabile — e permettono a un agente di decidere da
 | `2` | Errore di autenticazione o provider irraggiungibile |
 | `3` | Server offline o parametri errati |
 
-Per host o porta diversi: `LLM_QUOTA_URL=http://localhost:4747`.
+Per host o porta diversi: `LLM_QUOTA_URL=http://localhost:8080`.
 
 ---
 
@@ -147,7 +173,13 @@ python widget.py --register-protocol
 ```
 
 Registra il protocollo `llmquota://widget`. Il pulsante **Widget** nella dashboard lancia poi il
-widget Tk flottante sul desktop.
+widget Tk flottante e gli passa automaticamente l'origine locale della dashboard. Per un avvio
+manuale o remoto:
+
+```powershell
+python widget.py --server-url http://localhost:8080
+python widget.py --register-protocol --server-url http://localhost:8080
+```
 
 ---
 
