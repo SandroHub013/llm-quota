@@ -143,7 +143,7 @@ const MODELS = {
     { n: "+ altri, 58 in totale", ctx: "—", eff: "lista live: opencode.ai/zen/v1/models" },
   ],
   gemini: [
-    { n: "Gemini 3.6 Flash", ctx: "1,048,576", eff: "thinking dinamico" },
+    { n: "Gemini 3.6 Flash", ctx: "1,048,576", eff: "dynamic thinking" },
     { n: "Gemini 3.5 Flash", ctx: "1,048,576", eff: "minimal · low · medium · high" },
     { n: "Gemini 3.1 Pro", ctx: "1,048,576", eff: "low · medium · high" },
   ],
@@ -159,21 +159,21 @@ function fmt(n, unit) {
   if (unit === "usd") return "$" + n.toFixed(2);
   if (unit === "cny") return "¥" + n.toFixed(2);
   if (unit === "percent") return n + "%";
-  return n.toLocaleString("it-IT");
+  return n.toLocaleString("en-US");
 }
 
-const eur = new Intl.NumberFormat("it-IT", {
+const eur = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "EUR",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
-const compactTokens = new Intl.NumberFormat("it-IT", {
+const compactTokens = new Intl.NumberFormat("en-US", {
   notation: "compact",
   maximumFractionDigits: 2,
 });
-const exactTokens = new Intl.NumberFormat("it-IT");
-const oneDecimal = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
+const exactTokens = new Intl.NumberFormat("en-US");
+const oneDecimal = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 const efficiencyFormula = "Cache read / (input + cache read + cache write). Measures context reuse, not answer quality.";
 
 function fmtEur(value) {
@@ -247,7 +247,7 @@ function usageEfficiencyStat(value) {
 function renderUsage(summary) {
   const usageShell = usageBody.closest(".usage-shell");
   const previousScroll = usageShell?.scrollTop ?? 0;
-  const coverage = `${summary.pricingCoveragePct.toLocaleString("it-IT", { maximumFractionDigits: 1 })}% priced`;
+  const coverage = `${summary.pricingCoveragePct.toLocaleString("en-US", { maximumFractionDigits: 1 })}% priced`;
   const sourceChips = (summary.sources || []).map((source) => {
     const detail = source.message || (source.files != null ? `${source.files} local file${source.files === 1 ? "" : "s"}` : source.status);
     return `<span class="source-chip is-${escapeHtml(source.status)}" title="${escapeHtml(detail)}">
@@ -520,7 +520,7 @@ function animate(el, withMotion = true) {
    get most of the width, while weekly windows still have a place to sit.
    Stem height = how much of that window you have already burnt.
    ========================================================================== */
-const HZ_SPAN_H = 168; // 7 giorni
+const HZ_SPAN_H = 168; // seven days
 const hzRail = document.getElementById("hzRail");
 const hzNext = document.getElementById("hzNext");
 const hzText = document.getElementById("hzText");
@@ -868,7 +868,9 @@ document.getElementById("openWidget").addEventListener("click", (e) => {
   const b = e.currentTarget;
   b.disabled = true;
   b.textContent = "Opening…";
-  window.location.href = "llmquota://widget";
+  const widgetUrl = new URL("llmquota://widget");
+  widgetUrl.searchParams.set("server", location.origin);
+  window.location.href = widgetUrl.toString();
   setTimeout(() => {
     b.disabled = false;
     b.textContent = "▣ Widget";

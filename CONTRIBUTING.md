@@ -122,9 +122,11 @@ Adding, renaming or removing a provider touches more than the adapter:
 - [ ] `.github/ISSUE_TEMPLATE/bug_report.yml` — the provider dropdown
 - [ ] `public/logos/` and `docs/logos/` — the official mark, self-hosted in the app and site
 - [ ] `public/og.jpg`, `docs/og.jpg`, and `docs/dashboard-preview.*` — only if they
-      picture the provider list; regenerate rather than hand-editing
-- [ ] Repository-wide search — the provider name and fixed counts such as "six
-      providers"
+      picture the provider list; regenerate rather than hand-editing. Use the synthetic,
+      local-only generator so personal usage never enters an asset:
+      `uv run --with playwright --with pillow --with pillow-avif-plugin python scripts/capture_previews.py`
+- [ ] Repository-wide search — the provider name and fixed counts such as "five
+      measurable providers"
 
 The README is the file readers see first and the one that goes stale fastest — check
 it even when the change "only" touches code.

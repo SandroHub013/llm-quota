@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>LLM Quota — one horizon for every AI subscription</title>
+    <title>LLM Quota — live AI quotas, spend, and reset times</title>
     <meta
       name="description"
-      content="Local-first dashboard and CLI that reads the CLI logins already on your disk and puts every quota reset — Claude Code, Codex, z.ai, OpenCode Zen, Gemini, Moonshot — on one timeline. Zero telemetry, zero third-party requests."
+      content="Local-first live dashboard, CLI, and Windows widget for five measurable AI quotas, local token spend, and optional GitHub activity. Automatic updates, zero telemetry."
     />
     <meta name="theme-color" content="#05060b" />
     <meta name="color-scheme" content="dark" />
@@ -14,13 +14,19 @@
 
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://sandrohub013.github.io/llm-quota/" />
-    <meta property="og:title" content="LLM Quota — one horizon for every AI subscription" />
+    <meta property="og:title" content="LLM Quota — live quotas without refreshing" />
     <meta
       property="og:description"
-      content="How long before your AI quotas reset. Six providers, one timeline, all local. Zero telemetry."
+      content="Five measurable AI quotas, local token spend, and a Windows widget that update automatically. All local, zero telemetry."
     />
     <meta property="og:image" content="https://sandrohub013.github.io/llm-quota/og.jpg" />
+    <meta property="og:image:alt" content="LLM Quota live dashboard with five quota cards, a reset horizon, local token spend, and live status." />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="640" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="LLM Quota — live quotas without refreshing" />
+    <meta name="twitter:description" content="Five measurable AI quotas, local token spend, and a Windows widget that update automatically." />
+    <meta name="twitter:image" content="https://sandrohub013.github.io/llm-quota/og.jpg" />
     <link rel="icon" type="image/svg+xml" href="./logo.svg" />
 
     <link rel="preload" as="font" type="font/woff2" href="./fonts/schibsted-var-latin.woff2" crossorigin />
@@ -542,6 +548,7 @@
         <nav aria-label="Primary">
           <a href="#why">Why</a>
           <a href="#providers">Providers</a>
+          <a href="#personalize">Setup</a>
           <a href="#cli">CLI</a>
           <a href="#privacy">Privacy</a>
           <a class="cta" href="https://github.com/SandroHub013/llm-quota">GitHub</a>
@@ -558,8 +565,8 @@
               <h1>Your AI subscriptions.<br /><em>One horizon.</em></h1>
               <p class="lede">
                 Every provider rate-limits you on its own clock, in its own console. LLM Quota
-                reads the CLI logins already sitting on your disk and puts every reset on
-                <b>one timeline</b>.
+                reads the CLI logins and usage history already on your disk, then keeps every
+                reset and your local token spend <b>live without page reloads</b>.
               </p>
             </div>
 
@@ -593,7 +600,7 @@
           <figure><img src="./logos/claude.png" alt="" /> Claude Code</figure>
           <figure><img src="./logos/codex.webp" alt="" /> Codex</figure>
           <figure><img src="./logos/zai.svg" alt="" /> z.ai</figure>
-          <figure><img src="./logos/opencode-zen.png" alt="" /> OpenCode Zen</figure>
+          <figure><img src="./logos/opencode-zen.png" alt="" /> OpenCode logs</figure>
           <figure><img src="./logos/gemini.svg" alt="" /> Gemini</figure>
           <figure><img src="./logos/moonshot.png" alt="" /> Moonshot</figure>
         </div>
@@ -627,8 +634,18 @@
               </svg>
               <h3>Reset horizon</h3>
               <p>
-                All six providers' resets on one axis, now to seven days. Hover a marker and its
+                All five measurable providers' resets on one axis, now to seven days. Hover a marker and its
                 card lights up; hover a card and its marker does.
+              </p>
+            </article>
+            <article class="feat">
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 6v5h-5M4 18v-5h5" /><path d="M18.5 9A7 7 0 0 0 6 6.5L4 9M5.5 15A7 7 0 0 0 18 17.5l2-2.5" />
+              </svg>
+              <h3>Live without reloads</h3>
+              <p>
+                Quotas refresh silently every minute, spend every five seconds, and countdowns
+                keep moving locally. Unchanged data does not repaint the UI.
               </p>
             </article>
             <article class="feat">
@@ -639,6 +656,16 @@
               <p>
                 Reads the OAuth tokens <code>claude</code>, <code>codex</code> and
                 <code>opencode</code> already wrote to disk. No new logins for most providers.
+              </p>
+            </article>
+            <article class="feat">
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 19.5h16M6 16V9M11 16V5M16 16v-4" /><path d="M18.5 4.5v4M16.5 6.5h4" />
+              </svg>
+              <h3>Local token ledger</h3>
+              <p>
+                Real CLI history becomes model, effort, cache-reuse, daily token, and estimated
+                API-equivalent spend detail — including a count-up total.
               </p>
             </article>
             <article class="feat">
@@ -678,10 +705,10 @@
                 <rect x="2.5" y="6" width="19" height="12" rx="2.5" />
                 <path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10" />
               </svg>
-              <h3>Fits on one screen</h3>
+              <h3>Live Windows widget</h3>
               <p>
-                All six providers visible without scrolling from 1280×800 up. Keyboard navigable,
-                <code>prefers-reduced-motion</code> respected.
+                The always-on-top widget follows the dashboard's local server automatically and
+                keeps five measurable quotas, spend, and reset countdowns current.
               </p>
             </article>
           </div>
@@ -694,11 +721,11 @@
             <div>
               <h2>The whole thing, on one screen</h2>
               <p class="section-lede">
-                Six cards, six reset clocks, no scrolling. The horizon sits above them, and
-                hovering either one lights up the other.
+                Five quota cards plus local developer activity, one reset horizon, a live status,
+                and a spend total that counts smoothly to every new value.
               </p>
               <p class="hero-alt" style="margin: 0">
-                Screenshot from a real session, not a mockup.
+                Current interface rendered with synthetic sample data.
               </p>
             </div>
             <!-- Below the fold and lazy: the hero is the live horizon now, so this
@@ -709,7 +736,7 @@
               <img
                 class="shot"
                 src="./dashboard-preview.jpg"
-                alt="The LLM Quota dashboard: a reset horizon spanning now to seven days, with markers for each provider, above six cards showing usage percentages and reset times for Claude Code, z.ai, Gemini, Kimi, Codex and OpenCode Zen."
+                alt="The current LLM Quota dashboard with a seven-day reset horizon, live status, local spend total, five measurable quota cards, and a local token-spend calendar."
                 width="1600" height="800" loading="lazy" decoding="async"
               />
             </picture>
@@ -735,13 +762,30 @@
                     <tr><td>Claude Code</td><td><code>~/.claude/.credentials.json</code></td><td>Live 5h window + weekly quota %, reset time</td></tr>
                     <tr><td>Codex (ChatGPT)</td><td><code>~/.codex/auth.json</code></td><td>Active plan + usage windows</td></tr>
                     <tr><td>z.ai</td><td><code>opencode</code> config or pasted key</td><td>Live 5h token + monthly %, web-search status</td></tr>
-                    <tr><td>OpenCode Zen</td><td><code>opencode</code> config or pasted key</td><td>API key validity + model count</td></tr>
                     <tr><td>Gemini</td><td>In-app Google login or AI Studio key</td><td>Live per-model quota via Code Assist</td></tr>
                     <tr><td>Moonshot</td><td>Pasted API key</td><td>Live remaining credit and usage</td></tr>
                   </tbody>
                 </table>
               </div>
+              <p class="hero-alt">
+                OpenCode remains a local token-ledger source. Zen is omitted from quota cards because
+                its public endpoint exposes a model catalog, not numeric usage, limits, or reset times.
+              </p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="personalize">
+        <div class="shell">
+          <div class="lead-grid">
+            <h2>Your installation, your accounts</h2>
+            <ul class="ticks">
+              <li><b>Provider quotas come from the credentials on the current machine.</b> Pasted keys stay in <code>~/.llm-quota/config.json</code>.</li>
+              <li><b>Token spend comes from the current user's local CLI histories.</b> Screenshots use synthetic data, never maintainer history.</li>
+              <li><b>GitHub is optional and personal by design.</b> The calendar uses the viewer authenticated by <code>gh auth login</code>; no username is built in.</li>
+              <li><b>Custom ports work end to end.</b> Set <code>PORT</code> for the server; the dashboard passes its origin to the widget, while CLI and widget also accept <code>LLM_QUOTA_URL</code>.</li>
+            </ul>
           </div>
         </div>
       </section>
@@ -781,7 +825,7 @@ bun run cli provider codex</code></pre>
             <ul class="ticks">
               <li><b>No telemetry, analytics or crash reporting.</b> There is no server to report to.</li>
               <li>
-                <b>The frontend makes zero third-party requests.</b> Fonts and the six provider
+                <b>The frontend makes zero third-party requests.</b> Fonts and provider
                 logos are served from the app itself. A test fails the build if any external host
                 creeps back in.
               </li>
@@ -803,8 +847,8 @@ bun run cli provider codex</code></pre>
         <div class="shell">
           <h2>Stop checking five billing consoles</h2>
           <p class="section-lede" style="margin-inline: auto">
-            MIT licensed, one runtime dependency, no build step. Provider adapters and UI fixes
-            are welcome.
+            Live dashboard, agent-friendly CLI, and Windows widget. MIT licensed, one runtime
+            dependency, no build step.
           </p>
           <div class="btnrow">
             <a class="btn primary" href="https://github.com/SandroHub013/llm-quota">★ Star on GitHub</a>
@@ -821,7 +865,7 @@ bun run cli provider codex</code></pre>
         <span>Local-first · Zero telemetry · Zero CDN</span>
         <span>
           <a href="https://github.com/SandroHub013/llm-quota">GitHub</a> ·
-          <a href="https://github.com/SandroHub013/llm-quota/blob/main/README.it.md">Italiano</a>
+          <a href="https://github.com/SandroHub013/llm-quota/blob/main/README.it.md">Italian</a>
         </span>
       </div>
     </footer>
@@ -855,7 +899,6 @@ bun run cli provider codex</code></pre>
         claude: "#d97757",
         codex: "#10a37f",
         zai: "#4f7cff",
-        "opencode-zen": "#9b5bff",
         gemini: "#4285f4",
         moonshot: "#0ea5e9",
       };

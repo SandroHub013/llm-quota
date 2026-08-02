@@ -15,13 +15,13 @@ export async function readJson<T = any>(path: string): Promise<T | undefined> {
   }
 }
 
-/** Best-effort JSON write (no-op su FS read-only, es. Vercel serverless). */
+/** Best-effort JSON write (a no-op on read-only filesystems such as Vercel). */
 async function writeJson(path: string, value: unknown): Promise<void> {
   try {
     await mkdir(join(path, ".."), { recursive: true });
     await writeFile(path, JSON.stringify(value, null, 2));
   } catch (e: any) {
-    console.warn("writeJson fallita (read-only?):", path, String(e?.message ?? e));
+    console.warn("writeJson failed (read-only filesystem?):", path, String(e?.message ?? e));
   }
 }
 

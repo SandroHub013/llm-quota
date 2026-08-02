@@ -139,6 +139,48 @@ class ProtocolRegistrationTest(unittest.TestCase):
             widget.protocol_command(r"C:\Python\python.exe", r"C:\My App\widget.py"),
             r'"C:\Python\pythonw.exe" "C:\My App\widget.py" "%1"',
         )
+        self.assertEqual(
+            widget.protocol_command(
+                r"C:\Python\python.exe",
+                r"C:\My App\widget.py",
+                "http://localhost:8080",
+            ),
+            r'"C:\Python\pythonw.exe" "C:\My App\widget.py" --server-url "http://localhost:8080" "%1"',
+        )
+
+    def test_server_url_is_customizable_and_safely_normalized(self):
+        self.assertEqual(widget.normalize_base_url("https://quota.example.test/"), "https://quota.example.test")
+        self.assertEqual(widget.normalize_base_url("http://localhost:8080/base/"), "http://localhost:8080/base")
+        self.assertEqual(widget.normalize_base_url("javascript:alert(1)"), widget.DEFAULT_BASE)
+        self.assertEqual(widget.normalize_base_url("https://user:secret@example.test"), widget.DEFAULT_BASE)
+
+    def test_dashboard_protocol_passes_its_local_custom_port(self):
+        self.assertEqual(
+            widget.configured_base_url(
+                ["widget.py", "llmquota://widget?server=http%3A%2F%2Flocalhost%3A8080"],
+                {},
+            ),
+            "http://localhost:8080",
+        )
+
+    def test_explicit_server_url_wins_and_protocol_rejects_remote_hosts(self):
+        self.assertEqual(
+            widget.configured_base_url(
+                ["widget.py", "--server-url", "https://quota.example.test"],
+                {"LLM_QUOTA_URL": "http://localhost:9000"},
+            ),
+            "https://quota.example.test",
+        )
+        self.assertEqual(
+            widget.configured_base_url(
+                ["widget.py", "llmquota://widget?server=https%3A%2F%2Fevil.example"],
+                {"LLM_QUOTA_URL": "http://localhost:9000"},
+            ),
+            "http://localhost:9000",
+        )
+
+    def test_currency_uses_english_number_formatting(self):
+        self.assertEqual(widget.format_eur(2721.62), "€2,721.62")
 
 
 class WidgetPositionTest(unittest.TestCase):
