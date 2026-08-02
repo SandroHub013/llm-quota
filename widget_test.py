@@ -208,8 +208,32 @@ class GlassEffectTest(unittest.TestCase):
         self.assertEqual(widget.abgr_color("#0b1623", 125), 0x7D23160B)
 
     def test_surface_keeps_a_readable_transparent_fallback(self):
-        self.assertGreaterEqual(widget.SURFACE_OPACITY, 0.8)
-        self.assertLess(widget.SURFACE_OPACITY, 0.95)
+        self.assertGreaterEqual(widget.SURFACE_OPACITY, 0.6)
+        self.assertLessEqual(widget.SURFACE_OPACITY, 0.72)
+
+
+class WakeBehaviorTest(unittest.TestCase):
+    @patch("widget.force_window_visible")
+    def test_wake_forces_both_native_windows_visible(self, force_window_visible):
+        fake = object.__new__(widget.Widget)
+        fake.view_mode = "q"
+        fake.expanded = True
+        fake.panel = unittest.mock.Mock()
+        fake.surface = unittest.mock.Mock()
+        fake.deiconify = unittest.mock.Mock()
+        fake.after_idle = unittest.mock.Mock()
+        fake._sync_surface_to_logo = unittest.mock.Mock()
+        fake.lift = unittest.mock.Mock()
+        fake.attributes = unittest.mock.Mock()
+        fake._user_positioned = True
+        fake.refresh = unittest.mock.Mock()
+
+        widget.Widget._do_wake_up(fake)
+
+        self.assertEqual(
+            force_window_visible.call_args_list,
+            [unittest.mock.call(fake), unittest.mock.call(fake.surface)],
+        )
 
 
 class PollingTest(unittest.TestCase):
