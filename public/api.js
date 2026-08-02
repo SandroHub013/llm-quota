@@ -16,7 +16,7 @@ export async function loadQuota(request = fetch) {
 
 export async function loadUsage(request = fetch) {
   const body = await requestJson("/api/usage", undefined, request);
-  if (!Array.isArray(body?.rows) || !body?.tokens || !Number.isFinite(body?.estimatedCostEur)) {
+  if (!Array.isArray(body?.rows) || !Array.isArray(body?.daily) || !body?.tokens || !Number.isFinite(body?.estimatedCostEur)) {
     throw new Error("invalid_usage_response");
   }
   return body;

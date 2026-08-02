@@ -43,7 +43,8 @@ glance which subscription is free, which is cooling down, and exactly when to co
   (`claude`, `codex`, `opencode`) already wrote to disk. No new logins for most providers.
 - 💶 **Local token ledger** — totals Codex, Claude Code, OpenCode and Kimi Code history by
   model, effort and main/subagent, with an estimated API-equivalent value in euros and a
-  context-reuse efficiency index.
+  context-reuse efficiency index. A GitHub-style daily calendar shows when those tokens and euros
+  were spent; its GitHub button swaps in the authenticated contribution calendar.
 - 🔒 **Local-first** — no cloud, no database, no account. Keys and tokens never leave the machine.
 - 🚫 **Zero third-party requests** — fonts and provider logos ship in `public/`. The page loads
   nothing from a CDN, a font host, or a favicon service. [Enforced by a test.](src/frontend.test.ts)
