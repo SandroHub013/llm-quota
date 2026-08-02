@@ -98,6 +98,27 @@ test("every provider ships a static skeleton card", async () => {
   }
 });
 
+test("local token usage sits beside the widget and opens an accessible dialog", async () => {
+  const [html, app, api] = await Promise.all([
+    read("public/index.html"),
+    read("public/app.js"),
+    read("public/api.js"),
+  ]);
+  const widget = html.indexOf('id="openWidget"');
+  const usage = html.indexOf('id="openUsage"');
+  const refresh = html.indexOf('id="refreshAll"');
+
+  expect(widget).toBeGreaterThan(-1);
+  expect(usage).toBeGreaterThan(widget);
+  expect(refresh).toBeGreaterThan(usage);
+  expect(html).toContain('<dialog class="usage-dialog" id="usageDialog"');
+  expect(app).toContain("usageDialog.showModal()");
+  expect(api).toContain('requestJson("/api/usage"');
+  expect(app).toContain("summary.contextReusePct");
+  expect(app).toContain("row.contextReusePct");
+  expect(app).toContain("cache read + cache write");
+});
+
 test("gemini quota windows are named like every other provider's", () => {
   expect(normaliseLabel("Gemini Models · Weekly Limit")).toBe("Gemini models · Weekly (7d)");
   expect(normaliseLabel("Claude and GPT models · Five Hour Limit")).toBe(
