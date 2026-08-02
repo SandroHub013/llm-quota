@@ -32,4 +32,4 @@ Once one direction wins, only that decision should be rewritten into `widget.py`
 
 ## Verdict
 
-All three structural variants were rejected. The validated direction is the existing production widget, unchanged in layout and behaviour, with native Acrylic blur and stronger transparency applied only to its current surface. That implementation is now carried by `widget.py` on this prototype branch; the comparison harness remains here solely as the rejected primary source.
+All three structural variants were rejected. The validated direction is the existing production widget, unchanged in layout and behaviour, with native Acrylic blur and a genuinely see-through 68% surface applied only to its current window. The wake path also forces an existing hidden instance back on screen when the dashboard protocol is clicked. That implementation is now carried by `widget.py` on this prototype branch; the comparison harness remains here solely as the rejected primary source.
