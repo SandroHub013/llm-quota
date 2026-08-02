@@ -1,16 +1,16 @@
-"""LLM Quota desktop widget — always-on-top.
+"""LLM Quota desktop widget — always on top.
 
-Supporta 2 modalità di visualizzazione:
-1. Modalità Tendina Q Logo (Q icon + pannello a comparsa)
-2. Modalità Mini Bar (barra orizzontale sempre visibile a schermo)
+The widget has two display modes:
+1. Q logo drawer (Q icon with a pop-up panel)
+2. Mini bar (a horizontal strip that stays visible)
 
-Caratteristiche avanzate:
-- Loghi reali dei provider (Claude, ChatGPT/Codex, Z.ai, Gemini, Kimi)
-- Ore/tempo mancante al reset in ciascuna quota
-- Tooltip al passaggio del mouse con il dettaglio di tutte le finestre
-- Avviso visivo (anello rosso pulsante sulla Q) quando la quota è <= 15% o rate_limited
-- Notifiche Windows Toast per avvisi quota bassa o reset quota
-- Pulsanti Dashboard ↗ e Switch Vista (Q Logo <-> Mini Bar) per testare entrambe le modalità.
+Features:
+- Local provider logos (Claude, ChatGPT/Codex, Z.ai, Gemini, Kimi)
+- A live reset countdown for every measurable quota
+- Hover details for every provider window
+- A pulsing red Q ring when a quota is at or below 15%, or rate limited
+- Windows notifications for low quotas and resets
+- Dashboard and view-switch controls for both display modes
 """
 import ctypes
 import ctypes.wintypes as wintypes
@@ -27,8 +27,68 @@ import webbrowser
 import winreg
 from datetime import datetime, timezone
 from math import isfinite, sqrt
+from urllib.parse import parse_qs, urlsplit
 
-BASE = "http://localhost:4747"
+DEFAULT_BASE = "http://localhost:4747"
+
+
+def normalize_base_url(value):
+    """Return a safe server base URL, falling back to the local default."""
+    candidate = str(value or "").strip().rstrip("/")
+    try:
+        parsed = urlsplit(candidate)
+    except ValueError:
+        return DEFAULT_BASE
+    if (
+        any(char.isspace() for char in candidate)
+        or '"' in candidate
+        or parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+    ):
+        return DEFAULT_BASE
+    return candidate
+
+
+def command_line_base_url(argv):
+    """Return an explicitly supplied server URL, or None when it was omitted."""
+    args = list(argv)
+    for index, argument in enumerate(args):
+        if argument == "--server-url" and index + 1 < len(args):
+            return normalize_base_url(args[index + 1])
+        if argument.startswith("--server-url="):
+            return normalize_base_url(argument.split("=", 1)[1])
+    return None
+
+
+def configured_base_url(argv=None, environ=None):
+    """Resolve CLI, dashboard-protocol, and environment configuration in order."""
+    args = list(sys.argv if argv is None else argv)
+    environment = os.environ if environ is None else environ
+    explicit = command_line_base_url(args)
+    if explicit is not None:
+        return explicit
+
+    for argument in args:
+        if not str(argument).lower().startswith("llmquota://"):
+            continue
+        values = parse_qs(urlsplit(argument).query).get("server")
+        if not values:
+            continue
+        candidate = normalize_base_url(values[0])
+        # A web page may invoke a custom protocol. Only the local dashboard may
+        # choose the server implicitly; remote servers require an explicit flag
+        # or environment variable.
+        if urlsplit(candidate).hostname in {"localhost", "127.0.0.1", "::1"}:
+            return candidate
+
+    return normalize_base_url(environment.get("LLM_QUOTA_URL") or environment.get("WEBQUOTA_URL"))
+
+
+BASE = configured_base_url()
 POLL_MS = 60_000
 USAGE_POLL_MS = 5_000
 COUNTDOWN_TICK_MS = 30_000
@@ -152,9 +212,10 @@ def windows_work_area(screen_width, screen_height):
     return 0, 0, screen_width, screen_height
 
 
-def protocol_command(python_executable, script_path):
+def protocol_command(python_executable, script_path, base_url=None):
     pythonw = re.sub(r"python\.exe$", "pythonw.exe", python_executable, flags=re.IGNORECASE)
-    return f'"{pythonw}" "{script_path}" "%1"'
+    server_option = f' --server-url "{normalize_base_url(base_url)}"' if base_url is not None else ""
+    return f'"{pythonw}" "{script_path}"{server_option} "%1"'
 
 
 def register_protocol():
@@ -168,7 +229,11 @@ def register_protocol():
         python_executable = sys.executable
 
     root = r"Software\Classes\llmquota"
-    command = protocol_command(python_executable, os.path.abspath(__file__))
+    registration_base = command_line_base_url(sys.argv)
+    if registration_base is None:
+        environment_base = os.environ.get("LLM_QUOTA_URL") or os.environ.get("WEBQUOTA_URL")
+        registration_base = normalize_base_url(environment_base) if environment_base else None
+    command = protocol_command(python_executable, os.path.abspath(__file__), registration_base)
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, root) as key:
         winreg.SetValueEx(key, "", 0, winreg.REG_SZ, "URL:LLM Quota Widget")
         winreg.SetValueEx(key, "URL Protocol", 0, winreg.REG_SZ, "")
@@ -252,10 +317,9 @@ def horizon_events(data, elapsed=0):
 
 
 def format_eur(value):
-    """Compact Italian EUR formatting without changing the process locale."""
+    """Format EUR consistently with the widget's English interface."""
     amount = max(0, float(value or 0))
-    whole, decimals = f"{amount:,.2f}".split(".")
-    return f"€{whole.replace(',', '.')},{decimals}"
+    return f"€{amount:,.2f}"
 
 
 def quota_signature(data):
@@ -304,7 +368,7 @@ STATUS_DOT = {
 BG, PANEL, BORDER = "#05060b", "#101522", "#1d2740"
 FG, MUT, IDLE = "#eef3fa", "#8d9cb3", "#6e7681"
 ACCENT, VIOLET, TRACK, ERR = "#5b8cff", "#9b5bff", "#1d2740", "#f85149"
-KEY = "#010101"  # color key reso trasparente dalla finestra
+KEY = "#010101"  # color key made transparent by the window manager
 MONO = ("Cascadia Mono", 9)
 UI = ("Segoe UI", 9)
 
@@ -452,7 +516,7 @@ class Widget(tk.Tk):
         self.surface.withdraw()
 
         self.view_mode = "q"  # "q" per tendina Q logo, "bar" per mini bar orizzontale
-        self.expanded = True  # Aperto di default per essere subito visibile
+        self.expanded = True  # open by default so the widget is immediately visible
         self.rows = []
         self.icons = {}
         self.last_data = None
@@ -596,7 +660,7 @@ class Widget(tk.Tk):
         ccx, ccy, rr = 31 * S, 30 * S, 20 * S
         w = max(2, round(9 * S))
 
-        # Anello esterno pulsante di avviso per quota esaurita / rate limit
+        # Pulsing outer warning ring for an exhausted or rate-limited quota
         if critical and not offline:
             c.create_oval(ccx - rr - 3, ccy - rr - 3, ccx + rr + 3, ccy + rr + 3,
                           outline=ERR, width=2)

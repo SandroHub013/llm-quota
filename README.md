@@ -2,9 +2,9 @@
 
 # LLM Quota
 
-**One dashboard for every AI subscription you pay for.**
+**One live dashboard for every AI subscription you pay for.**
 
-Claude Code · Codex · Gemini · z.ai · Moonshot — on a single reset timeline.
+Claude Code · Codex · Gemini · z.ai · Moonshot — quotas, reset times, and local token spend.
 Runs on your machine. Talks to nobody but the providers.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -15,7 +15,7 @@ Runs on your machine. Talks to nobody but the providers.
 
 **[→ llm-quota website](https://sandrohub013.github.io/llm-quota/)**
 
-[Quickstart](#quickstart) · [Providers](#supported-providers) · [CLI](#cli-for-terminals-and-ai-agents) · [Privacy](#privacy) · [Contributing](CONTRIBUTING.md) · [🇮🇹 Italiano](README.it.md)
+[Quickstart](#quickstart) · [Personalization](#your-installation-your-data) · [Providers](#supported-providers) · [CLI](#cli-for-terminals-and-ai-agents) · [Privacy](#privacy) · [Contributing](CONTRIBUTING.md) · [🇮🇹 Italian](README.it.md)
 
 ![LLM Quota dashboard](docs/dashboard-preview.jpg)
 
@@ -39,12 +39,14 @@ glance which subscription is free, which is cooling down, and exactly when to co
 
 - ⏳ **Reset horizon** — all five measurable providers' resets on one time axis. Hover a marker, its card
   lights up; hover a card, its marker lights up.
+- ⚡ **Live without reloads** — quotas refresh silently every minute, local spend every five seconds,
+  and reset countdowns keep moving between requests. Unchanged data does not repaint the interface.
 - 🔑 **Reuses the sessions you already have** — reads the OAuth tokens the official CLIs
   (`claude`, `codex`, `opencode`) already wrote to disk. No new logins for most providers.
 - 💶 **Local token ledger** — totals Codex, Claude Code, OpenCode and Kimi Code history by
   model, effort and main/subagent, with an estimated API-equivalent value in euros and a
   context-reuse efficiency index. A GitHub-style daily calendar shows when those tokens and euros
-  were spent; its GitHub button swaps in the authenticated contribution calendar.
+  were spent; its optional GitHub view always uses the locally authenticated `gh` account.
 - 🔒 **Local-first** — no cloud, no database, no account. Keys and tokens never leave the machine.
 - 🚫 **Zero third-party requests** — fonts and provider logos ship in `public/`. The page loads
   nothing from a CDN, a font host, or a favicon service. [Enforced by a test.](src/frontend.test.ts)
@@ -71,8 +73,8 @@ bun install
 bun start          # → http://localhost:4747
 ```
 
-That is the whole setup. If you already use Claude Code, Codex or OpenCode, their providers light
-up immediately — the dashboard picks up the tokens those CLIs already stored.
+That is the whole setup. Existing Claude Code and Codex sessions populate their quota cards;
+supported CLI histories populate the local token ledger automatically.
 
 <details>
 <summary>One-liner install</summary>
@@ -103,9 +105,30 @@ Both `llm-quota` and `webquota` are registered as commands.
 
 ```bash
 bun run dev            # hot reload
-PORT=8080 bun start    # custom port
+PORT=8080 bun start    # custom port on macOS / Linux
+```
+
+```powershell
+$env:PORT=8080; bun start    # custom port on Windows
 ```
 </details>
+
+---
+
+## Your installation, your data
+
+No runtime account, username, quota, or spend total is tied to the project author:
+
+- Provider cards read the credentials and API keys on the current machine.
+- The token ledger scans the current user's local Codex, Claude Code, OpenCode, and Kimi Code history.
+- The optional contribution calendar queries the viewer authenticated by the official GitHub CLI.
+  Run `gh auth login` to enable it; without `gh`, the local spend calendar continues to work.
+- A dashboard running on a custom local port passes its own origin to the Windows widget automatically.
+  The CLI and a manually launched widget also accept `LLM_QUOTA_URL`; the widget additionally accepts
+  `--server-url`.
+
+Screenshots and social previews use synthetic sample data. They contain no maintainer account,
+credentials, or real usage history.
 
 ---
 
@@ -151,7 +174,7 @@ Exit codes make it scriptable — and let an agent decide for itself whether to 
 | `2` | Auth error or provider unreachable |
 | `3` | Server offline or bad arguments |
 
-Point it at another host or port with `LLM_QUOTA_URL=http://localhost:4747`.
+Point it at another host or port with `LLM_QUOTA_URL=http://localhost:8080`.
 
 ---
 
@@ -162,7 +185,13 @@ python widget.py --register-protocol
 ```
 
 Registers `llmquota://widget`. The **Widget** button in the dashboard then launches a floating
-Tk widget on the desktop.
+Tk widget on the desktop and passes the dashboard's local origin automatically. For a manual or
+remote setup:
+
+```powershell
+python widget.py --server-url http://localhost:8080
+python widget.py --register-protocol --server-url http://localhost:8080
+```
 
 ---
 

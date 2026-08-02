@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "private": false,
-  "description": "Local-first LLM quota dashboard and CLI for Claude Code, Codex, Z.AI, OpenCode Zen, Gemini, and Moonshot",
+  "description": "Local-first live quota dashboard, CLI, and Windows widget for Claude Code, Codex, Z.AI, Gemini, and Moonshot",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -12,7 +12,7 @@
   "bugs": {
     "url": "https://github.com/SandroHub013/llm-quota/issues"
   },
-  "homepage": "https://github.com/SandroHub013/llm-quota#readme",
+  "homepage": "https://sandrohub013.github.io/llm-quota/",
   "keywords": [
     "llm",
     "quota",
@@ -62,4 +62,3 @@
     "typescript": "5.8.2"
   }
 }
-
