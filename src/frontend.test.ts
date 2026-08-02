@@ -137,6 +137,10 @@ test("dashboard data refreshes silently and the spend total counts to each new v
   expect(app).toContain("animateUsageAmount(summary.estimatedCostEur)");
   expect(app).toContain("nextSignature === providerSignatures.get(p.id)");
   expect(github).toContain("const CONTRIBUTION_REFRESH_MS = 10 * 60_000");
+  expect(github).toContain('data-activity-view="github"');
+  expect(github).toContain('data-activity-view="usage"');
+  expect(github).toContain("buildUsageCalendar");
+  expect(html).toContain("column-span: all");
 });
 
 test("gemini quota windows are named like every other provider's", () => {

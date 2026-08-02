@@ -1387,6 +1387,23 @@
       }
       main .gh-account { display: block; margin-top: 3px; font-size: 9px; line-height: 1; }
       main .gh-profile { font-size: 8px; line-height: 1; }
+      main .gh-head-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 5px;
+        flex: none;
+      }
+      main .gh-view-toggle {
+        min-height: 23px;
+        padding: 0 7px;
+        border-color: rgba(123, 91, 255, 0.38);
+        border-radius: var(--r-full);
+        color: #d6c9ff;
+        background: rgba(123, 91, 255, 0.12);
+        font: 500 8px / 1 "JetBrains Mono", "Mono Fallback", monospace;
+      }
+      main .gh-view-toggle:hover { background: rgba(123, 91, 255, 0.24); }
       main .gh-total-number {
         display: flex;
         align-items: baseline;
@@ -1583,6 +1600,71 @@
         main .gh-weeks { gap: 0.75px; }
         main .gh-week { grid-template-rows: repeat(7, 5px); gap: 0.75px; }
         main .gh-day { width: 5px; height: 5px; }
+      }
+
+      /* On a taller desktop the unused strip below the provider columns becomes a
+         full-width activity band. Short laptops keep the masonry card above. */
+      @media (min-width: 1240px) and (min-height: 850px) {
+        main .gh-prototype { column-span: all; }
+        main .gh-card-a {
+          display: grid;
+          grid-template-columns: minmax(220px, 0.7fr) minmax(480px, 1.5fr) minmax(300px, 1fr);
+          grid-template-areas:
+            "head summary stats"
+            "source summary breakdown";
+          align-items: center;
+          column-gap: 18px;
+          row-gap: 5px;
+        }
+        main .gh-card-a > .gh-head { grid-area: head; }
+        main .gh-card-a > .gh-a-summary {
+          grid-area: summary;
+          display: grid;
+          grid-template-columns: minmax(150px, auto) 304px;
+          align-items: center;
+          gap: 12px;
+          margin: 0;
+        }
+        main .gh-card-a > .gh-stat-grid { grid-area: stats; margin: 0; }
+        main .gh-card-a > .gh-breakdown { grid-area: breakdown; margin: 0; }
+        main .gh-card-a > .gh-source { grid-area: source; margin: 0; }
+
+        main .gh-card-b {
+          display: grid;
+          grid-template-columns: minmax(230px, 0.62fr) 1fr 1fr;
+          grid-template-areas:
+            "head usage github"
+            "source breakdown breakdown";
+          align-items: center;
+          column-gap: 18px;
+          row-gap: 5px;
+        }
+        main .gh-card-b > .gh-head { grid-area: head; }
+        main .gh-card-b > .usage-half { grid-area: usage; margin: 0; }
+        main .gh-card-b > .github-half {
+          grid-area: github;
+          margin: 0;
+          padding: 0 0 0 18px;
+          border-top: 0;
+          border-left: 1px solid var(--line);
+        }
+        main .gh-card-b > .dual-breakdown { grid-area: breakdown; margin: 0; }
+        main .gh-card-b > .gh-source { grid-area: source; margin: 0; }
+
+        main .gh-card-c {
+          display: grid;
+          grid-template-columns: minmax(230px, 0.62fr) minmax(300px, 0.8fr) 1.7fr;
+          grid-template-areas:
+            "head summary months"
+            "source summary months";
+          align-items: center;
+          column-gap: 18px;
+          row-gap: 5px;
+        }
+        main .gh-card-c > .gh-head { grid-area: head; }
+        main .gh-card-c > .gh-c-summary { grid-area: summary; margin: 0; }
+        main .gh-card-c > .gh-month-cards { grid-area: months; }
+        main .gh-card-c > .gh-source { grid-area: source; margin: 0; }
       }
 
       footer .wrap { padding-top: 6px; padding-bottom: 6px; }

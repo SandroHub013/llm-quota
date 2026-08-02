@@ -13,7 +13,6 @@ const variants = {
 const integers = new Intl.NumberFormat("en");
 const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 const euro = new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
-const shortDate = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" });
 const CONTRIBUTION_REFRESH_MS = 10 * 60_000;
 let contributionData;
 let contributionSignature;
@@ -21,6 +20,7 @@ let contributionLoad;
 let lastContributionAttemptAt = 0;
 let usageData;
 let usageSignature;
+let activityView = "usage";
 
 function currentVariant() {
   const candidate = new URLSearchParams(location.search).get("variant")?.toUpperCase();
@@ -101,11 +101,10 @@ function buildUsageCalendar(summary) {
   };
 }
 
-function dayCell(day, firstColumn = false) {
+function dayCell(day) {
   const count = Number(day.count) || 0;
   const noun = count === 1 ? "contribution" : "contributions";
-  const style = firstColumn ? ` style="grid-column:${Number(day.weekday) + 1}"` : "";
-  return `<span class="gh-day l${Math.max(0, Math.min(4, Number(day.level) || 0))}"${style} title="${escapeHtml(`${day.date} · ${count} ${noun}`)}"></span>`;
+  return `<span class="gh-day l${Math.max(0, Math.min(4, Number(day.level) || 0))}" title="${escapeHtml(`${day.date} · ${count} ${noun}`)}"></span>`;
 }
 
 function monthLabels(data) {
@@ -176,17 +175,18 @@ function usageHeatmap(calendar, showLegend = true) {
   </div>`;
 }
 
-function header(data, title) {
-  return `<div class="gh-head">
-    <div><span class="gh-kicker">GitHub · authenticated viewer</span><h2 class="gh-title">${escapeHtml(title)}</h2><span class="gh-account">${escapeHtml(data.name || data.login)} · @${escapeHtml(data.login)}</span></div>
-    <a class="gh-profile" href="${escapeHtml(data.profileUrl)}" target="_blank" rel="noreferrer">View profile ↗</a>
-  </div>`;
-}
-
 function usageHeader(title, kicker = "Local token ledger") {
   return `<div class="gh-head">
     <div><span class="gh-kicker usage-kicker">${escapeHtml(kicker)}</span><h2 class="gh-title">${escapeHtml(title)}</h2><span class="gh-account">Codex · Claude Code · OpenCode · Kimi Code</span></div>
-    <a class="gh-profile" href="#usageDialog" data-open-usage>Full ledger ↗</a>
+    <div class="gh-head-actions"><a class="gh-profile" href="#usageDialog" data-open-usage>Ledger</a><button class="gh-view-toggle" type="button" data-activity-view="github">GitHub</button></div>
+  </div>`;
+}
+
+function githubToggleHeader(data) {
+  const account = data?.status === "ok" ? `${data.name || data.login} · @${data.login}` : "GitHub activity unavailable";
+  return `<div class="gh-head">
+    <div><span class="gh-kicker">GitHub · authenticated viewer</span><h2 class="gh-title">Contribution calendar</h2><span class="gh-account">${escapeHtml(account)}</span></div>
+    <div class="gh-head-actions">${data?.status === "ok" ? `<a class="gh-profile" href="${escapeHtml(data.profileUrl)}" target="_blank" rel="noreferrer">Profile ↗</a>` : ""}<button class="gh-view-toggle" type="button" data-activity-view="usage">Token spend</button></div>
   </div>`;
 }
 
@@ -220,17 +220,25 @@ function breakdownLine(data) {
   return `<p class="gh-breakdown" aria-label="Contribution breakdown">${items.map(([value, label]) => `<span><b>${escapeHtml(integers.format(value || 0))}</b> ${label}</span>`).join("")}</p>`;
 }
 
-function sourceNote(data) {
-  const from = shortDate.format(new Date(`${data.startedAt.slice(0, 10)}T12:00:00`));
-  const to = shortDate.format(new Date(`${data.endedAt.slice(0, 10)}T12:00:00`));
-  const text = `${from} – ${to} · ${data.source} · cached in memory for 10 minutes. Private counts depend on the GitHub token scope and profile settings.`;
-  return `<p class="gh-source">${escapeHtml(text)}</p>`;
+function variantAGithub(data) {
+  const available = data?.status === "ok";
+  return `<article class="gh-card gh-card-a" data-github-variant="A" data-activity-view="github">
+    ${githubToggleHeader(data)}
+    ${available ? `<div class="gh-a-summary">
+      <div class="gh-total-number">${escapeHtml(integers.format(data.total))}<small>contributions in the last year</small></div>
+      ${heatmap(data)}
+    </div>
+    <div class="gh-stat-grid">${stat("Active days", data.activeDays, true)}${stat("Longest streak", data.longestStreak, true)}${stat("Current streak", data.currentStreak)}${stat("Private marks", data.breakdown.restricted)}</div>
+    ${breakdownLine(data)}` : `<div class="gh-inline-unavailable">${escapeHtml(data?.message || "GitHub activity unavailable")}</div>`}
+    <p class="gh-source">Authenticated GitHub GraphQL · contribution counts follow profile visibility</p>
+  </article>`;
 }
 
-function variantA(_data, usage) {
+function variantA(data, usage) {
+  if (activityView === "github") return variantAGithub(data);
   const calendar = buildUsageCalendar(usage);
   const busiest = calendar.busiest?.usage?.tokens?.total || 0;
-  return `<article class="gh-card gh-card-a" data-github-variant="A">
+  return `<article class="gh-card gh-card-a" data-github-variant="A" data-activity-view="usage">
     ${usageHeader("Token spend calendar")}
     <div class="gh-a-summary">
       <div class="gh-total-number usage-total-number">${escapeHtml(fmtEur(calendar.costEur))}<small>API equivalent · ${escapeHtml(compact.format(calendar.totalTokens))} tokens</small></div>
@@ -258,32 +266,6 @@ function variantB(data, usage) {
     <p class="gh-breakdown dual-breakdown"><span><b>${calendar.activeDays}</b> token days</span><span><b>${calendar.contextReusePct == null ? "—" : `${calendar.contextReusePct}%`}</b> cache reuse</span><span><b>${githubOk ? data.longestStreak : 0}</b> GitHub streak</span></p>
     <p class="gh-source">Local CLI logs + authenticated GitHub GraphQL · hover any day for detail</p>
   </article>`;
-}
-
-function monthCards(data) {
-  const groups = new Map();
-  for (const day of data.weeks.flatMap((week) => week.days)) {
-    const key = day.date.slice(0, 7);
-    const days = groups.get(key) || [];
-    days.push(day);
-    groups.set(key, days);
-  }
-
-  const months = [...groups.entries()].map(([key, days]) => {
-    const total = days.reduce((sum, day) => sum + day.count, 0);
-    const date = new Date(`${key}-15T12:00:00`);
-    return {
-      label: new Intl.DateTimeFormat("en", { month: "short" }).format(date),
-      fullLabel: new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(date),
-      total,
-    };
-  });
-  const maximum = Math.max(1, ...months.map((month) => month.total));
-
-  return months.map((month) => {
-    const level = month.total ? Math.max(1, Math.ceil((month.total / maximum) * 4)) : 0;
-    return `<section class="gh-month-card l${level}" title="${escapeHtml(`${month.fullLabel}: ${integers.format(month.total)} contributions`)}"><h3>${escapeHtml(month.label)}<span>${escapeHtml(integers.format(month.total))}</span></h3></section>`;
-  }).join("");
 }
 
 function correlationMonthCards(data, calendar) {
@@ -411,6 +393,11 @@ export async function mountGitHubContributionPrototype() {
   document.addEventListener("click", (event) => {
     const button = event.target.closest?.("[data-gh-variant]");
     if (button) selectVariant(button.dataset.ghVariant);
+    const view = event.target.closest?.("[data-activity-view]");
+    if (view) {
+      activityView = view.dataset.activityView === "github" ? "github" : "usage";
+      render();
+    }
     const ledger = event.target.closest?.("[data-open-usage]");
     if (ledger) {
       event.preventDefault();

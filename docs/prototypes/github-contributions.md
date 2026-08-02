@@ -1,6 +1,6 @@
-# PROTOTYPE — GitHub contribution card
+# PROTOTYPE — token spend and GitHub activity card
 
-Question: **which compact GitHub contribution card can join the quota grid without turning LLM Quota into a generic analytics dashboard or forcing desktop scrolling?**
+Question: **how should daily token spend and GitHub activity share one useful dashboard surface without forcing desktop scrolling?**
 
 This prototype deliberately lives only on `prototype/github-contributions-card`. Run it with:
 
@@ -10,9 +10,9 @@ bun run dev
 
 Then compare the three variants on the existing dashboard:
 
-- `http://localhost:4747/?variant=A` — calendar first
-- `http://localhost:4747/?variant=B` — activity split
-- `http://localhost:4747/?variant=C` — monthly mosaic
+- `http://localhost:4747/?variant=A` — token-spend calendar with a GitHub toggle
+- `http://localhost:4747/?variant=B` — token and GitHub calendars side by side
+- `http://localhost:4747/?variant=C` — monthly token-cost/GitHub correlation
 
 The floating switcher and the left/right arrow keys cycle variants without reloading the page. Without a `variant` parameter, A is rendered without prototype controls.
 
@@ -20,6 +20,8 @@ The floating switcher and the left/right arrow keys cycle variants without reloa
 
 - Uses the official `gh api graphql` command and the already-authenticated GitHub CLI viewer.
 - Reads GitHub's one-year `contributionsCollection` calendar plus commit, pull-request, issue and review counts.
+- Reads the real timestamps stored in Codex, Claude Code, OpenCode and Kimi Code logs.
+- Aggregates each day into tokens, cache, output, reasoning, calls, pricing coverage and estimated API-equivalent euros.
 - Computes active days, current streak, longest streak and busiest day locally.
 - Keeps results in memory for ten minutes; no persistent cache is added.
 - The GitHub credential never enters the browser or the LLM Quota process.
@@ -27,9 +29,9 @@ The floating switcher and the left/right arrow keys cycle variants without reloa
 
 ## Current verdict
 
-**B — Activity split** is the strongest fit. It preserves the recognizable contribution heatmap while putting total, active days and streaks before it. A is the safest conventional option; C is useful but pushes the product farther toward a general activity dashboard.
+**A — Token spend with GitHub toggle** is the strongest fit. It answers the product's local-usage question first, keeps the detailed ledger one click away and preserves the familiar GitHub calendar behind an explicit button. B is the best direct comparison view; C is useful for investigating correlation but is denser than a quota dashboard needs to be.
 
-GitHub is now the sixth visible card in the four-column masonry, alongside five providers with measurable quotas. All three variants have zero horizontal and vertical overflow at 1920×1080, 1440×900, 1366×768 and 1280×720. Mobile remains a deliberate single-column scrolling layout so the data is not compressed beyond usefulness.
+On desktop viewports at least 850px tall, the activity surface spans the strip below the provider columns—the unused area identified during visual review. On shorter laptops it returns to the masonry as the sixth card. All variants have zero horizontal and vertical overflow at 1920×1080, 1440×900, 1366×768 and 1280×720. Mobile remains a deliberate single-column scrolling layout so the data is not compressed beyond usefulness.
 
 After validation, rewrite the winner as production code and remove this document, both `.prototype.*` modules, the losing variants and the switcher from the main branch.
 
