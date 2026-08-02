@@ -52,14 +52,26 @@ export const opencodeZen: Provider = {
       return { ...base, status: "unauthenticated", needsKey: true, message: "Invalid OpenCode Zen key." };
     }
 
-    const models = Array.isArray(res.body?.data) ? res.body.data.length : undefined;
-    if (res.ok && models != null) {
+    const allModels: any[] = Array.isArray(res.body?.data) ? res.body.data : [];
+    const freeModels = allModels.filter((m: any) => typeof m?.id === "string" && m.id.endsWith("-free"));
+    const freeCount = freeModels.length;
+    const totalCount = allModels.length;
+
+    if (res.ok && totalCount > 0) {
+      const freeNames = freeModels.map((m: any) => m.id.replace("-free", "")).join(", ");
       return {
         ...base,
-        status: "partial",
+        status: "ok",
         authSource: source,
-        message: `Key is valid: ${models} models available. Zen exposes no credits over the API: the balance lives on opencode.ai.`,
-        raw: { models },
+        metrics: [
+          {
+            label: "Stato Modelli Free",
+            remaining: 100,
+            unit: "percent",
+          },
+        ],
+        message: `${freeCount} modelli FREE attivi (${freeNames}). OpenCode non fornisce un contatore numerico a scalare per i modelli gratuiti: l'accesso è regolato da un rate-limit dinamico (Fair Use).`,
+        raw: { totalModels: totalCount, freeModels: freeModels.map((m: any) => m.id) },
       };
     }
 

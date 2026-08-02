@@ -232,6 +232,11 @@
           border-color: rgba(160, 190, 255, 0.9);
           background: rgba(91, 140, 255, 0.08);
         }
+        /* Modal dialogs live in the browser top layer, above the document-level
+           custom cursor. Keep a native cursor available while this one is open. */
+        .usage-dialog, .usage-dialog * { cursor: auto; }
+        .usage-dialog::backdrop { cursor: default; }
+        .usage-dialog button { cursor: pointer; }
       }
       @media (pointer: coarse) { .cur, .cur-ring { display: none; } }
 
@@ -293,6 +298,19 @@
       }
       .sub b { color: var(--text); font-weight: 600; }
       .actions { display: flex; gap: 10px; }
+      .usage-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-family: "JetBrains Mono", "Mono Fallback", monospace;
+        font-variant-numeric: tabular-nums;
+      }
+      .usage-trigger .usage-trigger-label {
+        color: var(--muted);
+        font-family: "Schibsted Grotesk", "Schibsted Fallback", sans-serif;
+        font-size: var(--t-sm);
+      }
+      .usage-trigger.is-loading .usage-amount { opacity: 0.55; }
 
       button {
         font: inherit;
@@ -322,6 +340,260 @@
         transition: transform 0.6s var(--ease-out);
       }
       button.primary:hover::after { transform: translateX(120%); }
+
+      /* ---------- local token usage dialog ---------- */
+      .usage-dialog {
+        width: min(1120px, calc(100vw - 32px));
+        max-height: min(860px, calc(100vh - 32px));
+        padding: 0;
+        color: var(--text);
+        background: #090d17;
+        border: 1px solid var(--line-strong);
+        border-radius: var(--r-lg);
+        box-shadow: 0 28px 90px rgba(0, 0, 0, 0.65), 0 0 70px rgba(91, 140, 255, 0.08);
+        overflow: hidden;
+      }
+      .usage-dialog::backdrop {
+        background: rgba(2, 4, 10, 0.78);
+        backdrop-filter: blur(7px);
+      }
+      .usage-dialog[open] { animation: dialog-in 0.3s var(--ease-expo); }
+      @keyframes dialog-in {
+        from { opacity: 0; transform: translateY(12px) scale(0.985); }
+      }
+      .usage-shell {
+        max-height: min(860px, calc(100vh - 32px));
+        overflow: auto;
+        overscroll-behavior: contain;
+      }
+      .usage-head {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 18px 20px;
+        background: rgba(9, 13, 23, 0.96);
+        border-bottom: 1px solid var(--line);
+      }
+      .usage-head > div:first-child { flex: 1; min-width: 0; }
+      .usage-kicker {
+        color: var(--accent);
+        font: 500 10px / 1 "JetBrains Mono", "Mono Fallback", monospace;
+        letter-spacing: 1.6px;
+        text-transform: uppercase;
+      }
+      .usage-head h2 {
+        margin-top: 5px;
+        font-family: "Syne", sans-serif;
+        font-size: 22px;
+        line-height: 1;
+      }
+      .usage-head-actions { display: flex; gap: 6px; }
+      .usage-head-actions button {
+        min-width: 40px;
+        min-height: 40px;
+        padding: 0 10px;
+        background: transparent;
+      }
+      .usage-body { padding: 20px; }
+      .usage-loading {
+        min-height: 280px;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        text-align: center;
+      }
+      .usage-loading .spin { color: var(--accent); font-size: 24px; margin-bottom: 10px; }
+      .usage-error { color: #ffaaa6; }
+      .usage-total {
+        position: relative;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 22px;
+        border: 1px solid rgba(91, 140, 255, 0.28);
+        border-radius: var(--r-lg);
+        background:
+          radial-gradient(circle at 15% 20%, rgba(91, 140, 255, 0.2), transparent 38%),
+          linear-gradient(135deg, rgba(20, 31, 58, 0.94), rgba(12, 14, 26, 0.94));
+        overflow: hidden;
+      }
+      .usage-total::after {
+        content: "";
+        position: absolute;
+        right: -70px;
+        bottom: -100px;
+        width: 260px;
+        height: 260px;
+        border: 1px solid rgba(155, 91, 255, 0.18);
+        border-radius: 50%;
+        box-shadow: 0 0 0 34px rgba(91, 140, 255, 0.025), 0 0 0 68px rgba(91, 140, 255, 0.018);
+        pointer-events: none;
+      }
+      .usage-total-label {
+        display: block;
+        color: var(--muted);
+        font-size: var(--t-sm);
+      }
+      .usage-total strong {
+        position: relative;
+        display: block;
+        margin: 3px 0 2px;
+        font: 700 clamp(36px, 7vw, 68px) / 1 "Syne", sans-serif;
+        letter-spacing: -3px;
+      }
+      .usage-total small { color: var(--dim); }
+      .coverage-pill {
+        position: relative;
+        z-index: 1;
+        flex: none;
+        padding: 8px 12px;
+        border-radius: var(--r-full);
+        color: #bcd0ff;
+        background: rgba(91, 140, 255, 0.13);
+        border: 1px solid rgba(91, 140, 255, 0.25);
+        font: 500 var(--t-xs) / 1 "JetBrains Mono", "Mono Fallback", monospace;
+      }
+      .usage-stats {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 8px;
+        margin: 12px 0 18px;
+      }
+      .usage-stat {
+        min-width: 0;
+        padding: 12px;
+        background: rgba(15, 21, 35, 0.78);
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+      }
+      .usage-stat span {
+        display: block;
+        color: var(--dim);
+        font-size: 10px;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+      }
+      .usage-stat b {
+        display: block;
+        margin-top: 4px;
+        overflow: hidden;
+        color: var(--text);
+        font: 500 var(--t-md) / 1.2 "JetBrains Mono", "Mono Fallback", monospace;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .usage-stat.reasoning b { color: #c5a6ff; }
+      .usage-stat.efficiency b { color: #91e2c0; }
+      .usage-section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 16px 0 8px;
+      }
+      .usage-section-head h3 {
+        margin: 0;
+        font-family: "Syne", sans-serif;
+        font-size: var(--t-md);
+      }
+      .usage-section-head span { color: var(--dim); font-size: var(--t-xs); }
+      .source-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .source-chip {
+        padding: 5px 8px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-full);
+        color: var(--muted);
+        font-size: var(--t-xs);
+      }
+      .source-chip::before {
+        content: "";
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        margin-right: 6px;
+        border-radius: 50%;
+        background: var(--ok);
+      }
+      .source-chip.is-missing::before { background: var(--dim); }
+      .source-chip.is-error::before { background: var(--err); }
+      .source-chip.is-unsupported::before { background: var(--warn); }
+      .usage-table-wrap {
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        overflow: hidden;
+      }
+      .usage-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      .usage-table th {
+        padding: 9px 10px;
+        color: var(--dim);
+        background: #0d1320;
+        border-bottom: 1px solid var(--line);
+        font: 500 10px / 1 "JetBrains Mono", "Mono Fallback", monospace;
+        letter-spacing: 0.5px;
+        text-align: right;
+        text-transform: uppercase;
+      }
+      .usage-table th:first-child { width: 27%; text-align: left; }
+      .usage-table th:nth-child(2) { width: 14%; text-align: left; }
+      .usage-table th:nth-child(6) { width: 11%; }
+      .usage-table th:nth-child(7) { width: 13%; }
+      .usage-table td {
+        padding: 10px;
+        border-bottom: 1px solid rgba(120, 150, 200, 0.09);
+        color: var(--muted);
+        font: 500 var(--t-xs) / 1.35 "JetBrains Mono", "Mono Fallback", monospace;
+        text-align: right;
+        vertical-align: middle;
+        font-variant-numeric: tabular-nums;
+      }
+      .usage-table tr:last-child td { border-bottom: 0; }
+      .usage-table tbody tr:hover { background: rgba(91, 140, 255, 0.045); }
+      .usage-model { text-align: left !important; }
+      .usage-model strong {
+        display: block;
+        overflow: hidden;
+        color: var(--text);
+        font-family: "Schibsted Grotesk", "Schibsted Fallback", sans-serif;
+        font-size: var(--t-sm);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .usage-model span { color: var(--dim); }
+      .usage-mode { text-align: left !important; }
+      .agent-pill {
+        display: inline-block;
+        margin-top: 3px;
+        padding: 2px 5px;
+        border-radius: 5px;
+        color: #c4d3f5;
+        background: rgba(91, 140, 255, 0.11);
+      }
+      .agent-pill.is-subagent { color: #d6bfff; background: rgba(155, 91, 255, 0.13); }
+      .usage-table small { display: block; color: var(--dim); font-size: 9px; }
+      .usage-efficiency { color: #91e2c0 !important; }
+      .usage-cost { color: #b8f1c0 !important; }
+      .usage-note {
+        margin-top: 12px;
+        color: var(--dim);
+        font-size: var(--t-xs);
+        line-height: 1.55;
+      }
+      .usage-note b { color: var(--muted); font-weight: 500; }
+
+      @media (max-width: 820px) {
+        .usage-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+        .usage-table th:nth-child(3), .usage-table td:nth-child(3),
+        .usage-table th:nth-child(4), .usage-table td:nth-child(4) { display: none; }
+        .usage-table th:first-child { width: 30%; }
+        .usage-table th:nth-child(2) { width: 20%; }
+        .usage-table th:nth-child(5) { width: 17%; }
+        .usage-table th:nth-child(6) { width: 17%; }
+        .usage-table th:nth-child(7) { width: 16%; }
+      }
 
       /* ================================================================
          THE HORIZON — the one idea. Every reset the six providers will
@@ -796,6 +1068,19 @@
         .hz-next { max-width: 100%; }
         .actions { width: 100%; }
         .actions button { flex: 1; }
+        .usage-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
+        .usage-shell { max-height: calc(100vh - 16px); }
+        .usage-body { padding: 12px; }
+        .usage-head { padding: 14px 12px; }
+        .usage-total { align-items: flex-start; flex-direction: column; padding: 18px; }
+        .usage-total strong { letter-spacing: -2px; }
+        .usage-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .usage-coverage-head { align-items: flex-start; flex-direction: column; }
+        .usage-table th:nth-child(2), .usage-table td:nth-child(2) { display: none; }
+        .usage-table th:nth-child(5), .usage-table td:nth-child(5) { display: none; }
+        .usage-table th:first-child { width: 46%; }
+        .usage-table th:nth-child(6) { width: 24%; }
+        .usage-table th:nth-child(7) { width: 30%; }
         .card-top { align-items: flex-start; }
         .name { font-size: var(--t-md); }
       }
@@ -840,6 +1125,10 @@
       </div>
       <div class="actions">
         <button id="openWidget" title="Open the desktop widget">▣ Widget</button>
+        <button class="usage-trigger is-loading" id="openUsage" type="button" aria-haspopup="dialog" aria-controls="usageDialog" title="Open local token usage">
+          <span class="usage-amount" id="usageAmount" aria-live="polite">€ …</span>
+          <span class="usage-trigger-label">Usage</span>
+        </button>
         <button class="primary" id="refreshAll">↻ Refresh all</button>
       </div>
      </div>
@@ -921,6 +1210,24 @@
 
     <!-- Visual echo of each marker's aria-label; the label already speaks it. -->
     <div class="hz-tip" id="hzTip" aria-hidden="true"></div>
+
+    <dialog class="usage-dialog" id="usageDialog" aria-labelledby="usageTitle">
+      <div class="usage-shell">
+        <div class="usage-head">
+          <div>
+            <p class="usage-kicker">Local CLI history</p>
+            <h2 id="usageTitle">Token usage &amp; API equivalent</h2>
+          </div>
+          <div class="usage-head-actions">
+            <button id="refreshUsage" type="button" title="Refresh token usage" aria-label="Refresh token usage">↻</button>
+            <button id="closeUsage" type="button" title="Close" aria-label="Close token usage">×</button>
+          </div>
+        </div>
+        <div class="usage-body" id="usageBody">
+          <div class="usage-loading"><div><span class="spin">↻</span><br />Reading local token histories…</div></div>
+        </div>
+      </div>
+    </dialog>
 
     <script type="module" src="/app.js"></script>
   </body>

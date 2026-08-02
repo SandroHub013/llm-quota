@@ -39,6 +39,9 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
   marcatore si illumina la card corrispondente, e viceversa.
 - 🔑 **Riusa le sessioni che hai già** — legge i token OAuth che le CLI ufficiali (`claude`,
   `codex`, `opencode`) hanno già scritto su disco. Per quasi tutti i provider, zero login nuovi.
+- 💶 **Registro token locale** — somma la cronologia di Codex, Claude Code, OpenCode e Kimi
+  Code per modello, effort e main/subagent, stimandone in euro il valore API equivalente e
+  mostrando un indice di efficienza basato sul riuso del contesto.
 - 🔒 **Local-first** — nessun cloud, nessun database, nessun account. Chiavi e token non lasciano
   mai la macchina.
 - 🚫 **Zero richieste di terze parti** — font e loghi sono serviti da `public/`. La pagina non
