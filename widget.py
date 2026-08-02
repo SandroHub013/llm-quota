@@ -690,10 +690,14 @@ class Widget(tk.Tk):
 
         if self.surface.winfo_ismapped():
             surface_handle = native_window_handle(self.surface)
-            apply_native_acrylic(surface_handle)
-            set_window_shape(surface_handle, [
-                ("round", 0, 0, self.surface.winfo_width(), self.surface.winfo_height())
-            ])
+            # DWM already clips Acrylic with an antialiased rounded silhouette.
+            # A second GDI region uses a different radius and exposes crescent-
+            # shaped slivers of the desktop at every corner. Keep GDI only as a
+            # fallback on systems where native Acrylic is unavailable.
+            if not apply_native_acrylic(surface_handle):
+                set_window_shape(surface_handle, [
+                    ("round", 0, 0, self.surface.winfo_width(), self.surface.winfo_height())
+                ])
 
     def _load_icons(self):
         def _fetch(pid, domain):
