@@ -203,6 +203,15 @@ class WidgetPositionTest(unittest.TestCase):
         )
 
 
+class GlassEffectTest(unittest.TestCase):
+    def test_acrylic_tint_is_packed_for_the_windows_compositor(self):
+        self.assertEqual(widget.abgr_color("#0b1623", 125), 0x7D23160B)
+
+    def test_surface_keeps_a_readable_transparent_fallback(self):
+        self.assertGreaterEqual(widget.SURFACE_OPACITY, 0.8)
+        self.assertLess(widget.SURFACE_OPACITY, 0.95)
+
+
 class PollingTest(unittest.TestCase):
     def test_live_intervals_match_each_data_source(self):
         self.assertEqual(widget.POLL_MS, 60_000)
