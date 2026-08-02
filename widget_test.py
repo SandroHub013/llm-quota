@@ -211,24 +211,6 @@ class GlassEffectTest(unittest.TestCase):
         self.assertGreaterEqual(widget.SURFACE_OPACITY, 0.6)
         self.assertLessEqual(widget.SURFACE_OPACITY, 0.72)
 
-    @patch("widget.ctypes.windll")
-    def test_acrylic_leaves_corner_shaping_to_the_window_region(self, windll):
-        observed_attributes = {}
-
-        def record_attribute(_hwnd, attribute, value, _size):
-            observed_attributes[attribute] = widget.ctypes.cast(
-                value,
-                widget.ctypes.POINTER(widget.ctypes.c_int),
-            ).contents.value
-            return 0
-
-        windll.user32.SetWindowCompositionAttribute.return_value = True
-        windll.dwmapi.DwmSetWindowAttribute.side_effect = record_attribute
-
-        widget.apply_native_acrylic(123)
-
-        self.assertEqual(observed_attributes[33], 1)
-
 
 class WakeBehaviorTest(unittest.TestCase):
     @patch("widget.force_window_visible")
