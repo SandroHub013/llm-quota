@@ -52,6 +52,7 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
 - 🪟 **Widget desktop Windows** — widget Tk flottante sempre in primo piano, lanciato dalla
   dashboard tramite il protocollo `llmquota://widget`. Aggiorna silenziosamente le quote ogni
   minuto, la spesa locale ogni cinque secondi e mantiene vivi i countdown tra una richiesta e l'altra.
+  Mostra solo i cinque provider con quote misurabili; OpenCode resta incluso nella spesa locale.
 - ♿ **Accessibile** — navigazione da tastiera, `prefers-reduced-motion` rispettato, tutte le card
   principali a schermo senza scroll nei comuni viewport desktop e laptop.
 

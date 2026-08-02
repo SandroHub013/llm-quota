@@ -52,7 +52,8 @@ glance which subscription is free, which is cooling down, and exactly when to co
   exit codes, so an agent can check its own budget before starting a long job.
 - 🪟 **Windows desktop widget** — a floating always-on-top Tk widget, launched from the dashboard
   via the `llmquota://widget` protocol. It silently refreshes quotas every minute, local spend
-  every five seconds, and keeps reset countdowns moving between requests.
+  every five seconds, and keeps reset countdowns moving between requests. It shows only the five
+  measurable quota providers; OpenCode remains included in local spend.
 - ♿ **Accessible** — full keyboard navigation, `prefers-reduced-motion` respected, all primary
   providers on screen without scrolling from 1280×800 up.
 

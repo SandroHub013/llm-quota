@@ -41,6 +41,27 @@ class FetchAllTest(unittest.TestCase):
         )
         get_json.assert_called_once_with("/api/quota", timeout=40)
 
+    @patch("widget.get_json")
+    def test_hides_opencode_quota_but_keeps_measurable_providers(self, get_json):
+        get_json.return_value = {
+            "providers": [
+                {
+                    "id": "opencode-zen",
+                    "name": "OpenCode Zen",
+                    "status": "no_endpoint",
+                    "metrics": [],
+                },
+                {
+                    "id": "codex",
+                    "name": "Codex",
+                    "status": "ok",
+                    "metrics": [{"used": 25, "limit": 100}],
+                },
+            ]
+        }
+
+        self.assertEqual([provider["id"] for provider in widget.fetch_all()], ["codex"])
+
     @patch("widget.get_json", return_value={"providers": [{"id": "broken"}]})
     def test_malformed_provider_payload_marks_widget_offline(self, _get_json):
         self.assertIsNone(widget.fetch_all())
