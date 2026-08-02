@@ -95,7 +95,7 @@ USAGE_POLL_MS = 5_000
 COUNTDOWN_TICK_MS = 30_000
 HORIZON_SEC = 7 * 24 * 60 * 60
 SURFACE_OPACITY = 0.68
-GLASS_TINT = "#0b1623"
+GLASS_TINT = "#000000"
 GLASS_TINT_ALPHA = 82
 MUTEX_NAME = "Local\\LLMQuotaWidget"
 WAKE_PORT = 51122
@@ -455,7 +455,7 @@ STATUS_DOT = {
     "no_endpoint": "#6e7681",
     "error": "#f85149",
 }
-BG, PANEL, BORDER = "#05060b", "#101522", "#1d2740"
+BG, PANEL, BORDER = "#060606", "#151515", "#1d2740"
 FG, MUT, IDLE = "#eef3fa", "#8d9cb3", "#6e7681"
 ACCENT, VIOLET, TRACK, ERR = "#5b8cff", "#9b5bff", "#1d2740", "#f85149"
 KEY = "#010101"  # color key made transparent by the window manager

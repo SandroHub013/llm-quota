@@ -207,6 +207,12 @@ class GlassEffectTest(unittest.TestCase):
     def test_acrylic_tint_is_packed_for_the_windows_compositor(self):
         self.assertEqual(widget.abgr_color("#0b1623", 125), 0x7D23160B)
 
+    def test_glass_background_layers_are_color_neutral(self):
+        for color in (widget.GLASS_TINT, widget.BG, widget.PANEL):
+            channels = tuple(int(color[index:index + 2], 16) for index in (1, 3, 5))
+            with self.subTest(color=color):
+                self.assertEqual(max(channels) - min(channels), 0)
+
     def test_surface_keeps_a_readable_transparent_fallback(self):
         self.assertGreaterEqual(widget.SURFACE_OPACITY, 0.6)
         self.assertLessEqual(widget.SURFACE_OPACITY, 0.72)
