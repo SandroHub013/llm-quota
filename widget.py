@@ -6,6 +6,7 @@ The widget has two display modes:
 
 Features:
 - Local provider logos (Claude, ChatGPT/Codex, Z.ai, Gemini, Kimi)
+- Native Windows acrylic glass without changing the existing widget layout
 - A live reset countdown for every measurable quota
 - Hover details for every provider window
 - A pulsing red Q ring when a quota is at or below 15%, or rate limited
@@ -93,7 +94,9 @@ POLL_MS = 60_000
 USAGE_POLL_MS = 5_000
 COUNTDOWN_TICK_MS = 30_000
 HORIZON_SEC = 7 * 24 * 60 * 60
-SURFACE_OPACITY = 0.95
+SURFACE_OPACITY = 0.88
+GLASS_TINT = "#0b1623"
+GLASS_TINT_ALPHA = 125
 MUTEX_NAME = "Local\\LLMQuotaWidget"
 WAKE_PORT = 51122
 
@@ -157,6 +160,60 @@ class Rect(ctypes.Structure):
         ("right", wintypes.LONG),
         ("bottom", wintypes.LONG),
     ]
+
+
+class AccentPolicy(ctypes.Structure):
+    _fields_ = (
+        ("accent_state", ctypes.c_int),
+        ("accent_flags", ctypes.c_int),
+        ("gradient_color", ctypes.c_uint),
+        ("animation_id", ctypes.c_int),
+    )
+
+
+class WindowCompositionAttributeData(ctypes.Structure):
+    _fields_ = (
+        ("attribute", ctypes.c_int),
+        ("data", ctypes.c_void_p),
+        ("size", ctypes.c_size_t),
+    )
+
+
+def abgr_color(hex_color, alpha):
+    """Pack #RRGGBB and alpha into the ABGR value expected by DWM."""
+    red = int(hex_color[1:3], 16)
+    green = int(hex_color[3:5], 16)
+    blue = int(hex_color[5:7], 16)
+    return (alpha << 24) | (blue << 16) | (green << 8) | red
+
+
+def apply_native_acrylic(hwnd, tint=GLASS_TINT, alpha=GLASS_TINT_ALPHA):
+    """Enable native Windows acrylic blur, leaving window alpha as fallback."""
+    try:
+        policy = AccentPolicy(4, 2, abgr_color(tint, alpha), 0)
+        data = WindowCompositionAttributeData(
+            19,
+            ctypes.cast(ctypes.pointer(policy), ctypes.c_void_p),
+            ctypes.sizeof(policy),
+        )
+        setter = ctypes.windll.user32.SetWindowCompositionAttribute
+        setter.argtypes = (wintypes.HWND, ctypes.POINTER(WindowCompositionAttributeData))
+        setter.restype = wintypes.BOOL
+        applied = bool(setter(hwnd, ctypes.byref(data)))
+
+        dark_mode = ctypes.c_int(1)
+        rounded_corners = ctypes.c_int(2)
+        dwm = ctypes.windll.dwmapi
+        dwm.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark_mode), ctypes.sizeof(dark_mode))
+        dwm.DwmSetWindowAttribute(
+            hwnd,
+            33,
+            ctypes.byref(rounded_corners),
+            ctypes.sizeof(rounded_corners),
+        )
+        return applied
+    except (AttributeError, OSError, ValueError):
+        return False
 
 
 def set_window_shape(hwnd, regions):
@@ -606,6 +663,7 @@ class Widget(tk.Tk):
 
         if self.surface.winfo_ismapped():
             surface_handle = handle(self.surface)
+            apply_native_acrylic(surface_handle)
             set_window_shape(surface_handle, [
                 ("round", 0, 0, self.surface.winfo_width(), self.surface.winfo_height())
             ])

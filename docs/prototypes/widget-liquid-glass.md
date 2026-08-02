@@ -29,3 +29,7 @@ py widget_liquid_glass_prototype.py --server-url http://localhost:8080
 The prototype uses the native Windows acrylic composition API when available and falls back to whole-window alpha transparency. Drag anywhere on the glass surface to reposition it; press `Esc` or right-click to close it.
 
 Once one direction wins, only that decision should be rewritten into `widget.py`; this comparison harness stays on the prototype branch.
+
+## Verdict
+
+All three structural variants were rejected. The validated direction is the existing production widget, unchanged in layout and behaviour, with native Acrylic blur and stronger transparency applied only to its current surface. That implementation is now carried by `widget.py` on this prototype branch; the comparison harness remains here solely as the rejected primary source.
