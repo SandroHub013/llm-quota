@@ -20,15 +20,18 @@ import re
 import subprocess
 import sys
 import threading
+import time
 import tkinter as tk
 import urllib.request
 import webbrowser
 import winreg
 from datetime import datetime, timezone
-from math import sqrt
+from math import isfinite, sqrt
 
 BASE = "http://localhost:4747"
-POLL_MS = 5 * 60_000
+POLL_MS = 60_000
+USAGE_POLL_MS = 5_000
+COUNTDOWN_TICK_MS = 30_000
 HORIZON_SEC = 7 * 24 * 60 * 60
 SURFACE_OPACITY = 0.95
 MUTEX_NAME = "Local\\LLMQuotaWidget"
@@ -237,13 +240,41 @@ def horizon_position(sec, width):
     return round(width * sqrt(min(max(sec, 0), HORIZON_SEC) / HORIZON_SEC))
 
 
-def horizon_events(data):
+def horizon_events(data, elapsed=0):
     events = []
     for provider in data:
         for reset in provider.get("resets", []):
-            if 0 < reset["sec"] <= HORIZON_SEC:
-                events.append({"id": provider["id"], "name": provider["name"], **reset})
+            sec = reset["sec"] - max(0, elapsed)
+            if 0 < sec <= HORIZON_SEC:
+                events.append({"id": provider["id"], "name": provider["name"], **reset, "sec": sec})
     return sorted(events, key=lambda event: event["sec"])
+
+
+def format_eur(value):
+    """Compact Italian EUR formatting without changing the process locale."""
+    amount = max(0, float(value or 0))
+    whole, decimals = f"{amount:,.2f}".split(".")
+    return f"€{whole.replace(',', '.')},{decimals}"
+
+
+def quota_signature(data):
+    """Visible quota state, excluding relative countdown text and fetch timing."""
+    if data is None:
+        return None
+    return tuple(
+        (
+            provider.get("id"),
+            provider.get("name"),
+            provider.get("status"),
+            provider.get("remaining"),
+            re.sub(r"\s+\(resets in [^)]+\)", "", str(provider.get("details_str") or "")),
+            tuple(
+                (reset.get("label"), reset.get("used_pct"), reset.get("reset_at"))
+                for reset in provider.get("resets", [])
+            ),
+        )
+        for provider in data
+    )
 
 
 BRAND = {
@@ -314,6 +345,15 @@ def get_json(path, timeout=40):
         return json.load(r)
 
 
+def fetch_usage_cost():
+    """Read the live local API-equivalent spend, preserving zero as valid data."""
+    try:
+        value = float(get_json("/api/usage", timeout=40)["estimatedCostEur"])
+        return value if isfinite(value) and value >= 0 else None
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+
+
 def fetch_all():
     """Return [{id, name, status, remaining, reset_str, details_str}]"""
     try:
@@ -340,6 +380,7 @@ def fetch_all():
                     resets.append({
                         "label": lbl,
                         "sec": sec,
+                        "reset_at": reset_at,
                         "used_pct": max(0, min(100, 100 - rem)) if rem is not None else 0,
                     })
 
@@ -373,6 +414,7 @@ def fetch_all():
                 "name": d["name"],
                 "status": d.get("status", "error"),
                 "remaining": remaining,
+                "reset_sec": reset_sec,
                 "reset_str": reset_str,
                 "resets": resets,
                 "details_str": details_str,
@@ -420,7 +462,23 @@ class Widget(tk.Tk):
         self._drag_origin = None
         self._user_positioned = False
         self._refresh_job = None
+        self._usage_job = None
+        self._tick_job = None
+        self._cost_animation_job = None
         self._loading = False
+        self._usage_loading = False
+        self._quota_online = False
+        self._quota_signature = None
+        self._last_data_at = time.monotonic()
+        self.usage_cost = None
+        self.displayed_usage_cost = None
+        self._row_reset_labels = {}
+        self._minibar_reset_labels = {}
+        self._live_labels = []
+        self._spend_labels = []
+        self._horizon_canvas = None
+        self._horizon_next_label = None
+        self._horizon_markers = []
 
         for window in (self, self.surface):
             window.bind("<Double-Button-1>", lambda e: self.destroy())
@@ -458,6 +516,8 @@ class Widget(tk.Tk):
         self._fade(0.0)
         self.after_idle(self._apply_window_effects)
         self.refresh()
+        self.refresh_usage()
+        self._tick_job = self.after(COUNTDOWN_TICK_MS, self._tick_live_values)
 
     def _apply_window_effects(self):
         self.update_idletasks()
@@ -678,7 +738,153 @@ class Widget(tk.Tk):
 
     def _finish_load(self, data):
         self._loading = False
-        self._render(data)
+        if data is None:
+            self._quota_online = False
+            if self.last_data is None:
+                self._render(None)
+            self._update_live_status()
+            return
+
+        signature = quota_signature(data)
+        changed = signature != self._quota_signature
+        self._last_data_at = time.monotonic()
+        self._quota_online = True
+        if changed:
+            self._quota_signature = signature
+            self._render(data)
+        else:
+            # Refresh the countdown baseline and tooltip payload without replacing
+            # any Tk widgets the user is currently hovering or dragging.
+            self.last_data = data
+            self._update_live_values()
+        self._update_live_status()
+
+    def refresh_usage(self):
+        if self._usage_job is not None:
+            self.after_cancel(self._usage_job)
+        if not self._usage_loading:
+            self._usage_loading = True
+            threading.Thread(target=self._load_usage, daemon=True).start()
+        self._usage_job = self.after(USAGE_POLL_MS, self.refresh_usage)
+
+    def _load_usage(self):
+        cost = fetch_usage_cost()
+        self.after(0, lambda: self._finish_usage(cost))
+
+    def _finish_usage(self, cost):
+        self._usage_loading = False
+        if cost is not None:
+            self.usage_cost = cost
+            self._animate_usage_cost(cost)
+
+    def _animate_usage_cost(self, target):
+        target = max(0, float(target))
+        start = self.displayed_usage_cost if self.displayed_usage_cost is not None else 0.0
+        if self._cost_animation_job is not None:
+            self.after_cancel(self._cost_animation_job)
+            self._cost_animation_job = None
+        if format_eur(start) == format_eur(target):
+            self.displayed_usage_cost = target
+            self._update_spend_labels()
+            return
+
+        started_at = time.monotonic()
+
+        def step():
+            progress = min(1.0, (time.monotonic() - started_at) / 0.9)
+            eased = 1 - (1 - progress) ** 3
+            self.displayed_usage_cost = start + (target - start) * eased
+            self._update_spend_labels()
+            if progress < 1:
+                self._cost_animation_job = self.after(33, step)
+            else:
+                self.displayed_usage_cost = target
+                self._cost_animation_job = None
+                self._update_spend_labels()
+
+        step()
+
+    def _update_spend_labels(self):
+        text = "€ …" if self.displayed_usage_cost is None else f"≈ {format_eur(self.displayed_usage_cost)}"
+        for label in self._spend_labels:
+            try:
+                label.config(text=text)
+            except tk.TclError:
+                pass
+
+    def _update_live_status(self):
+        text = "● LIVE" if self._quota_online else "● RETRY"
+        color = STATUS_DOT["ok"] if self._quota_online else STATUS_DOT["rate_limited"]
+        for label in self._live_labels:
+            try:
+                label.config(text=text, fg=color)
+            except tk.TclError:
+                pass
+
+    def _elapsed_since_load(self):
+        return max(0.0, time.monotonic() - self._last_data_at)
+
+    def _provider(self, provider_id):
+        return next((provider for provider in (self.last_data or []) if provider["id"] == provider_id), None)
+
+    def _update_live_values(self):
+        if not self.last_data:
+            return
+        elapsed = self._elapsed_since_load()
+        for provider_id, label in self._row_reset_labels.items():
+            provider = self._provider(provider_id)
+            reset = format_reset((provider.get("reset_sec") or 0) - elapsed) if provider else None
+            try:
+                label.config(text=f"({reset})" if reset else "")
+            except tk.TclError:
+                pass
+        for provider_id, label in self._minibar_reset_labels.items():
+            provider = self._provider(provider_id)
+            reset = format_reset((provider.get("reset_sec") or 0) - elapsed) if provider else None
+            try:
+                label.config(text=f"({reset})" if reset else "")
+            except tk.TclError:
+                pass
+        self._update_horizon_values(elapsed)
+
+    def _update_horizon_values(self, elapsed=None):
+        canvas = self._horizon_canvas
+        if canvas is None or self._horizon_next_label is None:
+            return
+        elapsed = self._elapsed_since_load() if elapsed is None else elapsed
+        events = horizon_events(self.last_data or [], elapsed)
+        by_key = {(event["id"], event["label"]): event for event in events}
+        left, right, baseline = self._horizon_geometry
+        for marker in self._horizon_markers:
+            event = by_key.get(marker["key"])
+            state = "normal" if event else "hidden"
+            for item in marker["items"]:
+                canvas.itemconfigure(item, state=state)
+            if not event:
+                continue
+            x = left + horizon_position(event["sec"], right - left)
+            stem = 10 + round(event["used_pct"] * 0.24)
+            y = baseline - stem
+            line, dot, text_item = marker["items"]
+            canvas.coords(line, x, baseline, x, y)
+            canvas.coords(dot, x - 7, y - 7, x + 7, y + 7)
+            canvas.coords(text_item, x, y)
+        if events:
+            first = events[0]
+            next_text = f"next · {first['name']} {first['label']} in {format_reset(first['sec'])}"
+        else:
+            next_text = "No resets in the next 7 days"
+        self._horizon_next_label.config(text=next_text)
+
+    def _tick_live_values(self):
+        self._update_live_values()
+        self._tick_job = self.after(COUNTDOWN_TICK_MS, self._tick_live_values)
+
+    def _horizon_tooltip(self, key):
+        for event in horizon_events(self.last_data or [], self._elapsed_since_load()):
+            if (event["id"], event["label"]) == key:
+                return f"{event['name']} · {event['label']}\nresets in {format_reset(event['sec'])}"
+        return "Reset elapsed"
 
     def _hover(self, row, on):
         bg = PANEL if on else BG
@@ -719,8 +925,10 @@ class Widget(tk.Tk):
             tk.Label(row, text=f"{rem}%", bg=BG, fg=quota_color(rem),
                      font=MONO, width=4, anchor="e").pack(side="left")
             rst_txt = f"({reset_str})" if reset_str else ""
-            tk.Label(row, text=rst_txt, bg=BG, fg=MUT,
-                     font=MONO, width=9, anchor="w").pack(side="left", padx=(4, 0))
+            reset_label = tk.Label(row, text=rst_txt, bg=BG, fg=MUT,
+                                   font=MONO, width=9, anchor="w")
+            reset_label.pack(side="left", padx=(4, 0))
+            self._row_reset_labels[d["id"]] = reset_label
         else:
             txt = STATUS_LABEL.get(d["status"], d["status"])
             tk.Label(row, text=txt, bg=BG, fg=MUT,
@@ -731,7 +939,7 @@ class Widget(tk.Tk):
         dot.pack(side="left", padx=(2, 8))
 
         # Tooltip con dettagli finestre
-        Tooltip(row, lambda: d.get("details_str"))
+        Tooltip(row, lambda provider_id=d["id"]: (self._provider(provider_id) or d).get("details_str"))
 
         row.pack(fill="x")
         for w in (row, *row.winfo_children()):
@@ -745,6 +953,7 @@ class Widget(tk.Tk):
             self.horizon_frame.destroy()
 
         self.horizon_frame = tk.Frame(self.panel, bg=BG)
+        self._horizon_markers = []
         events = horizon_events(data)
         tk.Label(self.horizon_frame, text="RESET HORIZON", bg=BG, fg=MUT,
                  font=("Cascadia Mono", 8), anchor="w").pack(fill="x", padx=8, pady=(6, 0))
@@ -753,12 +962,15 @@ class Widget(tk.Tk):
             next_text = f"next · {first['name']} {first['label']} in {format_reset(first['sec'])}"
         else:
             next_text = "No resets in the next 7 days"
-        tk.Label(self.horizon_frame, text=next_text, bg=BG, fg=FG,
-                 font=("Segoe UI", 8), anchor="w").pack(fill="x", padx=8)
+        self._horizon_next_label = tk.Label(self.horizon_frame, text=next_text, bg=BG, fg=FG,
+                                            font=("Segoe UI", 8), anchor="w")
+        self._horizon_next_label.pack(fill="x", padx=8)
 
         width, height, left, right, baseline = 300, 62, 8, 292, 43
         canvas = tk.Canvas(self.horizon_frame, width=width, height=height, bg=BG,
                            highlightthickness=0)
+        self._horizon_canvas = canvas
+        self._horizon_geometry = (left, right, baseline)
         canvas.create_line(left, baseline, right, baseline, fill=BORDER)
         for sec, label in ((0, "NOW"), (6 * 3600, "6h"), (24 * 3600, "24h"),
                            (72 * 3600, "3d"), (HORIZON_SEC, "7d")):
@@ -773,14 +985,14 @@ class Widget(tk.Tk):
             y = baseline - stem
             color, initial = BRAND.get(event["id"], (ACCENT, event["name"][0]))
             tag = f"horizon-{index}"
-            canvas.create_line(x, baseline, x, y, fill=color, width=2, tags=tag)
-            canvas.create_oval(x - 7, y - 7, x + 7, y + 7, fill=color, outline=BG,
-                               width=2, tags=tag)
-            canvas.create_text(x, y, text=initial, fill="#fff",
-                               font=("Segoe UI", 6, "bold"), tags=tag)
-            Tooltip(canvas,
-                    f"{event['name']} · {event['label']}\nresets in {format_reset(event['sec'])}",
-                    tag=tag)
+            line = canvas.create_line(x, baseline, x, y, fill=color, width=2, tags=tag)
+            dot = canvas.create_oval(x - 7, y - 7, x + 7, y + 7, fill=color, outline=BG,
+                                     width=2, tags=tag)
+            text_item = canvas.create_text(x, y, text=initial, fill="#fff",
+                                           font=("Segoe UI", 6, "bold"), tags=tag)
+            key = (event["id"], event["label"])
+            self._horizon_markers.append({"key": key, "items": (line, dot, text_item)})
+            Tooltip(canvas, lambda key=key: self._horizon_tooltip(key), tag=tag)
 
         canvas.pack(fill="x", padx=4)
         self.horizon_frame.pack(fill="x")
@@ -789,6 +1001,9 @@ class Widget(tk.Tk):
         if self.minibar_frame:
             self.minibar_frame.destroy()
 
+        self._minibar_reset_labels = {}
+        self._live_labels = []
+        self._spend_labels = []
         self.minibar_frame = tk.Frame(self.surface, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
         vertical = self.bar_orientation == "vertical"
 
@@ -811,10 +1026,12 @@ class Widget(tk.Tk):
             lbl_txt.pack(side="left", padx=1)
 
             if reset_str:
-                tk.Label(item, text=f"({reset_str})", bg=PANEL, fg=MUT, font=MONO).pack(side="left", padx=(0, 2))
+                reset_label = tk.Label(item, text=f"({reset_str})", bg=PANEL, fg=MUT, font=MONO)
+                reset_label.pack(side="left", padx=(0, 2))
+                self._minibar_reset_labels[d["id"]] = reset_label
 
             # Tooltip al passaggio del mouse
-            Tooltip(item, lambda d=d: d.get("details_str"))
+            Tooltip(item, lambda provider_id=d["id"]: (self._provider(provider_id) or d).get("details_str"))
 
             if vertical:
                 item.pack(fill="x", padx=3, pady=1)
@@ -822,6 +1039,16 @@ class Widget(tk.Tk):
                 item.pack(side="left", padx=2)
 
         controls = tk.Frame(self.minibar_frame, bg=PANEL)
+        spend = tk.Label(controls, text="€ …", bg=PANEL, fg="#b8f1c0", font=MONO)
+        spend.pack(side="left", padx=(4, 3), pady=2)
+        Tooltip(spend, "Live local API-equivalent token spend")
+        self._spend_labels.append(spend)
+
+        live = tk.Label(controls, text="● LIVE", bg=PANEL, fg=STATUS_DOT["ok"], font=("Cascadia Mono", 8))
+        live.pack(side="left", padx=(1, 3), pady=2)
+        Tooltip(live, "Silent updates: spend every 5 seconds, quotas every minute")
+        self._live_labels.append(live)
+
         orientation_text = "[ ↔ ]" if vertical else "[ ↕ ]"
         orientation_tip = "Switch to horizontal mini bar" if vertical else "Switch to vertical mini bar"
         btn_orientation = tk.Label(controls, text=orientation_text, bg=PANEL, fg=VIOLET,
@@ -843,6 +1070,8 @@ class Widget(tk.Tk):
 
         self.minibar_frame.pack()
         self.minibar_frame.bind("<B1-Motion>", self.drag)
+        self._update_spend_labels()
+        self._update_live_status()
 
     def _check_notifications(self, data):
         for d in data:
@@ -868,6 +1097,8 @@ class Widget(tk.Tk):
             return
         self.last_data = data
         self._check_notifications(data)
+        self._live_labels = []
+        self._spend_labels = []
 
         worst = [d["remaining"] for d in data if d["remaining"] is not None]
         mn = min(worst) if worst else None
@@ -883,6 +1114,7 @@ class Widget(tk.Tk):
 
         for w in self.rows:
             w.destroy()
+        self._row_reset_labels = {}
         self._render_horizon(data)
         if self.footer_frame:
             self.footer_frame.destroy()
@@ -890,7 +1122,7 @@ class Widget(tk.Tk):
 
         self.rows = [self._row(d) for d in data]
 
-        # Sleek footer: Dashboard link, Switch Vista e refresh manuale
+        # Live footer: navigation plus silent-update state and local spend.
         self.footer_frame = tk.Frame(self.panel, bg=BG)
         dash_btn = tk.Label(self.footer_frame, text="Dashboard ↗", bg=BG, fg=ACCENT, font=UI, cursor="hand2")
         dash_btn.pack(side="left", padx=(8, 0), pady=(4, 6))
@@ -900,9 +1132,16 @@ class Widget(tk.Tk):
         switch_btn.pack(side="left", padx=(10, 0), pady=(4, 6))
         switch_btn.bind("<Button-1>", lambda e: self.switch_view_mode())
 
-        ref_btn = tk.Label(self.footer_frame, text="↻ Refresh", bg=BG, fg=MUT, font=UI, cursor="hand2")
-        ref_btn.pack(side="right", padx=(0, 8), pady=(4, 6))
-        ref_btn.bind("<Button-1>", lambda e: self.refresh())
+        live = tk.Label(self.footer_frame, text="● LIVE", bg=BG, fg=STATUS_DOT["ok"],
+                        font=("Cascadia Mono", 8))
+        live.pack(side="right", padx=(4, 8), pady=(4, 6))
+        Tooltip(live, "Silent updates: spend every 5 seconds, quotas every minute")
+        self._live_labels.append(live)
+
+        spend = tk.Label(self.footer_frame, text="€ …", bg=BG, fg="#b8f1c0", font=MONO)
+        spend.pack(side="right", padx=(4, 0), pady=(4, 6))
+        Tooltip(spend, "Live local API-equivalent token spend")
+        self._spend_labels.append(spend)
 
         self.footer_frame.pack(fill="x")
 
@@ -911,6 +1150,9 @@ class Widget(tk.Tk):
         else:
             self.after_idle(self._sync_surface_to_logo)
         self.after_idle(self._apply_window_effects)
+        self._update_spend_labels()
+        self._update_live_status()
+        self._update_live_values()
 
 
 if __name__ == "__main__":
