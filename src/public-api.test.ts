@@ -23,6 +23,7 @@ test("usage detail validates the aggregate response", async () => {
     estimatedCostEur: 12.34,
     tokens: { total: 42 },
     rows: [],
+    daily: [],
   });
 
   expect((await loadUsage(request)).estimatedCostEur).toBe(12.34);

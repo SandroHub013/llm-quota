@@ -41,7 +41,8 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
   `codex`, `opencode`) hanno già scritto su disco. Per quasi tutti i provider, zero login nuovi.
 - 💶 **Registro token locale** — somma la cronologia di Codex, Claude Code, OpenCode e Kimi
   Code per modello, effort e main/subagent, stimandone in euro il valore API equivalente e
-  mostrando un indice di efficienza basato sul riuso del contesto.
+  mostrando un indice di efficienza basato sul riuso del contesto. Un calendario giornaliero in
+  stile GitHub mostra quando sono stati usati token ed euro; il tasto GitHub passa al calendario contribution.
 - 🔒 **Local-first** — nessun cloud, nessun database, nessun account. Chiavi e token non lasciano
   mai la macchina.
 - 🚫 **Zero richieste di terze parti** — font e loghi sono serviti da `public/`. La pagina non
