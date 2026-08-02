@@ -35,12 +35,20 @@ app.get("/api/providers", (c) => c.json(providers.map((p) => ({ id: p.id, name: 
 
 // All providers at once. Concurrent visible tabs share the same upstream work so
 // silent polling never multiplies provider requests unnecessarily.
+const QUOTA_CACHE_MS = 55_000;
 let quotaRequest: Promise<QuotaResult[]> | undefined;
+let quotaCache: { expiresAt: number; results: QuotaResult[] } | undefined;
 app.get("/api/quota", async (c) => {
-  quotaRequest ??= Promise.all(providers.map((p) => fetchOne(p.id))).finally(() => {
-    quotaRequest = undefined;
-  });
-  const results = await quotaRequest;
+  const cached = quotaCache && quotaCache.expiresAt > Date.now() ? quotaCache.results : undefined;
+  if (!cached) {
+    quotaRequest ??= Promise.all(providers.map((p) => fetchOne(p.id))).then((results) => {
+      quotaCache = { results, expiresAt: Date.now() + QUOTA_CACHE_MS };
+      return results;
+    }).finally(() => {
+      quotaRequest = undefined;
+    });
+  }
+  const results = cached ?? await quotaRequest!;
   return c.json(
     { providers: results, generatedAt: new Date().toISOString() },
     200,
@@ -79,6 +87,7 @@ app.post("/api/key/:id", async (c) => {
   if (key && key.trim()) cfg.keys[id] = key.trim();
   else delete cfg.keys[id];
   await writeConfig(cfg);
+  quotaCache = undefined;
   return c.json(await fetchOne(id));
 });
 
@@ -120,6 +129,7 @@ async function exchangeGeminiCode(code: string, verifier: string) {
     token_type: body.token_type,
     expiry_date: Date.now() + Number(body.expires_in ?? 3600) * 1000,
   });
+  quotaCache = undefined;
   console.log("gemini login: credentials saved to ~/.gemini/oauth_creds.json");
 }
 

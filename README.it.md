@@ -50,7 +50,8 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
 - 🤖 **CLI pensata per agenti AI** — `llm-quota status --json` produce JSON sanitizzato ed exit
   code sensati: un agente può verificare il proprio budget prima di partire con un job lungo.
 - 🪟 **Widget desktop Windows** — widget Tk flottante sempre in primo piano, lanciato dalla
-  dashboard tramite il protocollo `llmquota://widget`.
+  dashboard tramite il protocollo `llmquota://widget`. Aggiorna silenziosamente le quote ogni
+  minuto, la spesa locale ogni cinque secondi e mantiene vivi i countdown tra una richiesta e l'altra.
 - ♿ **Accessibile** — navigazione da tastiera, `prefers-reduced-motion` rispettato, tutte le card
   principali a schermo senza scroll nei comuni viewport desktop e laptop.
 
