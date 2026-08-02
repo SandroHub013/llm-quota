@@ -4,7 +4,7 @@
 
 **Una sola dashboard per tutti gli abbonamenti AI che paghi.**
 
-Claude Code · Codex · Gemini · z.ai · OpenCode Zen · Moonshot — su un unico asse dei reset.
+Claude Code · Codex · Gemini · z.ai · Moonshot — su un unico asse dei reset.
 Gira sulla tua macchina. Non parla con nessuno tranne i provider.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -35,7 +35,7 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
 
 ## Caratteristiche
 
-- ⏳ **Orizzonte reset** — i reset dei sei provider su un solo asse temporale. Passando su un
+- ⏳ **Orizzonte reset** — i reset dei cinque provider misurabili su un solo asse temporale. Passando su un
   marcatore si illumina la card corrispondente, e viceversa.
 - 🔑 **Riusa le sessioni che hai già** — legge i token OAuth che le CLI ufficiali (`claude`,
   `codex`, `opencode`) hanno già scritto su disco. Per quasi tutti i provider, zero login nuovi.
@@ -50,8 +50,8 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
   code sensati: un agente può verificare il proprio budget prima di partire con un job lungo.
 - 🪟 **Widget desktop Windows** — widget Tk flottante sempre in primo piano, lanciato dalla
   dashboard tramite il protocollo `llmquota://widget`.
-- ♿ **Accessibile** — navigazione da tastiera, `prefers-reduced-motion` rispettato, tutti e sei i
-  provider a schermo senza scroll da 1280×800 in su.
+- ♿ **Accessibile** — navigazione da tastiera, `prefers-reduced-motion` rispettato, tutte le card
+  principali a schermo senza scroll nei comuni viewport desktop e laptop.
 
 ---
 
@@ -98,9 +98,11 @@ PORT=8080 bun start    # porta personalizzata
 | **Claude Code** | `~/.claude/.credentials.json` (OAuth) | Live: finestra 5h + quota settimanale %, orario reset |
 | **Codex** (ChatGPT) | `~/.codex/auth.json` (OAuth) | Piano attivo + finestre d'uso |
 | **z.ai** | Config `opencode` o chiave incollata | Live: token 5h + mensile %, stato web search |
-| **OpenCode Zen** | Config `opencode` o chiave incollata | Validità chiave API + numero modelli |
 | **Gemini** | Login Google in-app o chiave AI Studio | Live: quota per modello via Code Assist / AI Studio |
 | **Moonshot** | Chiave API incollata | Live: credito residuo e utilizzo |
+
+OpenCode resta una fonte del registro token locale, ma Zen non compare nelle card quota: il suo
+endpoint pubblico espone il catalogo modelli, non utilizzo numerico, limiti o tempi di reset.
 
 Le chiavi inserite a mano restano in locale in `~/.llm-quota/config.json`. Non vengono mai inviate
 a nessuno tranne al provider a cui appartengono, e mai committate.
@@ -152,7 +154,7 @@ widget Tk flottante sul desktop.
 
 - Nessuna telemetria, nessuna analytics, nessun crash reporting. Non c'è un server a cui riportare.
 - Il frontend fa **zero** richieste di terze parti. I font (Syne, Schibsted Grotesk, JetBrains
-  Mono — ~102 KB, subset latino) e i sei loghi provider sono serviti da `public/`. Un
+  Mono — ~102 KB, subset latino) e i loghi provider sono serviti da `public/`. Un
   [test](src/frontend.test.ts) fallisce se un host esterno rientra dalla finestra.
 - I loghi sono congelati nel repository di proposito: caricarli dal provider — o da un servizio di
   favicon, come faceva una versione precedente — direbbe a terzi quali abbonamenti AI possiedi, a

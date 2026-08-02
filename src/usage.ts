@@ -31,6 +31,17 @@ export interface UsageBreakdown extends TokenUsage {
   costBasis?: "public_list" | "recorded";
 }
 
+export interface DailyUsage {
+  /** UTC calendar day derived from the timestamp stored by each local CLI. */
+  date: string;
+  calls: number;
+  tokens: TokenUsage;
+  contextReusePct: number | null;
+  estimatedCostEur: number;
+  pricingCoveragePct: number;
+  sources: UsageSourceId[];
+}
+
 export interface UsageSourceStatus {
   id: UsageSourceId | "gemini";
   name: string;
@@ -49,6 +60,8 @@ export interface UsageSummary {
   pricedTokens: number;
   pricingCoveragePct: number;
   rows: UsageBreakdown[];
+  /** Real per-day activity for the local spend calendar; undated records are excluded. */
+  daily: DailyUsage[];
   sources: UsageSourceStatus[];
   unpricedModels: string[];
   generatedAt: string;
@@ -75,6 +88,8 @@ export interface RawUsageRow {
   output: number;
   reasoning: number;
   recordedCostUsd?: number;
+  /** Original log timestamp normalized to ISO-8601 when the source exposes one. */
+  recordedAt?: string;
 }
 
 interface ClaudeMessage {
@@ -169,6 +184,23 @@ const number = (value: unknown): number => {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 };
+
+const isoTimestamp = (value: unknown): string | undefined => {
+  if (value == null || value === "") return undefined;
+  let input: string | number = value as string | number;
+  if (typeof input === "string" && /^\d+(?:\.\d+)?$/.test(input)) input = Number(input);
+  if (typeof input === "number") {
+    if (!Number.isFinite(input) || input <= 0) return undefined;
+    // Local stores vary between Unix seconds, milliseconds and microseconds.
+    if (input < 100_000_000_000) input *= 1_000;
+    else if (input > 100_000_000_000_000) input /= 1_000;
+  }
+  const date = new Date(input);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+};
+
+const recordTimestamp = (record: any): string | undefined =>
+  isoTimestamp(record?.timestamp ?? record?.time ?? record?.created_at ?? record?.createdAt);
 
 const totalOf = (row: Pick<RawUsageRow, "input" | "cacheRead" | "cacheWrite" | "output">) =>
   row.input + row.cacheRead + row.cacheWrite + row.output;
@@ -354,8 +386,10 @@ export function parseCodexRecords(records: string[], fallbackId = "session"): Co
     previous = current;
     if (Object.values(delta).every((value) => value === 0)) continue;
 
-    const key = `${model}\u0000${effort}\u0000${agent}`;
+    const recordedAt = recordTimestamp(record);
+    const key = `${model}\u0000${effort}\u0000${agent}\u0000${recordedAt?.slice(0, 10) ?? "undated"}`;
     const row = grouped.get(key) ?? rawRow("codex", model, effort, agent);
+    if (recordedAt && !row.recordedAt) row.recordedAt = recordedAt;
     const cacheRead = number(delta.cached_input_tokens);
     const cacheWrite = number(delta.cache_write_input_tokens);
     row.calls += 1;
@@ -411,6 +445,8 @@ export function parseClaudeRecords(records: string[], subagentFile = false): Cla
     row.cacheWrite1h = cache1h;
     row.output = number(usage.output_tokens);
     row.reasoning = number(usage.reasoning_tokens ?? usage.thinking_tokens);
+    const recordedAt = recordTimestamp(record);
+    if (recordedAt) row.recordedAt = recordedAt;
 
     const old = messages.get(String(id));
     if (!old || totalOf(row) >= totalOf(old)) messages.set(String(id), row);
@@ -452,6 +488,8 @@ export function parseKimiRecords(records: string[], agent: AgentKind = "main"): 
     row.cacheWrite = number(usage.inputCacheCreation);
     row.output = number(usage.output);
     row.reasoning = number(usage.outputReasoning ?? usage.reasoning);
+    const recordedAt = recordTimestamp(record);
+    if (recordedAt) row.recordedAt = recordedAt;
     rows.push(row);
   }
   return rows;
@@ -473,7 +511,7 @@ async function scanOpenCode(path: string): Promise<RawUsageRow[]> {
   try {
     const sessions = db.query(`
       SELECT parent_id, model, cost, tokens_input, tokens_output, tokens_reasoning,
-             tokens_cache_read, tokens_cache_write
+             tokens_cache_read, tokens_cache_write, time_created
       FROM session
     `).all() as Record<string, unknown>[];
     return sessions.map((session) => {
@@ -496,6 +534,8 @@ async function scanOpenCode(path: string): Promise<RawUsageRow[]> {
       // to the other sources, where reasoning is a subset of billed output.
       row.output = number(session.tokens_output) + row.reasoning;
       if (number(session.cost) > 0) row.recordedCostUsd = number(session.cost);
+      const recordedAt = isoTimestamp(session.time_created);
+      if (recordedAt) row.recordedAt = recordedAt;
       return row;
     });
   } finally {
@@ -521,6 +561,55 @@ function costOf(row: RawUsageRow): { usd?: number; basis?: "public_list" | "reco
   }
   if (row.recordedCostUsd != null) return { usd: row.recordedCostUsd, basis: "recorded" };
   return {};
+}
+
+function summarizeDailyUsage(raw: RawUsageRow[]): DailyUsage[] {
+  const grouped = new Map<string, {
+    calls: number;
+    tokens: TokenUsage;
+    pricedTokens: number;
+    estimatedCostUsd: number;
+    sources: Set<UsageSourceId>;
+  }>();
+
+  for (const row of raw) {
+    const date = row.recordedAt?.slice(0, 10);
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const day = grouped.get(date) ?? {
+      calls: 0,
+      tokens: emptyTokens(),
+      pricedTokens: 0,
+      estimatedCostUsd: 0,
+      sources: new Set<UsageSourceId>(),
+    };
+    const total = totalOf(row);
+    day.calls += row.calls;
+    day.tokens.input += row.input;
+    day.tokens.cacheRead += row.cacheRead;
+    day.tokens.cacheWrite += row.cacheWrite;
+    day.tokens.output += row.output;
+    day.tokens.reasoning += row.reasoning;
+    day.tokens.total += total;
+    day.sources.add(row.source);
+    const cost = costOf(row);
+    if (cost.usd != null) {
+      day.pricedTokens += total;
+      day.estimatedCostUsd += cost.usd;
+    }
+    grouped.set(date, day);
+  }
+
+  return [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, day]) => ({
+    date,
+    calls: day.calls,
+    tokens: day.tokens,
+    contextReusePct: contextReusePctOf(day.tokens),
+    estimatedCostEur: day.estimatedCostUsd / USD_PER_EUR,
+    pricingCoveragePct: day.tokens.total
+      ? Math.round(day.pricedTokens / day.tokens.total * 1000) / 10
+      : 0,
+    sources: [...day.sources].sort(),
+  }));
 }
 
 export function summarizeUsageRows(
@@ -589,6 +678,7 @@ export function summarizeUsageRows(
     pricedTokens,
     pricingCoveragePct: totals.total ? Math.round(pricedTokens / totals.total * 1000) / 10 : 0,
     rows,
+    daily: summarizeDailyUsage(raw),
     sources,
     unpricedModels: [...unpriced].sort(),
     generatedAt: new Date().toISOString(),

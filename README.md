@@ -4,7 +4,7 @@
 
 **One dashboard for every AI subscription you pay for.**
 
-Claude Code · Codex · Gemini · z.ai · OpenCode Zen · Moonshot — on a single reset timeline.
+Claude Code · Codex · Gemini · z.ai · Moonshot — on a single reset timeline.
 Runs on your machine. Talks to nobody but the providers.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -37,7 +37,7 @@ glance which subscription is free, which is cooling down, and exactly when to co
 
 ## Features
 
-- ⏳ **Reset horizon** — all six providers' resets on one time axis. Hover a marker, its card
+- ⏳ **Reset horizon** — all five measurable providers' resets on one time axis. Hover a marker, its card
   lights up; hover a card, its marker lights up.
 - 🔑 **Reuses the sessions you already have** — reads the OAuth tokens the official CLIs
   (`claude`, `codex`, `opencode`) already wrote to disk. No new logins for most providers.
@@ -51,7 +51,7 @@ glance which subscription is free, which is cooling down, and exactly when to co
   exit codes, so an agent can check its own budget before starting a long job.
 - 🪟 **Windows desktop widget** — a floating always-on-top Tk widget, launched from the dashboard
   via the `llmquota://widget` protocol.
-- ♿ **Accessible** — full keyboard navigation, `prefers-reduced-motion` respected, all six
+- ♿ **Accessible** — full keyboard navigation, `prefers-reduced-motion` respected, all primary
   providers on screen without scrolling from 1280×800 up.
 
 ---
@@ -113,9 +113,11 @@ PORT=8080 bun start    # custom port
 | **Claude Code** | `~/.claude/.credentials.json` (OAuth) | Live 5h window + weekly quota %, reset time |
 | **Codex** (ChatGPT) | `~/.codex/auth.json` (OAuth) | Active plan + usage windows |
 | **z.ai** | `opencode` config or pasted key | Live 5h token + monthly %, web-search status |
-| **OpenCode Zen** | `opencode` config or pasted key | API key validity + model count |
 | **Gemini** | In-app Google login or AI Studio key | Live per-model quota via Code Assist / AI Studio |
 | **Moonshot** | Pasted API key | Live remaining credit and usage |
+
+OpenCode remains a source for the local token ledger, but Zen is intentionally omitted from the
+quota cards: its public endpoint exposes a model catalog, not numeric usage, limits or reset times.
 
 Keys you paste yourself are stored locally in `~/.llm-quota/config.json`. They are never sent
 anywhere except to the provider they belong to, and never committed.
@@ -167,7 +169,7 @@ This is the point of the project, so it is worth being precise:
 
 - No telemetry, no analytics, no crash reporting. There is no server to report *to*.
 - The frontend makes **zero** third-party requests. Fonts (Syne, Schibsted Grotesk, JetBrains
-  Mono — ~102 KB, latin subset) and the six provider logos are served from `public/`.
+  Mono — ~102 KB, latin subset) and provider logos are served from `public/`.
   A [test](src/frontend.test.ts) fails the build if any external host creeps back in.
 - Provider logos are frozen in the repo deliberately: loading them from the provider — or from a
   favicon service, as an earlier version did — would tell a third party which AI subscriptions

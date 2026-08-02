@@ -1,19 +1,48 @@
 import { beginLogin, loadProvider, loadQuota, loadUsage, saveProviderKey } from "./api.js";
-import { escapeHtml } from "./ui.js";
+import { dataSignature, escapeHtml } from "./ui.js";
 import { mountGitHubContributionPrototype } from "./github-contributions.prototype.js";
 
 const grid = document.getElementById("grid");
 const cards = new Map(); // id -> element
 const latest = new Map(); // id -> QuotaResult, the horizon reads from here
+const providerSignatures = new Map();
 
 const usageDialog = document.getElementById("usageDialog");
 const usageBody = document.getElementById("usageBody");
 const usageAmount = document.getElementById("usageAmount");
 const usageButton = document.getElementById("openUsage");
-const refreshUsageButton = document.getElementById("refreshUsage");
+const liveStatus = document.getElementById("liveStatus");
+const liveStatusText = document.getElementById("liveStatusText");
 let usageLoad;
+let quotaLoad;
+let usageSignature;
+let displayedUsageCost = 0;
+let hasUsageCost = false;
+let usageAmountFrame;
+let lastQuotaAttemptAt = 0;
+let lastUsageAttemptAt = 0;
+
+const QUOTA_REFRESH_MS = 60_000;
+const USAGE_REFRESH_MS = 5_000;
+const liveFailures = new Set();
+const liveSources = new Set();
 
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+
+function setLiveResult(source, error) {
+  liveSources.add(source);
+  if (error) liveFailures.add(source);
+  else liveFailures.delete(source);
+
+  const failing = [...liveFailures];
+  const connected = liveSources.size > 0;
+  liveStatus.classList.toggle("is-live", connected && !failing.length);
+  liveStatus.classList.toggle("has-error", failing.length > 0);
+  liveStatusText.textContent = failing.length ? "Retrying…" : connected ? "Live" : "Connecting…";
+  liveStatus.title = failing.length
+    ? `Automatic updates are retrying: ${failing.join(", ")}`
+    : "Live updates · usage every 5 seconds · quotas every minute";
+}
 
 const STATUS_LABEL = {
   ok: "active",
@@ -78,7 +107,8 @@ function markHtml(id, cls) {
 
 // Reveal order, matching the static skeletons in index.html. Only used for a
 // provider the server returns that has no skeleton waiting for it.
-const LINEUP = ["claude", "codex", "zai", "opencode-zen", "gemini", "moonshot"];
+const LINEUP = ["claude", "codex", "zai", "gemini", "moonshot"];
+const VISIBLE_PROVIDERS = new Set(LINEUP);
 const orderOf = (id) => Math.max(0, LINEUP.indexOf(id));
 
 // Provider lineup: name, context, effort. Values from the provider/CLI catalogues.
@@ -163,6 +193,44 @@ function fmtPct(value) {
   return value == null ? "—" : `${oneDecimal.format(value)}%`;
 }
 
+function usageAmountText(value) {
+  return "≈ " + fmtEur(value);
+}
+
+// Animate from the number currently on screen, not from zero on every poll. A new
+// total arriving mid-animation simply takes over from the interpolated value.
+function animateUsageAmount(value) {
+  const target = Math.max(0, Number(value) || 0);
+  const startValue = hasUsageCost ? displayedUsageCost : 0;
+  hasUsageCost = true;
+  cancelAnimationFrame(usageAmountFrame);
+
+  const finish = () => {
+    displayedUsageCost = target;
+    usageAmount.textContent = usageAmountText(target);
+    usageAmount.setAttribute("aria-live", "polite");
+    usageButton.setAttribute("aria-label", `Open local token usage, estimated ${fmtEur(target)}`);
+  };
+
+  if (reduced.matches || usageAmountText(startValue) === usageAmountText(target)) {
+    finish();
+    return;
+  }
+
+  const startedAt = performance.now();
+  const duration = 900;
+  usageAmount.setAttribute("aria-live", "off");
+  const step = (now) => {
+    const progress = Math.min(1, (now - startedAt) / duration);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    displayedUsageCost = startValue + (target - startValue) * eased;
+    usageAmount.textContent = usageAmountText(displayedUsageCost);
+    if (progress < 1) usageAmountFrame = requestAnimationFrame(step);
+    else finish();
+  };
+  usageAmountFrame = requestAnimationFrame(step);
+}
+
 function usageStat(label, value, cls = "") {
   return `<div class="usage-stat ${cls}" title="${escapeHtml(tokenTitle(value))}">
     <span>${escapeHtml(label)}</span><b>${escapeHtml(fmtToken(value))}</b>
@@ -177,6 +245,8 @@ function usageEfficiencyStat(value) {
 }
 
 function renderUsage(summary) {
+  const usageShell = usageBody.closest(".usage-shell");
+  const previousScroll = usageShell?.scrollTop ?? 0;
   const coverage = `${summary.pricingCoveragePct.toLocaleString("it-IT", { maximumFractionDigits: 1 })}% priced`;
   const sourceChips = (summary.sources || []).map((source) => {
     const detail = source.message || (source.files != null ? `${source.files} local file${source.files === 1 ? "" : "s"}` : source.status);
@@ -247,24 +317,35 @@ function renderUsage(summary) {
       USD converted with the ECB reference rate <b>1 EUR = ${escapeHtml(summary.pricing.usdPerEur)} USD</b>
       (${escapeHtml(summary.pricing.fxAsOf)}). Subscription fees, taxes, discounts and provider credits are not included.${unpriced}
     </p>`;
+  if (usageShell) usageShell.scrollTop = previousScroll;
 }
 
 async function loadUsageSummary() {
   if (usageLoad) return usageLoad;
-  usageButton.classList.add("is-loading");
-  refreshUsageButton.disabled = true;
+  const isInitialLoad = usageSignature == null;
+  lastUsageAttemptAt = Date.now();
+  if (isInitialLoad) usageButton.classList.add("is-loading");
   usageLoad = (async () => {
     try {
       const summary = await loadUsage();
-      renderUsage(summary);
-      usageAmount.textContent = "≈ " + fmtEur(summary.estimatedCostEur);
+      dispatchEvent(new CustomEvent("llmquota:usage", { detail: summary }));
+      const nextSignature = dataSignature(summary);
+      if (nextSignature !== usageSignature) {
+        renderUsage(summary);
+        usageSignature = nextSignature;
+      }
+      animateUsageAmount(summary.estimatedCostEur);
       usageButton.title = `Open local token usage · ${summary.pricingCoveragePct}% priced`;
+      setLiveResult("usage", null);
     } catch (error) {
-      usageAmount.textContent = "€ ?";
-      usageBody.innerHTML = `<div class="usage-loading usage-error"><div>Could not read local token usage.<br /><small>${escapeHtml(error instanceof Error ? error.message : "error")}</small></div></div>`;
+      setLiveResult("usage", error);
+      // Keep the last good total and dialog visible through a transient failure.
+      if (usageSignature == null) {
+        usageAmount.textContent = "€ ?";
+        usageBody.innerHTML = `<div class="usage-loading usage-error"><div>Could not read local token usage. Retrying automatically.<br /><small>${escapeHtml(error instanceof Error ? error.message : "error")}</small></div></div>`;
+      }
     } finally {
       usageButton.classList.remove("is-loading");
-      refreshUsageButton.disabled = false;
       usageLoad = undefined;
     }
   })();
@@ -288,16 +369,16 @@ function resetText(iso) {
   return diff <= 0 ? "reset due" : "resets in " + humanGap(diff);
 }
 
-function donutHtml(pct) {
+function donutHtml(remainingPct) {
   const C = 113.1; // 2 * pi * r(18)
-  // A true 0% arc draws nothing and the ring reads as broken. Keep a minimum
-  // stub so "niente consumato" looks like a state, while the label stays exact.
-  const off = (C * (1 - Math.max(pct, 1.6) / 100)).toFixed(1);
-  const col = `hsl(${Math.round(140 - pct * 1.4)} 75% 55%)`;
+  // The card answers the dashboard's primary question: how much quota remains.
+  // Keep a minimum arc so an exhausted allowance still reads as a measured state.
+  const off = (C * (1 - Math.max(remainingPct, 1.6) / 100)).toFixed(1);
+  const col = `hsl(${Math.round(remainingPct * 1.4)} 75% 55%)`;
   return `<svg class="donut" viewBox="0 0 44 44" style="--off:${off};--c:${col}" aria-hidden="true">
     <circle class="track" cx="22" cy="22" r="18"></circle>
     <circle class="arc" cx="22" cy="22" r="18"></circle>
-    <text class="pct" x="22" y="26" transform="rotate(90 22 22)" data-v="${pct}">0%</text>
+    <text class="pct" x="22" y="26" transform="rotate(90 22 22)" data-v="${remainingPct}">0%</text>
   </svg>`;
 }
 
@@ -308,16 +389,17 @@ function usedPct(m) {
 }
 
 function metricHtml(m) {
-  const pct = usedPct(m);
-  const cls = pct == null ? "" : pct >= 90 ? "crit" : pct >= 70 ? "hot" : "";
+  const used = usedPct(m);
+  const remainingPct = used == null ? null : Math.max(0, 100 - used);
+  const cls = used == null ? "" : used >= 90 ? "crit" : used >= 70 ? "hot" : "";
   // Say what the number means. "0% / 100%" told the user nothing.
   const right =
     m.availability === "listed"
       ? "free · fair use"
       : m.remaining != null
       ? fmt(m.remaining, m.unit) + " left"
-      : pct != null
-        ? pct + "% used"
+      : remainingPct != null
+        ? remainingPct + "% left"
         : m.used != null
           ? fmt(m.used, m.unit)
           : "";
@@ -326,8 +408,8 @@ function metricHtml(m) {
   if (m.availability === "listed") {
     return `<div class="metric metric-availability"><div class="availability-orb" aria-hidden="true"></div><div class="metric-body">${head}<div class="reset">No numeric quota published</div></div></div>`;
   }
-  if (pct != null) {
-    return `<div class="metric">${donutHtml(pct)}<div class="metric-body">${head}${reset}</div></div>`;
+  if (remainingPct != null) {
+    return `<div class="metric">${donutHtml(remainingPct)}<div class="metric-body">${head}${reset}</div></div>`;
   }
   // No percentage to plot (an OAuth token, say). Hold the donut column open anyway
   // so every label in the card starts on the same vertical line.
@@ -361,7 +443,6 @@ function cardHtml(p) {
     ${p.needsKey ? `<div class="keyrow"><input type="password" placeholder="Paste API key…" aria-label="API key ${escapeHtml(p.name)}" data-key="${id}" /><button data-save="${id}">Save</button></div>` : ""}
     <div class="card-foot">
       <a href="${escapeHtml(p.consoleUrl)}" target="_blank" rel="noreferrer">Open console ↗</a>
-      <button class="mini" data-refresh="${id}">↻ refresh</button>
     </div>`;
 }
 
@@ -385,20 +466,34 @@ function cardFor(id) {
 }
 
 function render(p) {
+  if (!VISIBLE_PROVIDERS.has(p.id)) return;
   const el = cardFor(p.id);
+  const nextSignature = dataSignature(p);
+  const firstRender = !providerSignatures.has(p.id);
+  const modelsWereOpen = el.querySelector(".models")?.open ?? false;
+  latest.set(p.id, p);
+
+  // A fresh updatedAt timestamp alone must not replace the card. Leaving the DOM
+  // in place preserves open details, focus and hover without a visible refresh.
+  if (nextSignature === providerSignatures.get(p.id)) return false;
+
   el.classList.remove("is-skeleton");
   el.innerHTML = cardHtml(p);
-  latest.set(p.id, p);
-  animate(el);
-  drawHorizon();
+  if (modelsWereOpen) el.querySelector(".models")?.setAttribute("open", "");
+  providerSignatures.set(p.id, nextSignature);
+  animate(el, firstRender);
+  return true;
 }
 
 // Count-up donut percentages, grow bars from zero. Under reduced motion the same
 // values are written straight to their final state — informative, just still.
-function animate(el) {
+function animate(el, withMotion = true) {
   const bars = el.querySelectorAll(".bar > i[data-w]");
   const pcts = el.querySelectorAll(".donut .pct[data-v]");
-  if (reduced.matches) {
+  if (!withMotion || reduced.matches) {
+    if (!withMotion) {
+      for (const arc of el.querySelectorAll(".donut .arc")) arc.style.animation = "none";
+    }
     for (const i of bars) i.style.transform = `scaleX(${Number(i.dataset.w) / 100})`;
     for (const t of pcts) t.textContent = t.dataset.v + "%";
     return;
@@ -420,7 +515,7 @@ function animate(el) {
 
 /* ============================================================================
    THE HORIZON
-   Every reset the six providers will perform, on one non-linear time axis.
+   Every reset the five measurable providers will perform, on one non-linear time axis.
    x = sqrt(hours / 168) so the next few hours — the part you can still act on —
    get most of the width, while weekly windows still have a place to sit.
    Stem height = how much of that window you have already burnt.
@@ -449,16 +544,25 @@ const HZ_TICKS_NARROW = [
 ];
 const hzTicks = () =>
   hzRail.getBoundingClientRect().width < 520 ? HZ_TICKS_NARROW : HZ_TICKS_FULL;
+const horizonMarks = new Map();
+let horizonTickSignature = "";
 
 function horizonEvents() {
   const now = Date.now();
   const out = [];
   for (const p of latest.values()) {
-    for (const m of p.metrics || []) {
+    for (const [index, m] of (p.metrics || []).entries()) {
       if (!m.resetAt) continue;
       const ms = new Date(m.resetAt).getTime() - now;
       if (ms <= 0 || ms > HZ_SPAN_H * 3.6e6) continue;
-      out.push({ id: p.id, provider: p.name, label: m.label, ms, pct: usedPct(m) ?? 0 });
+      out.push({
+        key: `${p.id}\u0000${index}\u0000${m.label}`,
+        id: p.id,
+        provider: p.name,
+        label: m.label,
+        ms,
+        pct: usedPct(m) ?? 0,
+      });
     }
   }
   return out.sort((a, b) => a.ms - b.ms);
@@ -466,24 +570,35 @@ function horizonEvents() {
 
 function drawHorizon() {
   const events = horizonEvents();
-
-  hzRail.querySelectorAll(".hz-mark, .hz-tick").forEach((n) => n.remove());
-
   const ticks = hzTicks();
-  ticks.forEach((t, i) => {
-    const tick = document.createElement("div");
-    // Labels are centred on their tick; the first one would hang off the left edge,
-    // so it is left-aligned instead.
-    tick.className = "hz-tick" + (i === 0 ? " is-first" : "");
-    tick.style.left = hzPos(t.h) * 100 + "%";
-    tick.innerHTML = `<span>${t.label}</span>`;
-    hzRail.append(tick);
-  });
+  const nextTickSignature = ticks.map((tick) => `${tick.h}:${tick.label}`).join("|");
+  if (nextTickSignature !== horizonTickSignature) {
+    hzRail.querySelectorAll(".hz-tick").forEach((node) => node.remove());
+    ticks.forEach((tickData, index) => {
+      const tick = document.createElement("div");
+      // Labels are centred on their tick; the first one would hang off the left edge,
+      // so it is left-aligned instead.
+      tick.className = "hz-tick" + (index === 0 ? " is-first" : "");
+      tick.style.left = hzPos(tickData.h) * 100 + "%";
+      tick.innerHTML = `<span>${tickData.label}</span>`;
+      hzRail.append(tick);
+    });
+    horizonTickSignature = nextTickSignature;
+  }
 
+  const liveKeys = new Set();
   events.forEach((e, i) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "hz-mark" + (i === 0 ? " imminent" : "");
+    liveKeys.add(e.key);
+    let b = horizonMarks.get(e.key);
+    if (!b) {
+      b = document.createElement("button");
+      b.type = "button";
+      b.className = "hz-mark";
+      b.innerHTML = `<span class="hz-stem"></span>${markHtml(e.id, "hz-dot")}`;
+      hzRail.append(b);
+      horizonMarks.set(e.key, b);
+    }
+    b.classList.toggle("imminent", i === 0);
     b.style.left = hzPos(e.ms / 3.6e6) * 100 + "%";
     b.style.setProperty("--c", brand(e.id).b1);
     b.style.setProperty("--h", 22 + e.pct * 0.6 + "%");
@@ -494,11 +609,13 @@ function drawHorizon() {
       "aria-label",
       `${e.provider}, ${e.label}: resets in ${humanGap(e.ms)}, ${e.pct}% used`,
     );
-    // The marker carries the provider's mark, so the rail is readable as a lineup
-    // of brands before any hovering happens.
-    b.innerHTML = `<span class="hz-stem"></span>${markHtml(e.id, "hz-dot")}`;
-    hzRail.append(b);
   });
+  for (const [key, mark] of horizonMarks) {
+    if (liveKeys.has(key)) continue;
+    mark.remove();
+    horizonMarks.delete(key);
+    hzTip.classList.remove("on");
+  }
 
   if (!events.length) {
     hzNext.textContent = "No resets in the next 7 days.";
@@ -596,27 +713,46 @@ setInterval(() => {
 /* ---------------------------------------------------------------- data ---- */
 
 async function loadAll() {
-  const btn = document.getElementById("refreshAll");
-  btn.innerHTML = '<span class="spin">↻</span> Refreshing…';
-  try {
-    const providers = await loadQuota();
-    providers.forEach(render);
-    // Drop skeletons for providers the server no longer returns.
-    const live = new Set(providers.map((p) => p.id));
-    for (const [id, el] of cards) {
-      if (!live.has(id)) { el.remove(); cards.delete(id); latest.delete(id); }
+  if (quotaLoad) return quotaLoad;
+  lastQuotaAttemptAt = Date.now();
+  quotaLoad = (async () => {
+    try {
+      const providers = (await loadQuota()).filter((provider) => VISIBLE_PROVIDERS.has(provider.id));
+      let horizonChanged = false;
+      for (const provider of providers) horizonChanged = render(provider) || horizonChanged;
+
+      const live = new Set(providers.map((provider) => provider.id));
+      for (const [id, el] of cards) {
+        if (live.has(id)) continue;
+        el.remove();
+        cards.delete(id);
+        latest.delete(id);
+        providerSignatures.delete(id);
+        horizonChanged = true;
+      }
+      if (horizonChanged) drawHorizon();
+      setLiveResult("quotas", null);
+    } catch (error) {
+      setLiveResult("quotas", error);
+      // An initial connection failure should not leave an endless shimmer behind.
+      // The same cards are reused automatically as soon as a retry succeeds.
+      if (!latest.size) {
+        for (const el of grid.querySelectorAll(".card[data-provider]")) {
+          cards.set(el.dataset.provider, el);
+          el.classList.remove("is-skeleton");
+          el.innerHTML = `<div class="msg request-error">Could not load quotas. Retrying automatically.<br /><small>${escapeHtml(error instanceof Error ? error.message : "error")}</small></div>`;
+        }
+      }
+    } finally {
+      quotaLoad = undefined;
     }
-  } catch (error) {
-    btn.textContent = `✗ ${error instanceof Error ? error.message : "error"}`;
-    return;
-  } finally {
-    if (!btn.textContent.startsWith("✗")) btn.textContent = "↻ Refresh all";
-  }
+  })();
+  return quotaLoad;
 }
 
 async function refreshOne(id) {
   try {
-    render(await loadProvider(id));
+    if (render(await loadProvider(id))) drawHorizon();
   } catch (error) {
     showError(id, error);
   }
@@ -628,7 +764,7 @@ async function saveKey(id) {
   const btn = document.querySelector(`button[data-save="${id}"]`);
   if (btn) btn.textContent = "…";
   try {
-    render(await saveProviderKey(id, key));
+    if (render(await saveProviderKey(id, key))) drawHorizon();
   } catch (error) {
     if (btn) btn.textContent = "Retry";
     showError(id, error);
@@ -642,7 +778,9 @@ function showError(id, error) {
   if (!message) {
     message = document.createElement("div");
     message.className = "msg request-error";
-    card.querySelector(".card-foot")?.before(message);
+    const footer = card.querySelector(".card-foot");
+    if (footer) footer.before(message);
+    else card.append(message);
   }
   message.textContent = `Request error: ${error instanceof Error ? error.message : "error"}`;
 }
@@ -659,9 +797,8 @@ for (const root of [grid, hzRail]) {
 }
 
 grid.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-refresh],[data-save],[data-login]");
+  const t = e.target.closest("[data-save],[data-login]");
   if (!t) return;
-  if (t.dataset.refresh) refreshOne(t.dataset.refresh);
   if (t.dataset.save) saveKey(t.dataset.save);
   if (t.dataset.login) startLogin(t);
 });
@@ -693,7 +830,10 @@ async function startLogin(btn) {
     await new Promise((r) => setTimeout(r, 3000));
     try {
       const p = await loadProvider(provider);
-      if (p.status !== "unauthenticated") return render(p);
+      if (p.status !== "unauthenticated") {
+        if (render(p)) drawHorizon();
+        return;
+      }
     } catch {}
   }
   btn.disabled = false;
@@ -701,17 +841,27 @@ async function startLogin(btn) {
   refreshOne(provider);
 }
 
-document.getElementById("refreshAll").addEventListener("click", () => {
-  loadAll();
-  loadUsageSummary();
-});
-
 usageButton.addEventListener("click", () => usageDialog.showModal());
 document.getElementById("closeUsage").addEventListener("click", () => usageDialog.close());
-refreshUsageButton.addEventListener("click", loadUsageSummary);
 usageDialog.addEventListener("click", (event) => {
   if (event.target === usageDialog) usageDialog.close();
 });
+
+function refreshDueData(force = false) {
+  if (document.hidden) return;
+  const now = Date.now();
+  if (force || now - lastQuotaAttemptAt >= QUOTA_REFRESH_MS) loadAll();
+  if (force || now - lastUsageAttemptAt >= USAGE_REFRESH_MS) loadUsageSummary();
+}
+
+// Timers do no work in a background tab. Returning to the dashboard catches up
+// immediately instead of waiting for the next interval boundary.
+setInterval(() => refreshDueData(), USAGE_REFRESH_MS);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshDueData();
+});
+addEventListener("focus", () => refreshDueData());
+addEventListener("online", () => refreshDueData(true));
 
 // Let the browser/Windows shell launch Tk on the interactive desktop.
 document.getElementById("openWidget").addEventListener("click", (e) => {

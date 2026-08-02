@@ -3,15 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>LLM Quota — one horizon for six AI subscriptions</title>
+    <title>LLM Quota — one horizon for five measurable AI subscriptions</title>
     <meta
       name="description"
-      content="Local-first dashboard that reads the CLI logins already on your disk and shows, on a single timeline, when your Claude Code, Codex, z.ai, OpenCode Zen, Gemini and Kimi quotas reset."
+      content="Local-first dashboard that reads the CLI logins already on your disk and shows, on a single timeline, when your Claude Code, Codex, z.ai, Gemini and Kimi quotas reset."
     />
     <meta name="theme-color" content="#05060b" />
     <meta name="color-scheme" content="dark" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="LLM Quota — one horizon for six AI subscriptions" />
+    <meta property="og:title" content="LLM Quota — one horizon for five measurable AI subscriptions" />
     <meta
       property="og:description"
       content="How long you have before your AI quotas reset. All local, zero telemetry."
@@ -311,6 +311,35 @@
         font-size: var(--t-sm);
       }
       .usage-trigger.is-loading .usage-amount { opacity: 0.55; }
+      .live-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 0 14px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        color: var(--muted);
+        background: var(--surface-solid);
+        font-size: var(--t-sm);
+        white-space: nowrap;
+      }
+      .live-dot {
+        width: 7px;
+        height: 7px;
+        flex: none;
+        border-radius: 50%;
+        background: var(--warn);
+        box-shadow: 0 0 0 3px rgba(255, 184, 77, 0.12);
+      }
+      .live-status.is-live .live-dot {
+        background: var(--ok);
+        box-shadow: 0 0 0 3px rgba(85, 216, 138, 0.12);
+      }
+      .live-status.has-error .live-dot {
+        background: var(--err);
+        box-shadow: 0 0 0 3px rgba(255, 107, 102, 0.12);
+      }
 
       button {
         font: inherit;
@@ -596,7 +625,7 @@
       }
 
       /* ================================================================
-         THE HORIZON — the one idea. Every reset the six providers will
+         THE HORIZON — the one idea. Every reset the measurable providers will
          perform, plotted on a single non-linear time axis: now → 7 days.
          Hovering a marker lights its card; hovering a card lights its
          markers. It answers the question the percentages cannot:
@@ -687,7 +716,7 @@
         flex-direction: column;
         justify-content: flex-end;
         align-items: center;
-        transition: none;
+        transition: left 0.45s var(--ease-out);
       }
       .hz-mark:hover { background: none; transform: none; }
       .hz-stem {
@@ -771,7 +800,7 @@
         max-width: 1500px;
         margin: 0 auto;
       }
-      /* One column per provider as soon as there is room: the six cards land side by
+      /* One column per provider as soon as there is room: the cards land side by
          side instead of stacking into a scroll, on every common desktop and laptop. */
       @media (min-width: 1240px) { main { columns: 4; } }
       @media (max-width: 1180px) { main { columns: 2; } }
@@ -1324,6 +1353,253 @@
         .gh-prototype-switcher span { min-width: 142px; }
       }
 
+      /* Compact dashboard integration: developer activity is the sixth masonry
+         card, not a full-width report below the provider grid. */
+      main .gh-prototype {
+        width: 100%;
+        max-width: none;
+        margin: 0 0 var(--gap);
+        padding: 0;
+        break-inside: avoid;
+      }
+      main .gh-loading, main .gh-unavailable {
+        min-height: 118px;
+        padding: 12px;
+        border-radius: var(--r-lg);
+        font-size: var(--t-sm);
+      }
+      main .gh-card {
+        padding: 10px;
+        border-radius: var(--r-lg);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.32);
+      }
+      main .gh-head { gap: 8px; }
+      main .gh-kicker {
+        font-size: 8px;
+        line-height: 1;
+        letter-spacing: 0.8px;
+      }
+      main .gh-title {
+        margin-top: 3px;
+        font-size: var(--t-lg);
+        line-height: 1;
+        letter-spacing: -0.2px;
+      }
+      main .gh-account { display: block; margin-top: 3px; font-size: 9px; line-height: 1; }
+      main .gh-profile { font-size: 8px; line-height: 1; }
+      main .gh-total-number {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        font-size: 28px;
+        line-height: 0.9;
+        letter-spacing: -1px;
+      }
+      main .gh-total-number small {
+        display: inline;
+        min-width: 0;
+        margin: 0;
+        overflow: hidden;
+        font-size: 8px;
+        line-height: 1;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      main .gh-stat-grid, main .gh-b-streaks {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 3px;
+        width: 100%;
+      }
+      main .gh-stat {
+        padding: 4px;
+        border-radius: 6px;
+      }
+      main .gh-stat span { font-size: 7px; line-height: 1; letter-spacing: 0.2px; }
+      main .gh-stat b { margin-top: 2px; font-size: 11px; line-height: 1; }
+      main .gh-heatmap-scroll { padding: 0; overflow: hidden; }
+      main .gh-heatmap { width: max-content; min-width: 264px; }
+      main .gh-month-labels {
+        grid-template-columns: repeat(var(--week-count), 4px);
+        gap: 1px;
+        height: 9px;
+        font-size: 7px;
+      }
+      main .gh-weeks { gap: 1px; }
+      main .gh-week { grid-template-rows: repeat(7, 4px); gap: 1px; }
+      main .gh-day {
+        width: 4px;
+        height: 4px;
+        border: 0;
+        border-radius: 1px;
+      }
+      main .gh-day.usage-day.l1 { background: #192950; }
+      main .gh-day.usage-day.l2 { background: #2f55a4; }
+      main .gh-day.usage-day.l3 { background: #5b78e8; }
+      main .gh-day.usage-day.l4 { background: #a875ff; }
+      main .gh-day.usage-day.is-future { background: transparent; }
+      main .gh-legend { gap: 2px; margin-top: 2px; font-size: 6px; line-height: 1; }
+      main .usage-legend { color: #aab9ff; }
+      main .gh-breakdown {
+        display: flex;
+        justify-content: space-between;
+        gap: 4px;
+        margin-top: 4px;
+        color: var(--dim);
+        font: 500 7px / 1 "JetBrains Mono", "Mono Fallback", monospace;
+        white-space: nowrap;
+      }
+      main .gh-breakdown b { color: #a6efc1; font-weight: 500; }
+      main .gh-source {
+        margin-top: 4px;
+        overflow: hidden;
+        font-size: 7px;
+        line-height: 1;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      main .gh-card-a { padding: 10px; }
+      main .gh-card-a { border-color: rgba(123, 91, 255, 0.32); }
+      main .usage-kicker { color: #a990ff; }
+      main .dual-kicker { color: #8eacd8; }
+      main .usage-total-number { font-size: 24px; }
+      main .gh-a-summary {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 5px;
+        margin-top: 7px;
+      }
+      main .gh-card-a .gh-stat-grid { margin-top: 5px; }
+
+      main .gh-card-b { display: block; }
+      main .activity-half { margin-top: 6px; }
+      main .activity-half + .activity-half {
+        margin-top: 5px;
+        padding-top: 5px;
+        border-top: 1px solid var(--line);
+      }
+      main .activity-label {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 2px;
+        color: var(--dim);
+        font: 500 7px / 1 "JetBrains Mono", "Mono Fallback", monospace;
+        letter-spacing: 0.45px;
+        text-transform: uppercase;
+      }
+      main .activity-label b {
+        color: var(--text);
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      main .activity-label small { margin-left: 6px; color: var(--dim); font-size: 7px; }
+      main .dual-breakdown { justify-content: flex-start; gap: 14px; }
+      main .gh-inline-unavailable {
+        min-height: 39px;
+        display: grid;
+        place-items: center;
+        color: var(--dim);
+        font-size: 8px;
+      }
+      main .gh-b-score {
+        display: block;
+        margin: 7px 0 5px;
+        padding: 0;
+        border: 0;
+        background: none;
+      }
+      main .gh-b-score .gh-total-number { margin: 0; }
+      main .gh-b-streaks { margin: 5px 0 0; }
+      main .gh-b-calendar { padding: 0; }
+
+      main .gh-card-c { padding: 10px; }
+      main .gh-c-summary {
+        display: block;
+        margin: 7px 0 5px;
+      }
+      main .gh-c-summary .gh-stat-grid { max-width: none; margin-top: 5px; }
+      main .gh-month-cards {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 3px;
+      }
+      main .gh-month-card {
+        padding: 4px;
+        border-radius: 5px;
+        background: rgba(120, 150, 200, 0.08);
+      }
+      main .gh-month-card.l1 { background: #123a2a; border-color: #194c36; }
+      main .gh-month-card.l2 { background: #196c43; border-color: #238052; }
+      main .gh-month-card.l3 { background: #2a8f56; border-color: #3bbb71; }
+      main .gh-month-card.l4 { background: #3ebd71; border-color: #72e5a0; }
+      main .gh-month-card h3 {
+        display: block;
+        margin: 0;
+        color: var(--muted);
+        font-size: 7px;
+        line-height: 1;
+        text-align: center;
+      }
+      main .gh-month-card h3 span {
+        display: block;
+        margin-top: 2px;
+        color: var(--text);
+        font-size: 9px;
+      }
+      main .gh-month-card.l3 h3, main .gh-month-card.l4 h3,
+      main .gh-month-card.l3 h3 span, main .gh-month-card.l4 h3 span { color: #06140c; }
+      main .correlation-month {
+        min-width: 0;
+        text-align: center;
+      }
+      main .correlation-month.l1 { background: #192950; border-color: #263b6d; }
+      main .correlation-month.l2 { background: #2f55a4; border-color: #466cc1; }
+      main .correlation-month.l3 { background: #526cce; border-color: #768ced; }
+      main .correlation-month.l4 { background: #8e63d6; border-color: #b588fa; }
+      main .correlation-month h3,
+      main .correlation-month.l3 h3,
+      main .correlation-month.l4 h3 { color: rgba(255, 255, 255, 0.72); }
+      main .correlation-month > b,
+      main .correlation-month > span,
+      main .correlation-month > small {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      main .correlation-month > b { margin-top: 3px; color: #fff; font-size: 8px; line-height: 1; }
+      main .correlation-month > span { margin-top: 2px; color: rgba(255, 255, 255, 0.78); font-size: 6px; line-height: 1; }
+      main .correlation-month > small { margin-top: 2px; color: rgba(255, 255, 255, 0.62); font-size: 6px; line-height: 1; }
+
+      @media (min-width: 1400px) {
+        main .gh-heatmap { min-width: 304px; }
+        main .gh-month-labels { grid-template-columns: repeat(var(--week-count), 5px); gap: 0.75px; }
+        main .gh-weeks { gap: 0.75px; }
+        main .gh-week { grid-template-rows: repeat(7, 5px); gap: 0.75px; }
+        main .gh-day { width: 5px; height: 5px; }
+      }
+
+      footer .wrap { padding-top: 6px; padding-bottom: 6px; }
+      @media (min-width: 1240px) and (max-height: 820px) {
+        footer { display: none; }
+        main { padding-bottom: 0; }
+        main .gh-source { display: none; }
+      }
+      @media (max-width: 720px) {
+        main .gh-card { padding: 14px; }
+        main .gh-heatmap-scroll { overflow-x: auto; }
+        main .gh-stat-grid, main .gh-b-streaks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        main .gh-b-score { display: block; }
+        main .gh-b-streaks { margin-top: 7px; }
+        main .gh-month-cards { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+      }
+
       footer { border-top: 1px solid var(--line); }
       footer .wrap {
         display: flex;
@@ -1346,6 +1622,7 @@
         .hz-next { max-width: 100%; }
         .actions { width: 100%; }
         .actions button { flex: 1; }
+        .actions .live-status { flex: 1; justify-content: center; }
         .usage-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
         .usage-shell { max-height: calc(100vh - 16px); }
         .usage-body { padding: 12px; }
@@ -1398,7 +1675,7 @@
           <span class="grad" id="title">LLM Quota</span>
         </h1>
         <p class="sub">
-          Six AI subscriptions, <b>one horizon</b> — reads the CLI logins already on your disk, never leaves localhost.
+          Five measurable AI subscriptions, <b>one horizon</b> — reads the CLI logins already on your disk, never leaves localhost.
         </p>
       </div>
       <div class="actions">
@@ -1407,7 +1684,10 @@
           <span class="usage-amount" id="usageAmount" aria-live="polite">€ …</span>
           <span class="usage-trigger-label">Usage</span>
         </button>
-        <button class="primary" id="refreshAll">↻ Refresh all</button>
+        <div class="live-status" id="liveStatus" role="status" title="Connecting automatic updates">
+          <span class="live-dot" aria-hidden="true"></span>
+          <span id="liveStatusText">Connecting…</span>
+        </div>
       </div>
      </div>
     </header>
@@ -1454,17 +1734,7 @@
         <div class="sk sk-line sk-det"></div>
         <div class="sk sk-line sk-foot"></div>
       </div>
-      <div class="card is-skeleton" data-provider="opencode-zen" style="--d:210ms;--brand:#9b5bff">
-        <div class="card-top"><div class="sk sk-av"></div><div class="titles"><div class="sk sk-line" style="width:64%"></div><div class="sk sk-line sk-sub"></div></div></div>
-        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:76%"></div><div class="sk sk-line sk-sub"></div></div></div>
-        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:68%"></div><div class="sk sk-line sk-sub"></div></div></div>
-        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:72%"></div><div class="sk sk-line sk-sub"></div></div></div>
-        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:64%"></div><div class="sk sk-line sk-sub"></div></div></div>
-        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:70%"></div><div class="sk sk-line sk-sub"></div></div></div>
-        <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:62%"></div><div class="sk sk-line sk-sub"></div></div></div>
-        <div class="sk sk-line sk-foot"></div>
-      </div>
-      <div class="card is-skeleton" data-provider="gemini" style="--d:280ms;--brand:#4285f4">
+      <div class="card is-skeleton" data-provider="gemini" style="--d:210ms;--brand:#4285f4">
         <div class="card-top"><div class="sk sk-av"></div><div class="titles"><div class="sk sk-line" style="width:44%"></div><div class="sk sk-line sk-sub"></div></div></div>
         <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:74%"></div><div class="sk sk-line sk-sub" style="width:40%"></div></div></div>
         <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:70%"></div><div class="sk sk-line sk-sub" style="width:38%"></div></div></div>
@@ -1473,22 +1743,21 @@
         <div class="sk sk-line sk-det"></div>
         <div class="sk sk-line sk-foot"></div>
       </div>
-      <div class="card is-skeleton" data-provider="moonshot" style="--d:350ms;--brand:#0ea5e9">
+      <div class="card is-skeleton" data-provider="moonshot" style="--d:280ms;--brand:#0ea5e9">
         <div class="card-top"><div class="sk sk-av"></div><div class="titles"><div class="sk sk-line" style="width:58%"></div><div class="sk sk-line sk-sub"></div></div></div>
         <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:56%"></div><div class="sk sk-line sk-sub" style="width:34%"></div></div></div>
         <div class="metric"><div class="sk sk-donut"></div><div class="metric-body"><div class="sk sk-line" style="width:60%"></div><div class="sk sk-line sk-sub" style="width:36%"></div></div></div>
         <div class="sk sk-line sk-det"></div>
         <div class="sk sk-line sk-foot"></div>
       </div>
+      <!-- PROTOTYPE: three compact developer-activity cards, selected with ?variant=A|B|C. -->
+      <section class="gh-prototype" id="githubContributionsPrototype" aria-label="Token spend and GitHub activity" aria-busy="true">
+        <div class="gh-loading">
+          <span class="spin">↻</span>
+          <span>Reading local usage and GitHub activity…</span>
+        </div>
+      </section>
     </main>
-
-    <!-- PROTOTYPE: three GitHub activity-card variants, selected with ?variant=A|B|C. -->
-    <section class="gh-prototype" id="githubContributionsPrototype" aria-label="GitHub contribution activity" aria-busy="true">
-      <div class="gh-loading">
-        <span class="spin">↻</span>
-        <span>Reading the authenticated GitHub CLI contribution calendar…</span>
-      </div>
-    </section>
 
     <footer>
       <div class="wrap">
@@ -1508,7 +1777,6 @@
             <h2 id="usageTitle">Token usage &amp; API equivalent</h2>
           </div>
           <div class="usage-head-actions">
-            <button id="refreshUsage" type="button" title="Refresh token usage" aria-label="Refresh token usage">↻</button>
             <button id="closeUsage" type="button" title="Close" aria-label="Close token usage">×</button>
           </div>
         </div>

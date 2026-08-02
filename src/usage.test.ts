@@ -141,6 +141,7 @@ test("Kimi usage records inherit request effort and expose cache tokens", () => 
     line({
       type: "usage.record",
       model: "kimi-code/k3",
+      time: Date.parse("2026-08-02T09:30:00Z"),
       usage: { inputOther: 10, inputCacheRead: 20, inputCacheCreation: 5, output: 7 },
     }),
   ], "subagent");
@@ -154,6 +155,65 @@ test("Kimi usage records inherit request effort and expose cache tokens", () => 
     cacheRead: 20,
     cacheWrite: 5,
     output: 7,
+    recordedAt: "2026-08-02T09:30:00.000Z",
+  });
+});
+
+test("the spend calendar groups real timestamped usage by day", () => {
+  const rows: RawUsageRow[] = [{
+    source: "codex",
+    model: "gpt-5.6-sol",
+    effort: "high",
+    agent: "main",
+    calls: 2,
+    input: 1_000_000,
+    cacheRead: 0,
+    cacheWrite: 0,
+    output: 0,
+    reasoning: 0,
+    recordedAt: "2026-08-01T08:00:00.000Z",
+  }, {
+    source: "opencode",
+    model: "unpriced-local-model",
+    effort: "default",
+    agent: "subagent",
+    calls: 1,
+    input: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    output: 1_000_000,
+    reasoning: 250_000,
+    recordedAt: "2026-08-01T18:00:00.000Z",
+  }, {
+    source: "claude",
+    model: "claude-opus-5",
+    effort: "xhigh",
+    agent: "main",
+    calls: 1,
+    input: 0,
+    cacheRead: 500_000,
+    cacheWrite: 0,
+    output: 100_000,
+    reasoning: 50_000,
+    recordedAt: "2026-08-02T09:00:00.000Z",
+  }];
+
+  const summary = summarizeUsageRows(rows);
+
+  expect(summary.daily.map((day) => day.date)).toEqual(["2026-08-01", "2026-08-02"]);
+  expect(summary.daily[0]).toMatchObject({
+    calls: 3,
+    pricingCoveragePct: 50,
+    sources: ["codex", "opencode"],
+    tokens: { total: 2_000_000, reasoning: 250_000 },
+  });
+  expect(summary.daily[0]!.estimatedCostEur).toBeCloseTo(5 / 1.1485, 10);
+  expect(summary.daily[1]).toMatchObject({
+    calls: 1,
+    contextReusePct: 100,
+    pricingCoveragePct: 100,
+    sources: ["claude"],
+    tokens: { total: 600_000, cacheRead: 500_000, reasoning: 50_000 },
   });
 });
 

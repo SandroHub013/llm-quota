@@ -91,11 +91,13 @@ test("fonts are served from the repo, not a CDN", async () => {
 
 // The cards are painted as static skeletons so the deferred module never pushes the
 // layout down after first paint. Losing them would bring the layout shift back.
-test("every provider ships a static skeleton card", async () => {
-  const html = await read("public/index.html");
-  for (const id of ["claude", "codex", "zai", "opencode-zen", "gemini", "moonshot"]) {
+test("every visible quota provider ships a static skeleton card", async () => {
+  const [html, app] = await Promise.all([read("public/index.html"), read("public/app.js")]);
+  for (const id of ["claude", "codex", "zai", "gemini", "moonshot"]) {
     expect(html).toContain(`class="card is-skeleton" data-provider="${id}"`);
   }
+  expect(html).not.toContain('class="card is-skeleton" data-provider="opencode-zen"');
+  expect(app).toContain('const LINEUP = ["claude", "codex", "zai", "gemini", "moonshot"]');
 });
 
 test("local token usage sits beside the widget and opens an accessible dialog", async () => {
@@ -106,17 +108,35 @@ test("local token usage sits beside the widget and opens an accessible dialog", 
   ]);
   const widget = html.indexOf('id="openWidget"');
   const usage = html.indexOf('id="openUsage"');
-  const refresh = html.indexOf('id="refreshAll"');
+  const live = html.indexOf('id="liveStatus"');
 
   expect(widget).toBeGreaterThan(-1);
   expect(usage).toBeGreaterThan(widget);
-  expect(refresh).toBeGreaterThan(usage);
+  expect(live).toBeGreaterThan(usage);
   expect(html).toContain('<dialog class="usage-dialog" id="usageDialog"');
+  expect(html).not.toContain('id="refreshAll"');
+  expect(html).not.toContain('id="refreshUsage"');
   expect(app).toContain("usageDialog.showModal()");
   expect(api).toContain('requestJson("/api/usage"');
   expect(app).toContain("summary.contextReusePct");
   expect(app).toContain("row.contextReusePct");
   expect(app).toContain("cache read + cache write");
+});
+
+test("dashboard data refreshes silently and the spend total counts to each new value", async () => {
+  const [html, app, github] = await Promise.all([
+    read("public/index.html"),
+    read("public/app.js"),
+    read("public/github-contributions.prototype.js"),
+  ]);
+
+  expect(html).toContain('id="liveStatus" role="status"');
+  expect(app).toContain("const QUOTA_REFRESH_MS = 60_000");
+  expect(app).toContain("const USAGE_REFRESH_MS = 5_000");
+  expect(app).toContain('document.addEventListener("visibilitychange"');
+  expect(app).toContain("animateUsageAmount(summary.estimatedCostEur)");
+  expect(app).toContain("nextSignature === providerSignatures.get(p.id)");
+  expect(github).toContain("const CONTRIBUTION_REFRESH_MS = 10 * 60_000");
 });
 
 test("gemini quota windows are named like every other provider's", () => {
