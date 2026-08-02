@@ -33,10 +33,19 @@ async function fetchOne(id: string): Promise<QuotaResult> {
 // Provider id list (cards load one by one so a slow provider never blocks the rest).
 app.get("/api/providers", (c) => c.json(providers.map((p) => ({ id: p.id, name: p.name }))));
 
-// All providers at once.
+// All providers at once. Concurrent visible tabs share the same upstream work so
+// silent polling never multiplies provider requests unnecessarily.
+let quotaRequest: Promise<QuotaResult[]> | undefined;
 app.get("/api/quota", async (c) => {
-  const results = await Promise.all(providers.map((p) => fetchOne(p.id)));
-  return c.json({ providers: results, generatedAt: new Date().toISOString() });
+  quotaRequest ??= Promise.all(providers.map((p) => fetchOne(p.id))).finally(() => {
+    quotaRequest = undefined;
+  });
+  const results = await quotaRequest;
+  return c.json(
+    { providers: results, generatedAt: new Date().toISOString() },
+    200,
+    { "Cache-Control": "no-store" },
+  );
 });
 
 // Local CLI histories expose token detail that quota endpoints do not. Compute this
@@ -54,11 +63,11 @@ app.get("/api/prototype/github-contributions", async (c) => {
   return c.json(await collectGitHubContributions(), 200, { "Cache-Control": "no-store" });
 });
 
-// Single provider (used by per-card refresh).
+// Single provider (used after credential and OAuth flows).
 app.get("/api/quota/:id", async (c) => {
   const id = c.req.param("id");
   if (!getProvider(id)) return c.json({ error: "unknown provider" }, 404);
-  return c.json(await fetchOne(id));
+  return c.json(await fetchOne(id), 200, { "Cache-Control": "no-store" });
 });
 
 // Save / clear a user API key for a provider.

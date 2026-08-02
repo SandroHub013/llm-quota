@@ -1,6 +1,6 @@
 # PROTOTYPE — GitHub contribution card
 
-Question: **which GitHub contribution-card layout belongs below the quota providers without turning LLM Quota into a generic analytics dashboard?**
+Question: **which compact GitHub contribution card can join the quota grid without turning LLM Quota into a generic analytics dashboard or forcing desktop scrolling?**
 
 This prototype deliberately lives only on `prototype/github-contributions-card`. Run it with:
 
@@ -27,10 +27,14 @@ The floating switcher and the left/right arrow keys cycle variants without reloa
 
 ## Current verdict
 
-**B — Activity split** is the strongest fit. It preserves the recognizable contribution heatmap, gives streaks and contribution types a clear hierarchy, and is considerably shorter than the monthly mosaic. A is the safest conventional option; C is useful but pushes the product too far toward a general activity dashboard.
+**B — Activity split** is the strongest fit. It preserves the recognizable contribution heatmap while putting total, active days and streaks before it. A is the safest conventional option; C is useful but pushes the product farther toward a general activity dashboard.
+
+GitHub is now the sixth visible card in the four-column masonry, alongside five providers with measurable quotas. All three variants have zero horizontal and vertical overflow at 1920×1080, 1440×900, 1366×768 and 1280×720. Mobile remains a deliberate single-column scrolling layout so the data is not compressed beyond usefulness.
 
 After validation, rewrite the winner as production code and remove this document, both `.prototype.*` modules, the losing variants and the switcher from the main branch.
 
 ## OpenCode Zen finding
 
-The Zen models endpoint exposes catalog fields only (`id`, `object`, `created`, `owned_by`) and no quota/rate-limit headers. The prior aggregate `100%` was therefore not a real quota. This branch replaces it with one honest `free · fair use` availability row per listed free model. Numeric percentages can be added only if Zen publishes usage, limit and reset counters in the future.
+The Zen models endpoint exposes catalog fields only (`id`, `object`, `created`, `owned_by`) and no quota/rate-limit headers. The prior aggregate `100%` was therefore not a real quota. OpenCode Zen is now omitted from the visible quota cards and reset horizon; its local history remains available to the token ledger. A quota card can return only if Zen publishes usage, limit and reset counters.
+
+Provider cards now lead with the percentage remaining rather than percentage consumed. This matches the dashboard's immediate job—showing how much capacity is still available—while the reset horizon continues to use consumption internally to express urgency.
