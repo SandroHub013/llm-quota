@@ -4,11 +4,11 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { readJson } from "./credentials.js";
 
-export type OfficialBridgeProvider = "claude" | "gemini";
+export type OfficialBridgeProvider = "claude" | "gemini" | "zai";
 
 export interface OfficialBridgeSnapshot {
   version: 1;
-  provider: "claude" | "antigravity";
+  provider: "claude" | "antigravity" | "zai";
   capturedAt: string;
   data: Record<string, any>;
 }
@@ -23,7 +23,7 @@ interface BridgeMetadata {
 }
 
 export function officialBridgePaths(provider: OfficialBridgeProvider, home = homedir()) {
-  const source = provider === "gemini" ? "antigravity" : "claude";
+  const source = provider === "gemini" ? "antigravity" : provider;
   const root = join(home, ".llm-quota", "official");
   return {
     source,
@@ -32,9 +32,9 @@ export function officialBridgePaths(provider: OfficialBridgeProvider, home = hom
     script: join(root, `${source}-statusline-bridge.ps1`),
     previous: join(root, `${source}-previous-statusline.cmd`),
     metadata: join(root, `${source}-bridge-install.json`),
-    config: provider === "claude"
-      ? join(home, ".claude", "settings.json")
-      : join(home, ".gemini", "antigravity-cli", "settings.json"),
+    config: provider === "gemini"
+      ? join(home, ".gemini", "antigravity-cli", "settings.json")
+      : join(home, ".claude", "settings.json"),
   };
 }
 
@@ -44,7 +44,7 @@ export async function readOfficialBridgeSnapshot(
 ): Promise<OfficialBridgeSnapshot | undefined> {
   const paths = officialBridgePaths(provider, home);
   const snapshot = await readJson<OfficialBridgeSnapshot>(paths.cache);
-  const expected = provider === "gemini" ? "antigravity" : "claude";
+  const expected = provider === "gemini" ? "antigravity" : provider;
   if (
     snapshot?.version !== 1 ||
     snapshot.provider !== expected ||
@@ -140,10 +140,12 @@ export function buildPowerShellBridge(
   cachePath: string,
   previousCommandPath: string,
 ): string {
-  const source = provider === "gemini" ? "antigravity" : "claude";
+  const source = provider === "gemini" ? "antigravity" : provider;
   const dataSelector = provider === "claude"
     ? `$officialData = if ($null -ne $state.rate_limits) { [ordered]@{ rateLimits = $state.rate_limits } } else { $null }`
-    : `$officialData = if ($null -ne $state.quota) { [ordered]@{ quota = $state.quota; planTier = $state.plan_tier } } else { $null }`;
+    : provider === "gemini"
+      ? `$officialData = if ($null -ne $state.quota) { [ordered]@{ quota = $state.quota; planTier = $state.plan_tier } } else { $null }`
+      : `$officialData = if ($null -ne $state.glm_quota) { [ordered]@{ glmQuota = $state.glm_quota } } elseif ($null -ne $state.zai_quota) { [ordered]@{ zaiQuota = $state.zai_quota } } elseif ($null -ne $state.rate_limits) { [ordered]@{ rateLimits = $state.rate_limits } } else { $null }`;
 
   return `$ErrorActionPreference = 'SilentlyContinue'
 $payload = [Console]::In.ReadToEnd()
@@ -184,11 +186,13 @@ if ($null -ne $state.model.display_name) { $parts.Add([string]$state.model.displ
 if ($null -ne $state.context_window.used_percentage) {
   $parts.Add("context $([Math]::Round([double]$state.context_window.used_percentage))%")
 }
-if (${provider === "claude" ? "$null -ne $state.rate_limits.five_hour.used_percentage" : "$null -ne $state.quota"}) {
+if (${provider === "claude" ? "$null -ne $state.rate_limits.five_hour.used_percentage" : provider === "gemini" ? "$null -ne $state.quota" : "$null -ne $officialData"}) {
   ${provider === "claude"
     ? `$parts.Add("5h $([Math]::Round([double]$state.rate_limits.five_hour.used_percentage))% used")`
-    : `$remaining = @($state.quota.PSObject.Properties.Value | Where-Object { $null -ne $_.remaining_fraction } | ForEach-Object { [double]$_.remaining_fraction * 100 })
-  if ($remaining.Count -gt 0) { $parts.Add("quota $([Math]::Round(($remaining | Measure-Object -Minimum).Minimum))% left") }`}
+    : provider === "gemini"
+      ? `$remaining = @($state.quota.PSObject.Properties.Value | Where-Object { $null -ne $_.remaining_fraction } | ForEach-Object { [double]$_.remaining_fraction * 100 })
+  if ($remaining.Count -gt 0) { $parts.Add("quota $([Math]::Round(($remaining | Measure-Object -Minimum).Minimum))% left") }`
+      : `$parts.Add("Z.ai GLM plugin sync")`}
 }
 if ($parts.Count -eq 0) { $parts.Add('LLM Quota official sync') }
 Write-Output ($parts -join ' \u00b7 ')
