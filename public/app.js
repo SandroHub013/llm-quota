@@ -107,7 +107,10 @@ function markHtml(id, cls) {
 
 // Reveal order, matching the static skeletons in index.html. Only used for a
 // provider the server returns that has no skeleton waiting for it.
-const LINEUP = ["claude", "codex", "zai", "gemini", "moonshot"];
+// "moonshot" is absent on purpose: see the comment in src/providers/index.ts.
+// Its palette, logo and model list stay below so the card can return unchanged
+// once Kimi Code exposes a quota surface a third-party dashboard may read.
+const LINEUP = ["claude", "codex", "zai", "gemini"];
 const VISIBLE_PROVIDERS = new Set(LINEUP);
 const orderOf = (id) => Math.max(0, LINEUP.indexOf(id));
 
