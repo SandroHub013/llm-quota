@@ -1,7 +1,6 @@
 import type { Provider } from "./types.js";
 import { claude } from "./claude.js";
 import { codex } from "./codex.js";
-import { zai } from "./zai.js";
 import { gemini } from "./gemini.js";
 
 // `moonshot` is deliberately not registered, so no Kimi card is rendered and no
@@ -26,7 +25,19 @@ import { gemini } from "./gemini.js";
 //
 // Re-register this adapter once Moonshot documents a quota surface a third-party
 // dashboard may call.
-export const providers: Provider[] = [claude, codex, zai, gemini];
+// `zai` is deliberately not registered either. The card was built on the official
+// status-line bridge reading $state.glm_quota, but nothing publishes that field:
+// Z.ai's own Usage Query Plugin ships only a slash command, an agent and a skill
+// (docs.z.ai/devpack/extension/usage-query-plugin, "only available for the
+// Personal plan", Claude Code only), so ~/.llm-quota/official/zai.json is never
+// written and the card sat at "bridge active" forever.
+//
+// The plugin's script reads the quota from /api/monitor/usage/quota/limit with the
+// user's key in the Authorization header — the same route this project removed as
+// high risk (docs/research/provider-terms-assessment.md). Re-register this adapter
+// only together with a decision on that route, or once Z.ai publishes a field the
+// bridge can read.
+export const providers: Provider[] = [claude, codex, gemini];
 
 export function getProvider(id: string): Provider | undefined {
   return providers.find((p) => p.id === id);
