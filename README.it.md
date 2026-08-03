@@ -13,6 +13,8 @@ Gira sulla tua macchina. Non parla con nessuno tranne i provider.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml/badge.svg)](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml)
 [![Runtime: Bun](https://img.shields.io/badge/runtime-Bun-000?logo=bun)](https://bun.sh)
+[![npm downloads](https://img.shields.io/npm/dm/llm-quota?color=blue&logo=npm)](https://www.npmjs.com/package/llm-quota)
+[![GitHub Release Downloads](https://img.shields.io/github/downloads/SandroHub013/llm-quota/total?color=green&logo=github)](https://github.com/SandroHub013/llm-quota/releases)
 
 **[→ Sito llm-quota](https://sandrohub013.github.io/llm-quota/)**
 

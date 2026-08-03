@@ -90,7 +90,7 @@ app.post("/api/key/:id", async (context) => {
 // wrapper. Existing custom status-line commands are chained and kept visible.
 app.post("/api/official-bridge/:id", async (context) => {
   const id = context.req.param("id");
-  if (id !== "claude" && id !== "gemini") {
+  if (id !== "claude" && id !== "gemini" && id !== "zai") {
     return context.json({ error: "unsupported bridge" }, 404);
   }
   try {
@@ -104,7 +104,7 @@ app.post("/api/official-bridge/:id", async (context) => {
 
 app.delete("/api/official-bridge/:id", async (context) => {
   const id = context.req.param("id");
-  if (id !== "claude" && id !== "gemini") {
+  if (id !== "claude" && id !== "gemini" && id !== "zai") {
     return context.json({ error: "unsupported bridge" }, 404);
   }
   try {
