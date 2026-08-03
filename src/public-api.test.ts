@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { loadProvider, loadQuota, loadUsage, requestJson } from "../public/api.js";
+import { installOfficialBridge, loadProvider, loadQuota, loadUsage, removeOfficialBridge, requestJson } from "../public/api.js";
 
 test("dashboard refresh loads every provider with one aggregate request", async () => {
   const urls: string[] = [];
@@ -45,4 +45,21 @@ test("single-provider refresh encodes ids and rejects malformed responses", asyn
 
 test("JSON requests reject non-JSON responses with a stable error", async () => {
   expect(requestJson("/broken", undefined, async () => new Response("oops"))).rejects.toThrow("invalid_json");
+});
+
+test("official bridge setup is explicit and provider-scoped", async () => {
+  const calls: Array<{ url: string; method?: string }> = [];
+  const result = await installOfficialBridge("claude", async (url, init) => {
+    calls.push({ url: String(url), method: init?.method });
+    return Response.json({ id: "claude", metrics: [] });
+  });
+  expect(calls).toEqual([{ url: "/api/official-bridge/claude", method: "POST" }]);
+  expect(result.id).toBe("claude");
+
+  const removed = await removeOfficialBridge("claude", async (url, init) => {
+    calls.push({ url: String(url), method: init?.method });
+    return Response.json({ id: "claude", metrics: [] });
+  });
+  expect(calls.at(-1)).toEqual({ url: "/api/official-bridge/claude", method: "DELETE" });
+  expect(removed.id).toBe("claude");
 });

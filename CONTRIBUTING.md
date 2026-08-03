@@ -70,9 +70,8 @@ A provider is one file in `src/providers/` that fetches whatever the service exp
 and returns a `QuotaResult`.
 
 1. Read `src/providers/types.ts` for the shape.
-2. Copy the closest existing adapter — `zai.ts` is the simplest (API key, one quota
-   endpoint), `claude.ts` the most complete (OAuth from disk, caching, rate-limit
-   backoff).
+2. Copy the closest supported adapter — `zai.ts` is the unavailable-state baseline,
+   `claude.ts` parses an official client bridge, and `codex.ts` uses documented IPC.
 3. Register it in `src/providers/index.ts`.
 4. If the provider needs a logo, add an official mark to both `public/logos/` and
    `docs/logos/`, then reference it — do **not** hotlink it. `src/frontend.test.ts`
@@ -91,6 +90,9 @@ and returns a `QuotaResult`.
   with exactly one (`hono`) is a feature.
 - **Never commit credentials**, and scrub tokens out of test fixtures. A fixture with
   a real token gets the PR closed, not fixed.
+- **Official surfaces only.** Do not read or refresh another client's OAuth token,
+  imitate its identity, call a private endpoint, scrape a console, or bypass a block.
+  If no documented API/IPC/export exists, return `no_endpoint` and explain the fallback.
 - **Practitioner voice in docs.** Write what broke and what to do, not what one should
   consider doing.
 
