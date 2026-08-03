@@ -203,6 +203,72 @@ class WidgetPositionTest(unittest.TestCase):
         )
 
 
+class GlassEffectTest(unittest.TestCase):
+    def test_acrylic_tint_is_packed_for_the_windows_compositor(self):
+        self.assertEqual(widget.abgr_color("#0b1623", 125), 0x7D23160B)
+
+    def test_glass_background_layers_are_color_neutral(self):
+        for color in (widget.GLASS_TINT, widget.BG, widget.PANEL):
+            channels = tuple(int(color[index:index + 2], 16) for index in (1, 3, 5))
+            with self.subTest(color=color):
+                self.assertEqual(max(channels) - min(channels), 0)
+
+    def test_surface_keeps_a_readable_transparent_fallback(self):
+        self.assertGreaterEqual(widget.SURFACE_OPACITY, 0.6)
+        self.assertLessEqual(widget.SURFACE_OPACITY, 0.72)
+
+    @patch("widget.set_window_shape")
+    @patch("widget.apply_native_acrylic", return_value=True)
+    @patch("widget.native_window_handle", side_effect=(101, 202))
+    def test_acrylic_surface_has_only_one_rounded_corner_owner(
+        self,
+        native_window_handle,
+        apply_native_acrylic,
+        set_window_shape,
+    ):
+        fake = object.__new__(widget.Widget)
+        fake.update_idletasks = unittest.mock.Mock()
+        fake.winfo_rootx = unittest.mock.Mock(return_value=0)
+        fake.winfo_rooty = unittest.mock.Mock(return_value=0)
+        fake.logo = unittest.mock.Mock()
+        fake.logo.winfo_rootx.return_value = 0
+        fake.logo.winfo_rooty.return_value = 0
+        fake.logo.winfo_width.return_value = 40
+        fake.logo.winfo_height.return_value = 40
+        fake.surface = unittest.mock.Mock()
+        fake.surface.winfo_ismapped.return_value = True
+
+        widget.Widget._apply_window_effects(fake)
+
+        native_window_handle.assert_has_calls([unittest.mock.call(fake), unittest.mock.call(fake.surface)])
+        apply_native_acrylic.assert_called_once_with(202)
+        set_window_shape.assert_called_once_with(101, [("ellipse", 0, 0, 40, 40)])
+
+
+class WakeBehaviorTest(unittest.TestCase):
+    @patch("widget.force_window_visible")
+    def test_wake_forces_both_native_windows_visible(self, force_window_visible):
+        fake = object.__new__(widget.Widget)
+        fake.view_mode = "q"
+        fake.expanded = True
+        fake.panel = unittest.mock.Mock()
+        fake.surface = unittest.mock.Mock()
+        fake.deiconify = unittest.mock.Mock()
+        fake.after_idle = unittest.mock.Mock()
+        fake._sync_surface_to_logo = unittest.mock.Mock()
+        fake.lift = unittest.mock.Mock()
+        fake.attributes = unittest.mock.Mock()
+        fake._user_positioned = True
+        fake.refresh = unittest.mock.Mock()
+
+        widget.Widget._do_wake_up(fake)
+
+        self.assertEqual(
+            force_window_visible.call_args_list,
+            [unittest.mock.call(fake), unittest.mock.call(fake.surface)],
+        )
+
+
 class PollingTest(unittest.TestCase):
     def test_live_intervals_match_each_data_source(self):
         self.assertEqual(widget.POLL_MS, 60_000)

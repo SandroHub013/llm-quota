@@ -82,13 +82,12 @@ def quota_fixture() -> dict:
             "name": "Claude Code",
             "status": "ok",
             "plan": "max",
-            "authSource": "~/.claude/.credentials.json",
+            "sourceLabel": "Claude Code status line",
             "consoleUrl": "https://claude.ai/settings/usage",
             "updatedAt": NOW.isoformat(),
             "metrics": [
                 {"label": "Session (5h)", "used": 38, "limit": 100, "unit": "percent", "resetAt": iso_after(hours=3, minutes=42)},
                 {"label": "Weekly (7d)", "used": 63, "limit": 100, "unit": "percent", "resetAt": iso_after(days=4, hours=18)},
-                {"label": "OAuth token", "resetAt": iso_after(hours=2, minutes=18)},
             ],
         },
         {
@@ -96,7 +95,7 @@ def quota_fixture() -> dict:
             "name": "Codex (ChatGPT)",
             "status": "ok",
             "plan": "plus",
-            "authSource": "~/.codex/auth.json",
+            "sourceLabel": "Codex app-server",
             "consoleUrl": "https://chatgpt.com",
             "updatedAt": NOW.isoformat(),
             "metrics": [
@@ -106,24 +105,20 @@ def quota_fixture() -> dict:
         {
             "id": "zai",
             "name": "z.ai",
-            "status": "ok",
-            "plan": "lite",
-            "authSource": "local API key",
+            "status": "no_endpoint",
+            "sourceLabel": "official plugin / console",
             "consoleUrl": "https://z.ai/manage-apikey/apikey-list",
             "updatedAt": NOW.isoformat(),
-            "metrics": [
-                {"label": "Web tool (month)", "used": 11, "limit": 100, "unit": "percent", "resetAt": iso_after(days=6, hours=20)},
-                {"label": "Tokens (5h)", "used": 27, "limit": 100, "unit": "percent", "resetAt": iso_after(hours=1, minutes=26)},
-                {"label": "Tokens (month)", "used": 19, "limit": 100, "unit": "percent", "resetAt": iso_after(days=3, hours=6)},
-            ],
+            "metrics": [],
+            "message": "Quota available through the official Usage Query plugin; no public dashboard API.",
         },
         {
             "id": "gemini",
             "name": "Gemini",
             "status": "ok",
             "plan": "Google AI Pro",
-            "authSource": "~/.gemini/oauth_creds.json",
-            "consoleUrl": "https://aistudio.google.com/usage",
+            "sourceLabel": "Antigravity status line",
+            "consoleUrl": "https://antigravity.google/",
             "updatedAt": NOW.isoformat(),
             "metrics": [
                 {"label": "Gemini models \u00b7 Weekly (7d)", "used": 29, "limit": 100, "unit": "percent", "resetAt": iso_after(days=2, hours=8)},
@@ -134,15 +129,13 @@ def quota_fixture() -> dict:
         },
         {
             "id": "moonshot",
-            "name": "Kimi (Moonshot)",
+            "name": "Kimi / Moonshot",
             "status": "ok",
-            "plan": "intermediate",
-            "authSource": "local API key",
+            "sourceLabel": "Moonshot Open Platform balance API",
             "consoleUrl": "https://platform.moonshot.ai/console/account",
             "updatedAt": NOW.isoformat(),
             "metrics": [
-                {"label": "Session (5h)", "used": 34, "limit": 100, "unit": "percent", "resetAt": iso_after(hours=2, minutes=9)},
-                {"label": "Weekly (7d)", "used": 74, "limit": 100, "unit": "percent", "resetAt": iso_after(days=1, hours=21)},
+                {"label": "Available API credit", "remaining": 46.2, "unit": "cny"},
             ],
         },
     ]

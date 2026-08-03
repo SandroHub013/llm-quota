@@ -1,4 +1,4 @@
-import { beginLogin, loadProvider, loadQuota, loadUsage, saveProviderKey } from "./api.js";
+import { installOfficialBridge, loadProvider, loadQuota, loadUsage, removeOfficialBridge, saveProviderKey } from "./api.js";
 import { dataSignature, escapeHtml } from "./ui.js";
 import { mountGitHubContributionPrototype } from "./github-contributions.prototype.js";
 
@@ -403,7 +403,8 @@ function metricHtml(m) {
         : m.used != null
           ? fmt(m.used, m.unit)
           : "";
-  const reset = m.resetAt ? `<div class="reset">${resetText(m.resetAt)}</div>` : "";
+  const expiredUnused = remainingPct === 100 && m.resetAt && new Date(m.resetAt).getTime() <= Date.now();
+  const reset = m.resetAt && !expiredUnused ? `<div class="reset">${resetText(m.resetAt)}</div>` : "";
   const head = `<div class="metric-head"><span>${escapeHtml(m.label)}</span><span class="val">${right}</span></div>`;
   if (m.availability === "listed") {
     return `<div class="metric metric-availability"><div class="availability-orb" aria-hidden="true"></div><div class="metric-body">${head}<div class="reset">No numeric quota published</div></div></div>`;
@@ -411,7 +412,7 @@ function metricHtml(m) {
   if (remainingPct != null) {
     return `<div class="metric">${donutHtml(remainingPct)}<div class="metric-body">${head}${reset}</div></div>`;
   }
-  // No percentage to plot (an OAuth token, say). Hold the donut column open anyway
+  // No percentage to plot (a currency balance, say). Hold the donut column open anyway
   // so every label in the card starts on the same vertical line.
   return `<div class="metric"><div class="donut-gap" aria-hidden="true"></div>
     <div class="metric-body">${head}
@@ -426,23 +427,25 @@ function cardHtml(p) {
   const models = (MODELS[p.id] || [])
     .map((m) => `<div class="mrow"><span>${escapeHtml(m.n)}</span><span class="mi">${escapeHtml(m.ctx)} · ${escapeHtml(m.eff)}</span></div>`)
     .join("");
-  const src = p.authSource ? `<span class="src">via ${escapeHtml(p.authSource)}</span>` : "";
+  const source = p.sourceLabel || p.authSource;
+  const context = [p.plan ? `plan: ${p.plan}` : "", source ? `via ${source}` : ""].filter(Boolean).join(" · ");
   return `
     <div class="card-top">
       ${markHtml(p.id, "avatar")}
       <div class="titles">
         <h2 class="name">${escapeHtml(p.name)}</h2>
-        ${p.plan ? `<div class="plan">plan: ${escapeHtml(p.plan)}</div>` : src ? `<div class="plan">${src}</div>` : ""}
+        ${context ? `<div class="plan"${p.sourceUpdatedAt ? ` title="Official source updated ${escapeHtml(p.sourceUpdatedAt)}"` : ""}>${escapeHtml(context)}</div>` : ""}
       </div>
       <span class="badge b-${st}">${STATUS_LABEL[st] || st}</span>
     </div>
     ${metrics}
     ${models ? `<details class="models"><summary>Models · context · effort</summary>${models}<div class="mnote">indicative values</div></details>` : ""}
     ${p.message ? `<div class="msg">${escapeHtml(p.message)}</div>` : ""}
-    ${p.loginUrl ? `<button class="login-btn" data-login="${escapeHtml(p.loginUrl)}" data-provider="${id}">⬢ Sign in with Google</button>` : ""}
+    ${p.setupUrl ? `<button class="integration-btn" data-setup="${escapeHtml(p.setupUrl)}" data-provider="${id}">${escapeHtml(p.setupLabel || "Enable official integration")}</button>` : ""}
     ${p.needsKey ? `<div class="keyrow"><input type="password" placeholder="Paste API key…" aria-label="API key ${escapeHtml(p.name)}" data-key="${id}" /><button data-save="${id}">Save</button></div>` : ""}
     <div class="card-foot">
       <a href="${escapeHtml(p.consoleUrl)}" target="_blank" rel="noreferrer">Open console ↗</a>
+      ${p.teardownUrl ? `<button class="mini" data-teardown="${escapeHtml(p.teardownUrl)}" data-provider="${id}">${escapeHtml(p.teardownLabel || "Disable integration")}</button>` : ""}
     </div>`;
 }
 
@@ -515,7 +518,7 @@ function animate(el, withMotion = true) {
 
 /* ============================================================================
    THE HORIZON
-   Every reset the five measurable providers will perform, on one non-linear time axis.
+   Every currently measurable provider reset, on one non-linear time axis.
    x = sqrt(hours / 168) so the next few hours — the part you can still act on —
    get most of the width, while weekly windows still have a place to sit.
    Stem height = how much of that window you have already burnt.
@@ -797,48 +800,35 @@ for (const root of [grid, hzRail]) {
 }
 
 grid.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-save],[data-login]");
+  const t = e.target.closest("[data-save],[data-setup],[data-teardown]");
   if (!t) return;
   if (t.dataset.save) saveKey(t.dataset.save);
-  if (t.dataset.login) startLogin(t);
+  if (t.dataset.setup) setupOfficialBridge(t);
+  if (t.dataset.teardown) teardownOfficialBridge(t);
 });
 
-// OAuth loopback flow: open Google's consent page; the server catches the redirect
-// on localhost:51121 and saves the credentials by itself. We just poll until
-// the provider flips out of "unauthenticated".
-async function startLogin(btn) {
-  const url = btn.dataset.login;
+async function setupOfficialBridge(btn) {
   const provider = btn.dataset.provider;
   btn.disabled = true;
-  btn.textContent = "…";
-  let j;
+  btn.textContent = "Installing…";
   try {
-    j = await beginLogin(url);
+    if (render(await installOfficialBridge(provider))) drawHorizon();
   } catch (error) {
     btn.disabled = false;
     btn.textContent = `Retry: ${error instanceof Error ? error.message : "error"}`;
-    return;
   }
-  if (j.error || !j.url) {
+}
+
+async function teardownOfficialBridge(btn) {
+  const provider = btn.dataset.provider;
+  btn.disabled = true;
+  btn.textContent = "Restoring…";
+  try {
+    if (render(await removeOfficialBridge(provider))) drawHorizon();
+  } catch (error) {
     btn.disabled = false;
-    btn.textContent = "Error: " + (j.error ?? "no url");
-    return;
+    btn.textContent = `Retry: ${error instanceof Error ? error.message : "error"}`;
   }
-  window.open(j.url, "_blank");
-  btn.textContent = "Completa il login nel browser…";
-  for (let i = 0; i < 60; i++) {
-    await new Promise((r) => setTimeout(r, 3000));
-    try {
-      const p = await loadProvider(provider);
-      if (p.status !== "unauthenticated") {
-        if (render(p)) drawHorizon();
-        return;
-      }
-    } catch {}
-  }
-  btn.disabled = false;
-  btn.textContent = "Retry sign-in";
-  refreshOne(provider);
 }
 
 usageButton.addEventListener("click", () => usageDialog.showModal());

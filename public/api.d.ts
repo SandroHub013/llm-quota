@@ -10,4 +10,5 @@ export function loadUsage(request?: RequestFn): Promise<UsageSummary>;
 export function loadGitHubContributions(request?: RequestFn): Promise<GitHubContributionsResult>;
 export function loadProvider(id: string, request?: RequestFn): Promise<QuotaResult>;
 export function saveProviderKey(id: string, key: string, request?: RequestFn): Promise<QuotaResult>;
-export function beginLogin<T = Record<string, unknown>>(path: string, request?: RequestFn): Promise<T>;
+export function installOfficialBridge(id: string, request?: RequestFn): Promise<QuotaResult>;
+export function removeOfficialBridge(id: string, request?: RequestFn): Promise<QuotaResult>;
