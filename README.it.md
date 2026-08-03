@@ -7,7 +7,7 @@
 
 **Una sola dashboard live per tutti gli abbonamenti AI che paghi.**
 
-Claude Code · Codex · Gemini · z.ai · Moonshot — su un unico asse dei reset.
+Claude Code · Codex · Gemini · z.ai — su un unico asse dei reset.
 Gira sulla tua macchina. Non parla con nessuno tranne i provider.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -134,10 +134,14 @@ credenziali o cronologie d'uso reali.
 | **Codex** (ChatGPT) | JSON-RPC ufficiale `codex app-server` | Piano attivo + finestre d'uso |
 | **z.ai** | Plugin ufficiale Usage Query / console | Stato non disponibile finché manca una API pubblica per dashboard |
 | **Gemini / Antigravity** | JSON ufficiale della status line Antigravity (opt-in) | Quota residua per bucket e reset |
-| **Kimi / Moonshot** | API balance documentata di Open Platform | Credito API; la quota Kimi Code resta nel comando `/usage` |
+| **Kimi / Moonshot** | Card disabilitata | La quota del piano Kimi Code non ha una fonte machine-readable conforme; i token restano nel registro locale |
 
 OpenCode resta una fonte del registro token locale, ma Zen non compare nelle card quota: il suo
 endpoint pubblico espone il catalogo modelli, non utilizzo numerico, limiti o tempi di reset.
+Kimi è escluso per lo stesso motivo: la sua status line ufficiale non porta campi di quota, rate
+limit o abbonamento, le finestre del piano dietro `/usage` sono raggiungibili solo con il token
+OAuth della CLI Kimi Code, e il balance documentato di Open Platform è credito API, non quota del
+piano.
 
 Le chiavi inserite a mano restano in locale in `~/.llm-quota/config.json`. Non vengono mai inviate
 a nessuno tranne al provider a cui appartengono, e mai committate.
