@@ -92,11 +92,15 @@ test("fonts are served from the repo, not a CDN", async () => {
 // layout down after first paint. Losing them would bring the layout shift back.
 test("every visible quota provider ships a static skeleton card", async () => {
   const [html, app] = await Promise.all([read("public/index.html"), read("public/app.js")]);
-  for (const id of ["claude", "codex", "zai", "gemini", "moonshot"]) {
+  for (const id of ["claude", "codex", "zai", "gemini"]) {
     expect(html).toContain(`class="card is-skeleton" data-provider="${id}"`);
   }
-  expect(html).not.toContain('class="card is-skeleton" data-provider="opencode-zen"');
-  expect(app).toContain('const LINEUP = ["claude", "codex", "zai", "gemini", "moonshot"]');
+  // Disabled providers must not reserve a skeleton, or the grid paints a card
+  // that never arrives. Moonshot: see the comment in src/providers/index.ts.
+  for (const id of ["opencode-zen", "moonshot"]) {
+    expect(html).not.toContain(`class="card is-skeleton" data-provider="${id}"`);
+  }
+  expect(app).toContain('const LINEUP = ["claude", "codex", "zai", "gemini"]');
 });
 
 test("local token usage sits beside the widget and opens an accessible dialog", async () => {
