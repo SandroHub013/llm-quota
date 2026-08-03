@@ -90,7 +90,9 @@ app.post("/api/key/:id", async (context) => {
 // wrapper. Existing custom status-line commands are chained and kept visible.
 app.post("/api/official-bridge/:id", async (context) => {
   const id = context.req.param("id");
-  if (id !== "claude" && id !== "gemini" && id !== "zai") {
+  // Z.ai is absent on purpose: its adapter is unregistered, so fetchOne has no
+  // provider to report with. See src/providers/index.ts.
+  if (id !== "claude" && id !== "gemini") {
     return context.json({ error: "unsupported bridge" }, 404);
   }
   try {
@@ -104,7 +106,9 @@ app.post("/api/official-bridge/:id", async (context) => {
 
 app.delete("/api/official-bridge/:id", async (context) => {
   const id = context.req.param("id");
-  if (id !== "claude" && id !== "gemini" && id !== "zai") {
+  // Z.ai is absent on purpose: its adapter is unregistered, so fetchOne has no
+  // provider to report with. See src/providers/index.ts.
+  if (id !== "claude" && id !== "gemini") {
     return context.json({ error: "unsupported bridge" }, 404);
   }
   try {
