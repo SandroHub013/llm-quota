@@ -14,7 +14,8 @@ export function parseZaiBridgeUsage(snapshot?: OfficialBridgeSnapshot): QuotaMet
   const metrics: QuotaMetric[] = [];
   const data = snapshot.data;
 
-  const glm = data.glmQuota ?? data.zaiQuota ?? data.rateLimits;
+  // Never fall back to rateLimits: that field is Claude's own quota, not GLM's.
+  const glm = data.glmQuota ?? data.zaiQuota;
   if (glm && typeof glm === "object") {
     if (typeof glm.used_percentage === "number") {
       metrics.push({
