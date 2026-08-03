@@ -6,7 +6,7 @@
     <title>LLM Quota — live AI quotas, spend, and reset times</title>
     <meta
       name="description"
-      content="Local-first live dashboard, CLI, and Windows widget for five measurable AI quotas, local token spend, and optional GitHub activity. Automatic updates, zero telemetry."
+      content="Local-first dashboard, CLI, and Windows widget for official AI quota sources, local token spend, and optional GitHub activity. Automatic updates, zero telemetry."
     />
     <meta name="theme-color" content="#05060b" />
     <meta name="color-scheme" content="dark" />
@@ -634,7 +634,7 @@
               </svg>
               <h3>Reset horizon</h3>
               <p>
-                All five measurable providers' resets on one axis, now to seven days. Hover a marker and its
+                Every currently measurable provider reset on one axis, now to seven days. Hover a marker and its
                 card lights up; hover a card and its marker does.
               </p>
             </article>
@@ -652,10 +652,10 @@
               <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <circle cx="8" cy="12" r="4" /><path d="M12 12h9M17.5 12v3.5M20.5 12v2.5" />
               </svg>
-              <h3>Reuses your sessions</h3>
+              <h3>Official-surface first</h3>
               <p>
-                Reads the OAuth tokens <code>claude</code>, <code>codex</code> and
-                <code>opencode</code> already wrote to disk. No new logins for most providers.
+                Uses <code>codex app-server</code> and opt-in status-line bridges for Claude and
+                Antigravity. It never reads or refreshes another client's OAuth token.
               </p>
             </article>
             <article class="feat">
@@ -708,7 +708,7 @@
               <h3>Live Windows widget</h3>
               <p>
                 The always-on-top widget follows the dashboard's local server automatically and
-                keeps five measurable quotas, spend, and reset countdowns current.
+                keeps provider cards, local spend, and available reset countdowns current.
               </p>
             </article>
           </div>
@@ -736,7 +736,7 @@
               <img
                 class="shot"
                 src="./dashboard-preview.jpg"
-                alt="The current LLM Quota dashboard with a seven-day reset horizon, live status, local spend total, five measurable quota cards, and a local token-spend calendar."
+                alt="The current LLM Quota dashboard with a seven-day reset horizon, official source status, local spend total, provider cards, and a local token-spend calendar."
                 width="1600" height="800" loading="lazy" decoding="async"
               />
             </picture>
@@ -750,20 +750,20 @@
             <h2>What it reads, and from where</h2>
             <div>
               <p class="section-lede">
-                Nothing is uploaded. Credentials are read from disk, used to call the provider
-                they belong to, and never written anywhere else.
+                Nothing is uploaded. Official clients own their credentials; bridge caches contain
+                only quota windows and reset times, never account identity, transcripts, or tokens.
               </p>
               <div class="scroller">
                 <table>
                   <thead>
-                    <tr><th>Provider</th><th>Credentials from</th><th>What you get</th></tr>
+                    <tr><th>Provider</th><th>Supported source</th><th>What you get</th></tr>
                   </thead>
                   <tbody>
-                    <tr><td>Claude Code</td><td><code>~/.claude/.credentials.json</code></td><td>Live 5h window + weekly quota %, reset time</td></tr>
-                    <tr><td>Codex (ChatGPT)</td><td><code>~/.codex/auth.json</code></td><td>Active plan + usage windows</td></tr>
-                    <tr><td>z.ai</td><td><code>opencode</code> config or pasted key</td><td>Live 5h token + monthly %, web-search status</td></tr>
-                    <tr><td>Gemini</td><td>In-app Google login or AI Studio key</td><td>Live per-model quota via Code Assist</td></tr>
-                    <tr><td>Moonshot</td><td>Pasted API key</td><td>Live remaining credit and usage</td></tr>
+                    <tr><td>Claude Code</td><td>Official status-line JSON (opt-in)</td><td>5h + weekly quota %, reset time</td></tr>
+                    <tr><td>Codex (ChatGPT)</td><td>Official <code>codex app-server</code></td><td>Active plan + usage windows</td></tr>
+                    <tr><td>z.ai</td><td>Official Usage Query plugin / console</td><td>Unavailable until a public dashboard API exists</td></tr>
+                    <tr><td>Gemini / Antigravity</td><td>Official Antigravity status-line JSON (opt-in)</td><td>Per-bucket quota and reset time</td></tr>
+                    <tr><td>Kimi / Moonshot</td><td>Documented Open Platform balance API</td><td>API credit; Kimi Code quota stays in <code>/usage</code></td></tr>
                   </tbody>
                 </table>
               </div>
@@ -781,7 +781,7 @@
           <div class="lead-grid">
             <h2>Your installation, your accounts</h2>
             <ul class="ticks">
-              <li><b>Provider quotas come from the credentials on the current machine.</b> Pasted keys stay in <code>~/.llm-quota/config.json</code>.</li>
+              <li><b>Provider quotas come from official local interfaces or documented APIs.</b> Pasted Open Platform keys stay in <code>~/.llm-quota/config.json</code>.</li>
               <li><b>Token spend comes from the current user's local CLI histories.</b> Screenshots use synthetic data, never maintainer history.</li>
               <li><b>GitHub is optional and personal by design.</b> The calendar uses the viewer authenticated by <code>gh auth login</code>; no username is built in.</li>
               <li><b>Custom ports work end to end.</b> Set <code>PORT</code> for the server; the dashboard passes its origin to the widget, while CLI and widget also accept <code>LLM_QUOTA_URL</code>.</li>

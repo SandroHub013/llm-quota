@@ -6,6 +6,7 @@ The widget has two display modes:
 
 Features:
 - Local provider logos (Claude, ChatGPT/Codex, Z.ai, Gemini, Kimi)
+- Native Windows acrylic glass without changing the existing widget layout
 - A live reset countdown for every measurable quota
 - Hover details for every provider window
 - A pulsing red Q ring when a quota is at or below 15%, or rate limited
@@ -93,7 +94,9 @@ POLL_MS = 60_000
 USAGE_POLL_MS = 5_000
 COUNTDOWN_TICK_MS = 30_000
 HORIZON_SEC = 7 * 24 * 60 * 60
-SURFACE_OPACITY = 0.95
+SURFACE_OPACITY = 0.68
+GLASS_TINT = "#000000"
+GLASS_TINT_ALPHA = 82
 MUTEX_NAME = "Local\\LLMQuotaWidget"
 WAKE_PORT = 51122
 
@@ -157,6 +160,93 @@ class Rect(ctypes.Structure):
         ("right", wintypes.LONG),
         ("bottom", wintypes.LONG),
     ]
+
+
+class AccentPolicy(ctypes.Structure):
+    _fields_ = (
+        ("accent_state", ctypes.c_int),
+        ("accent_flags", ctypes.c_int),
+        ("gradient_color", ctypes.c_uint),
+        ("animation_id", ctypes.c_int),
+    )
+
+
+class WindowCompositionAttributeData(ctypes.Structure):
+    _fields_ = (
+        ("attribute", ctypes.c_int),
+        ("data", ctypes.c_void_p),
+        ("size", ctypes.c_size_t),
+    )
+
+
+def native_window_handle(window):
+    """Return the real Win32 handle behind a Tk top-level window."""
+    user32 = ctypes.windll.user32
+    user32.GetParent.argtypes = (wintypes.HWND,)
+    user32.GetParent.restype = wintypes.HWND
+    return user32.GetParent(window.winfo_id()) or window.winfo_id()
+
+
+def abgr_color(hex_color, alpha):
+    """Pack #RRGGBB and alpha into the ABGR value expected by DWM."""
+    red = int(hex_color[1:3], 16)
+    green = int(hex_color[3:5], 16)
+    blue = int(hex_color[5:7], 16)
+    return (alpha << 24) | (blue << 16) | (green << 8) | red
+
+
+def apply_native_acrylic(hwnd, tint=GLASS_TINT, alpha=GLASS_TINT_ALPHA):
+    """Enable native Windows acrylic blur, leaving window alpha as fallback."""
+    try:
+        policy = AccentPolicy(4, 2, abgr_color(tint, alpha), 0)
+        data = WindowCompositionAttributeData(
+            19,
+            ctypes.cast(ctypes.pointer(policy), ctypes.c_void_p),
+            ctypes.sizeof(policy),
+        )
+        setter = ctypes.windll.user32.SetWindowCompositionAttribute
+        setter.argtypes = (wintypes.HWND, ctypes.POINTER(WindowCompositionAttributeData))
+        setter.restype = wintypes.BOOL
+        applied = bool(setter(hwnd, ctypes.byref(data)))
+
+        dark_mode = ctypes.c_int(1)
+        rounded_corners = ctypes.c_int(2)
+        dwm = ctypes.windll.dwmapi
+        dwm.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(dark_mode), ctypes.sizeof(dark_mode))
+        dwm.DwmSetWindowAttribute(
+            hwnd,
+            33,
+            ctypes.byref(rounded_corners),
+            ctypes.sizeof(rounded_corners),
+        )
+        return applied
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
+def force_window_visible(window):
+    """Restore a Tk window even when Windows hid it behind Tk's state tracking."""
+    window.deiconify()
+    window.update_idletasks()
+    try:
+        hwnd = native_window_handle(window)
+        user32 = ctypes.windll.user32
+        user32.ShowWindow.argtypes = (wintypes.HWND, ctypes.c_int)
+        user32.ShowWindow.restype = wintypes.BOOL
+        user32.SetWindowPos.argtypes = (
+            wintypes.HWND,
+            wintypes.HWND,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            wintypes.UINT,
+        )
+        user32.SetWindowPos.restype = wintypes.BOOL
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+        user32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0040)
+    except (AttributeError, OSError, ValueError):
+        pass
 
 
 def set_window_shape(hwnd, regions):
@@ -365,7 +455,7 @@ STATUS_DOT = {
     "no_endpoint": "#6e7681",
     "error": "#f85149",
 }
-BG, PANEL, BORDER = "#05060b", "#101522", "#1d2740"
+BG, PANEL, BORDER = "#060606", "#151515", "#1d2740"
 FG, MUT, IDLE = "#eef3fa", "#8d9cb3", "#6e7681"
 ACCENT, VIOLET, TRACK, ERR = "#5b8cff", "#9b5bff", "#1d2740", "#f85149"
 KEY = "#010101"  # color key made transparent by the window manager
@@ -588,12 +678,6 @@ class Widget(tk.Tk):
     def _apply_window_effects(self):
         self.update_idletasks()
         self.surface.update_idletasks()
-        user32 = ctypes.windll.user32
-        user32.GetParent.argtypes = (wintypes.HWND,)
-        user32.GetParent.restype = wintypes.HWND
-
-        def handle(window):
-            return user32.GetParent(window.winfo_id()) or window.winfo_id()
 
         logo_bounds = (
             "ellipse",
@@ -602,13 +686,18 @@ class Widget(tk.Tk):
             self.logo.winfo_rootx() - self.winfo_rootx() + self.logo.winfo_width(),
             self.logo.winfo_rooty() - self.winfo_rooty() + self.logo.winfo_height(),
         )
-        set_window_shape(handle(self), [logo_bounds])
+        set_window_shape(native_window_handle(self), [logo_bounds])
 
         if self.surface.winfo_ismapped():
-            surface_handle = handle(self.surface)
-            set_window_shape(surface_handle, [
-                ("round", 0, 0, self.surface.winfo_width(), self.surface.winfo_height())
-            ])
+            surface_handle = native_window_handle(self.surface)
+            # DWM already clips Acrylic with an antialiased rounded silhouette.
+            # A second GDI region uses a different radius and exposes crescent-
+            # shaped slivers of the desktop at every corner. Keep GDI only as a
+            # fallback on systems where native Acrylic is unavailable.
+            if not apply_native_acrylic(surface_handle):
+                set_window_shape(surface_handle, [
+                    ("round", 0, 0, self.surface.winfo_width(), self.surface.winfo_height())
+                ])
 
     def _load_icons(self):
         def _fetch(pid, domain):
@@ -750,9 +839,12 @@ class Widget(tk.Tk):
                 self.expanded = True
                 self.panel.pack()
             self.surface.deiconify()
+            force_window_visible(self)
+            force_window_visible(self.surface)
             self.after_idle(self._sync_surface_to_logo)
         else:
             self.surface.deiconify()
+            force_window_visible(self.surface)
         self.lift()
         self.surface.lift()
         self.attributes("-topmost", True)

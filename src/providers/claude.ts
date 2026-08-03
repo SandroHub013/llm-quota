@@ -1,20 +1,13 @@
 import type { Provider, QuotaMetric, QuotaResult } from "./types.js";
-import { readClaude } from "../credentials.js";
-import { fetchJson, nowIso } from "./util.js";
+import {
+  officialBridgeInstalled,
+  readOfficialBridgeSnapshot,
+  type OfficialBridgeSnapshot,
+} from "../official-bridge.js";
+import { nowIso } from "./util.js";
 
 const CONSOLE = "https://claude.ai/settings/usage";
-
-// Anthropic exposes an OAuth usage endpoint used by Claude Code itself.
-// Shape varies; we defensively pull whatever rate-limit windows it returns.
-const USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
-
-let cache: { result: QuotaResult; timestamp: number } | null = null;
-const CACHE_TTL_MS = 60_000; // Cache 60s per normal responses
-const RATE_LIMIT_TTL_MS = 3 * 60_000; // Cache 3m for 429 rate-limited responses
-
-export function clearClaudeCache() {
-  cache = null;
-}
+const FRESH_MS = 15 * 60_000;
 
 export const claude: Provider = {
   id: "claude",
@@ -22,119 +15,81 @@ export const claude: Provider = {
   consoleUrl: CONSOLE,
 
   async fetch(): Promise<QuotaResult> {
-    const now = Date.now();
-    if (cache) {
-      const ttl = cache.result.status === "rate_limited" ? RATE_LIMIT_TTL_MS : CACHE_TTL_MS;
-      if (now - cache.timestamp < ttl) {
-        return {
-          ...cache.result,
-          updatedAt: nowIso(),
-        };
-      }
-    }
-
     const base: QuotaResult = {
       id: "claude",
       name: "Claude Code",
-      status: "error",
+      status: "partial",
       consoleUrl: CONSOLE,
+      sourceKind: "official_client",
+      sourceLabel: "Claude Code status line",
       metrics: [],
       updatedAt: nowIso(),
     };
 
-    const cred = await readClaude();
-    if (!cred?.accessToken) {
-      const res: QuotaResult = {
+    const installed = await officialBridgeInstalled("claude");
+    const snapshot = await readOfficialBridgeSnapshot("claude");
+    const metrics = parseBridgeUsage(snapshot);
+    if (snapshot && metrics.length) {
+      const age = Date.now() - Date.parse(snapshot.capturedAt);
+      const stale = age > FRESH_MS;
+      const exhausted = metrics.some((metric) => (metric.used ?? 0) >= 100);
+      return {
         ...base,
-        status: "unauthenticated",
-        message: "No login found in ~/.claude/.credentials.json. Run `claude` and sign in.",
+        status: exhausted ? "rate_limited" : stale ? "partial" : "ok",
+        authSource: "official status-line bridge",
+        sourceUpdatedAt: snapshot.capturedAt,
+        metrics,
+        teardownUrl: installed ? "/api/official-bridge/claude" : undefined,
+        teardownLabel: installed ? "Disable bridge" : undefined,
+        message: exhausted
+          ? "Claude reports an exhausted quota window. The card will recover after its official reset."
+          : stale
+            ? "Last official update is stale. Use Claude Code once to refresh the quota snapshot."
+            : undefined,
       };
-      cache = { result: res, timestamp: now };
-      return res;
     }
 
-    const expired = cred.expiresAt && cred.expiresAt < Date.now();
-    const tokenMetric: QuotaMetric = {
-      label: "OAuth token",
-      resetAt: cred.expiresAt ? new Date(cred.expiresAt).toISOString() : undefined,
+    return {
+      ...base,
+      setupUrl: installed ? undefined : "/api/official-bridge/claude",
+      setupLabel: installed ? undefined : "Enable official bridge",
+      teardownUrl: installed ? "/api/official-bridge/claude" : undefined,
+      teardownLabel: installed ? "Disable bridge" : undefined,
+      message: installed
+        ? "Bridge installed. Use Claude Code once; quota appears after its first API response."
+        : "Enable the official local bridge to receive 5-hour and 7-day quota without reading Claude OAuth.",
     };
-
-    const res = await fetchJson(USAGE_URL, {
-      headers: {
-        Authorization: `Bearer ${cred.accessToken}`,
-        "anthropic-beta": "oauth-2025-04-20",
-        "Content-Type": "application/json",
-      },
-    });
-
-    let result: QuotaResult;
-
-    if (res.status === 429) {
-      result = {
-        ...base,
-        status: "rate_limited",
-        authSource: "~/.claude/.credentials.json",
-        metrics: [tokenMetric],
-        message: "Anthropic returned 429 (rate limited). Pausing for 3 minutes to let the limit reset.",
-      };
-    } else if (res.status === 401 || res.status === 403) {
-      result = {
-        ...base,
-        status: expired ? "unauthenticated" : "partial",
-        authSource: "~/.claude/.credentials.json",
-        metrics: [tokenMetric],
-        message: expired
-          ? "OAuth token expired: sign in again with `claude`."
-          : "Token present but the usage endpoint refused the request (insufficient scopes).",
-      };
-    } else {
-      const metrics = parseUsage(res.body);
-      if (res.ok && metrics.length) {
-        result = {
-          ...base,
-          status: "ok",
-          authSource: "~/.claude/.credentials.json",
-          metrics: [...metrics, tokenMetric],
-          raw: res.body,
-        };
-      } else {
-        result = {
-          ...base,
-          status: "partial",
-          authSource: "~/.claude/.credentials.json",
-          metrics: [tokenMetric],
-          message: "Signed in. The usage endpoint responded but with no readable quota windows; check the console.",
-          raw: res.body ?? res.text?.slice(0, 300),
-        };
-      }
-    }
-
-    cache = { result, timestamp: now };
-    return result;
   },
 };
 
-const KIND_LABEL: Record<string, string> = {
-  session: "Session (5h)",
-  weekly_all: "Weekly (7d)",
-};
-
-// Live shape: body.limits[] = percent-based windows. Verified against the real endpoint.
-export function parseUsage(body: any): QuotaMetric[] {
-  if (!Array.isArray(body?.limits)) return [];
-  return body.limits
-    .filter((l: any) => typeof l?.percent === "number")
-    .map((l: any) => ({
-      label: KIND_LABEL[l.kind] ?? l.kind ?? "Window",
-      used: l.percent,
+export function parseBridgeUsage(snapshot?: OfficialBridgeSnapshot): QuotaMetric[] {
+  const limits = snapshot?.data?.rateLimits;
+  if (!limits || typeof limits !== "object") return [];
+  const definitions = [
+    ["five_hour", "Session (5h)"],
+    ["seven_day", "Weekly (7d)"],
+  ] as const;
+  const metrics: QuotaMetric[] = [];
+  for (const [key, label] of definitions) {
+    const window = limits[key];
+    const used = number(window?.used_percentage);
+    if (used == null) continue;
+    metrics.push({
+      label,
+      used: Math.max(0, Math.min(100, used)),
       limit: 100,
-      unit: "percent" as const,
-      resetAt: iso(l.resets_at),
-    }));
+      unit: "percent",
+      resetAt: epochIso(window?.resets_at),
+    });
+  }
+  return metrics;
 }
 
-function iso(v: any): string | undefined {
-  if (!v) return undefined;
-  const n = typeof v === "number" ? v : Date.parse(v);
-  return Number.isFinite(n) ? new Date(n < 1e12 ? n * 1000 : n).toISOString() : undefined;
+function epochIso(value: unknown): string | undefined {
+  const seconds = number(value);
+  return seconds == null ? undefined : new Date(seconds * 1000).toISOString();
+}
+
+function number(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
