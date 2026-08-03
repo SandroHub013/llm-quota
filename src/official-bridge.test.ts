@@ -99,6 +99,27 @@ test("Claude and Z.ai share one wrapper instead of chaining into each other", as
   expect(await Bun.file(claudePaths.script).exists()).toBe(false);
 });
 
+// The Antigravity CLI splits the status-line command itself instead of handing it
+// to a shell, so a quoted path reaches PowerShell with the quotes still attached
+// and -File rejects it. Only a path that would split on a space may be quoted.
+test("the generated command quotes the script path only when it contains a space", async () => {
+  if (process.platform !== "win32") return;
+  const plain = await mkdtemp(join(tmpdir(), "llm-quota-plain-"));
+  homes.push(plain);
+  const plainPaths = officialBridgePaths("gemini", plain);
+  await installOfficialBridge("gemini", plain);
+  const plainCommand = JSON.parse(await readFile(plainPaths.config, "utf8")).statusLine.command;
+  expect(plainCommand).toContain(`-File ${plainPaths.script}`);
+  expect(plainCommand).not.toContain('"');
+
+  const spaced = await mkdtemp(join(tmpdir(), "llm-quota spaced-"));
+  homes.push(spaced);
+  const spacedPaths = officialBridgePaths("gemini", spaced);
+  await installOfficialBridge("gemini", spaced);
+  const spacedCommand = JSON.parse(await readFile(spacedPaths.config, "utf8")).statusLine.command;
+  expect(spacedCommand).toContain(`-File "${spacedPaths.script}"`);
+});
+
 test("upgrading an older install keeps its restore target", async () => {
   if (process.platform !== "win32") return;
   const home = await mkdtemp(join(tmpdir(), "llm-quota-upgrade-"));
