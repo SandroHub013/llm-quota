@@ -4,7 +4,7 @@
 
 **One live dashboard for every AI subscription you pay for.**
 
-Claude Code · Codex · Gemini · z.ai · Moonshot — quotas, reset times, and local token spend.
+Claude Code · Codex · Gemini · z.ai — quotas, reset times, and local token spend.
 Runs on your machine. Talks to nobody but the providers.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -146,10 +146,13 @@ credentials, or real usage history.
 | **Codex** (ChatGPT) | Official `codex app-server` JSON-RPC | Active plan + usage windows |
 | **z.ai** | Official Usage Query plugin / console | Honest unavailable state until a public dashboard API exists |
 | **Gemini / Antigravity** | Official Antigravity status-line JSON (opt-in) | Per-bucket remaining quota and reset time |
-| **Kimi / Moonshot** | Documented Open Platform balance API | API credit; Kimi Code subscription quota remains in `/usage` |
+| **Kimi / Moonshot** | Card disabled | Kimi Code plan quota has no compliant machine-readable source; token spend still appears in the local ledger |
 
 OpenCode remains a source for the local token ledger, but Zen is intentionally omitted from the
 quota cards: its public endpoint exposes a model catalog, not numeric usage, limits or reset times.
+Kimi is omitted for the same reason: its official status line carries no quota, rate limit or
+subscription field, the plan windows behind `/usage` are reachable only with the Kimi Code CLI's own
+OAuth token, and the documented Open Platform balance is API credit rather than plan quota.
 
 Keys you paste yourself are stored locally in `~/.llm-quota/config.json`. They are never sent
 anywhere except to the provider they belong to, and never committed.
