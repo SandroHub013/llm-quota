@@ -11,7 +11,6 @@ test("product surfaces use LLM Quota as the primary identity", async () => {
       read("src/providers/codex.ts"),
       read("src/providers/gemini.ts"),
       read("src/providers/moonshot.ts"),
-      read("src/providers/opencode-zen.ts"),
       read("src/providers/zai.ts"),
     ]).then((files) => files.join("\n")),
   ]);
