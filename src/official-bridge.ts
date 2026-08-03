@@ -312,8 +312,17 @@ Write-Output ($parts -join (' ' + [char]0x00B7 + ' '))
 `;
 }
 
+/**
+ * Quote the script path only when it contains whitespace. Hosts do not agree on
+ * how this command is parsed: Claude Code hands it to a shell, which strips the
+ * quotes, while the Antigravity CLI splits the arguments itself and passes them
+ * through verbatim — there, quotes become part of the path and PowerShell fails
+ * with "Caratteri non validi nel percorso". Unquoted works in both, so quote
+ * only for the paths that would otherwise split on a space.
+ */
 function bridgeCommand(script: string): string {
-  return `powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${script}"`;
+  const path = /\s/.test(script) ? `"${script}"` : script;
+  return `powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ${path}`;
 }
 
 /** True for any wrapper this tool generated, including quoted and pre-shared-script layouts. */
