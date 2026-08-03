@@ -17,6 +17,7 @@ __pycache__/
 *.pyc
 .impeccable/
 reports/
+.scratch/
 
 # OS metadata
 .DS_Store

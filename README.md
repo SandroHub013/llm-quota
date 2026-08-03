@@ -37,12 +37,13 @@ glance which subscription is free, which is cooling down, and exactly when to co
 
 ## Features
 
-- ⏳ **Reset horizon** — all five measurable providers' resets on one time axis. Hover a marker, its card
+- ⏳ **Reset horizon** — every currently measurable provider reset on one time axis. Hover a marker, its card
   lights up; hover a card, its marker lights up.
 - ⚡ **Live without reloads** — quotas refresh silently every minute, local spend every five seconds,
   and reset countdowns keep moving between requests. Unchanged data does not repaint the interface.
-- 🔑 **Reuses the sessions you already have** — reads the OAuth tokens the official CLIs
-  (`claude`, `codex`, `opencode`) already wrote to disk. No new logins for most providers.
+- 🔑 **Official-surface first** — Codex is queried through `codex app-server`; Claude Code and
+  Antigravity deliberately deliver quota JSON through opt-in local status-line bridges. LLM Quota
+  never reads or refreshes another client's OAuth token.
 - 💶 **Local token ledger** — totals Codex, Claude Code, OpenCode and Kimi Code history by
   model, effort and main/subagent, with an estimated API-equivalent value in euros and a
   context-reuse efficiency index. A GitHub-style daily calendar shows when those tokens and euros
@@ -54,8 +55,8 @@ glance which subscription is free, which is cooling down, and exactly when to co
   exit codes, so an agent can check its own budget before starting a long job.
 - 🪟 **Windows desktop widget** — a floating always-on-top Tk widget, launched from the dashboard
   via the `llmquota://widget` protocol. It silently refreshes quotas every minute, local spend
-  every five seconds, and keeps reset countdowns moving between requests. It shows only the five
-  measurable quota providers; OpenCode remains included in local spend.
+  every five seconds, and keeps reset countdowns moving between requests. It shows the five provider
+  cards; OpenCode remains included only in local spend.
 - ♿ **Accessible** — full keyboard navigation, `prefers-reduced-motion` respected, all primary
   providers on screen without scrolling from 1280×800 up.
 
@@ -73,8 +74,9 @@ bun install
 bun start          # → http://localhost:4747
 ```
 
-That is the whole setup. Existing Claude Code and Codex sessions populate their quota cards;
-supported CLI histories populate the local token ledger automatically.
+That is the whole setup. Codex populates through its official app-server. On the Claude and Gemini
+cards, choose **Enable official bridge** once if you want their official clients to publish quota to
+LLM Quota. Existing CLI histories populate the local token ledger automatically.
 
 <details>
 <summary>One-liner install</summary>
@@ -119,7 +121,9 @@ $env:PORT=8080; bun start    # custom port on Windows
 
 No runtime account, username, quota, or spend total is tied to the project author:
 
-- Provider cards read the credentials and API keys on the current machine.
+- Codex authentication remains inside `codex app-server`; LLM Quota never opens Codex's auth file.
+- Opt-in Claude/Antigravity bridges cache only quota windows and reset times. They exclude account
+  identity, transcripts and access tokens, and preserve an existing custom status line.
 - The token ledger scans the current user's local Codex, Claude Code, OpenCode, and Kimi Code history.
 - The optional contribution calendar queries the viewer authenticated by the official GitHub CLI.
   Run `gh auth login` to enable it; without `gh`, the local spend calendar continues to work.
@@ -134,13 +138,13 @@ credentials, or real usage history.
 
 ## Supported providers
 
-| Provider | Credentials read from | What you get |
+| Provider | Supported source | What you get |
 |---|---|---|
-| **Claude Code** | `~/.claude/.credentials.json` (OAuth) | Live 5h window + weekly quota %, reset time |
-| **Codex** (ChatGPT) | `~/.codex/auth.json` (OAuth) | Active plan + usage windows |
-| **z.ai** | `opencode` config or pasted key | Live 5h token + monthly %, web-search status |
-| **Gemini** | In-app Google login or AI Studio key | Live per-model quota via Code Assist / AI Studio |
-| **Moonshot** | Pasted API key | Live remaining credit and usage |
+| **Claude Code** | Official status-line JSON (opt-in) | 5h + weekly quota %, reset time and source freshness |
+| **Codex** (ChatGPT) | Official `codex app-server` JSON-RPC | Active plan + usage windows |
+| **z.ai** | Official Usage Query plugin / console | Honest unavailable state until a public dashboard API exists |
+| **Gemini / Antigravity** | Official Antigravity status-line JSON (opt-in) | Per-bucket remaining quota and reset time |
+| **Kimi / Moonshot** | Documented Open Platform balance API | API credit; Kimi Code subscription quota remains in `/usage` |
 
 OpenCode remains a source for the local token ledger, but Zen is intentionally omitted from the
 quota cards: its public endpoint exposes a model catalog, not numeric usage, limits or reset times.
@@ -206,7 +210,8 @@ This is the point of the project, so it is worth being precise:
 - Provider logos are frozen in the repo deliberately: loading them from the provider — or from a
   favicon service, as an earlier version did — would tell a third party which AI subscriptions
   you hold, on every page load.
-- Credentials are read from disk, used to call the provider, and never written anywhere else.
+- OAuth credential files belonging to Codex, Claude, Gemini, OpenCode and Kimi are not read or
+  modified. User-supplied Open Platform keys are used only with their documented provider API.
 
 ---
 
@@ -214,8 +219,10 @@ This is the point of the project, so it is worth being precise:
 
 ```text
 src/
-├── server.ts          # Hono backend (/api/quota, /api/key, /api/auth/gemini)
-├── credentials.ts     # local credential + user config parsing
+├── server.ts          # loopback-only Hono backend (/api/quota, /api/key, /api/official-bridge)
+├── codex-app-server.ts# official Codex JSON-RPC client
+├── official-bridge.ts # opt-in Claude/Antigravity status-line wrappers
+├── credentials.ts     # user-supplied key config only
 ├── cli.ts             # CLI for developers and agents
 └── providers/         # one adapter per provider (fetch → QuotaResult)
 public/                # frontend SPA — HTML, CSS, vanilla JS, no build step
