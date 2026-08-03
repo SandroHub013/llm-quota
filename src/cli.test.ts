@@ -63,4 +63,19 @@ describe("CLI summary", () => {
       }),
     ])).toEqual({ providers: [{ id: "moonshot", status: "ok" }] });
   });
+
+  test("stats command fetches npm and github download stats", async () => {
+    const { run } = await import("./cli.js");
+    const mockRequest = async (url: any) => {
+      const u = String(url);
+      if (u.includes("npmjs.org")) return Response.json({ downloads: 150 });
+      if (u.includes("github.com")) return Response.json([{ assets: [{ download_count: 42 }] }]);
+      return new Response("not found", { status: 444 });
+    };
+
+    const res = await run(["stats"], mockRequest);
+    expect(res.code).toBe(0);
+    expect(res.output).toContain("NPM Downloads (last 30d): 150");
+    expect(res.output).toContain("GitHub Release Downloads: 42");
+  });
 });
