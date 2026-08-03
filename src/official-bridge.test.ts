@@ -47,6 +47,16 @@ test("snapshot reader accepts only the expected minimal provider cache", async (
     data: { quota: {} },
   }));
   expect((await readOfficialBridgeSnapshot("gemini", home))?.provider).toBe("antigravity");
+  
+  const zaiPaths = officialBridgePaths("zai", home);
+  await Bun.write(zaiPaths.cache, JSON.stringify({
+    version: 1,
+    provider: "zai",
+    capturedAt: "2026-08-03T10:00:00Z",
+    data: { glmQuota: { used_percentage: 15 } },
+  }));
+  expect((await readOfficialBridgeSnapshot("zai", home))?.provider).toBe("zai");
+
   await writeFile(paths.cache, JSON.stringify({ version: 1, provider: "claude", capturedAt: "bad", data: {} }));
   expect(await readOfficialBridgeSnapshot("gemini", home)).toBeUndefined();
 });

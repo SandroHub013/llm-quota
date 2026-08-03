@@ -12,17 +12,55 @@ type Request = (input: string | URL | globalThis.Request) => Promise<Response>;
 const HELP = `llm-quota status [--json]
 llm-quota provider <id> [--json]
 llm-quota doctor
+llm-quota stats
 
 env: LLM_QUOTA_URL (default http://localhost:4747)
 exit: 0 healthy, 1 quota <=20%, 2 provider error, 3 server/usage error`;
+
+export async function fetchProjectStats(request: Request = fetch): Promise<string> {
+  let npmDownloads: number | string = "0";
+  let githubDownloads: number | string = "0";
+
+  try {
+    const npmRes = await request("https://api.npmjs.org/downloads/point/last-month/llm-quota");
+    if (npmRes.ok) {
+      const data = (await npmRes.json()) as { downloads?: number };
+      if (typeof data.downloads === "number") npmDownloads = data.downloads.toString();
+    }
+  } catch {}
+
+  try {
+    const ghRes = await request("https://api.github.com/repos/SandroHub013/llm-quota/releases");
+    if (ghRes.ok) {
+      const releases = (await ghRes.json()) as Array<{ assets?: Array<{ download_count?: number }> }>;
+      if (Array.isArray(releases)) {
+        let total = 0;
+        for (const rel of releases) {
+          if (Array.isArray(rel.assets)) {
+            for (const asset of rel.assets) {
+              total += asset.download_count ?? 0;
+            }
+          }
+        }
+        githubDownloads = total.toString();
+      }
+    }
+  } catch {}
+
+  return `NPM Downloads (last 30d): ${npmDownloads}\nGitHub Release Downloads: ${githubDownloads}`;
+}
 
 export async function run(args: string[], request: Request = fetch): Promise<RunResult> {
   if (args.includes("--help") || args.includes("-h") || args[0] === "help") {
     return { output: HELP, code: 0 };
   }
   const command = args.find((arg) => !arg.startsWith("-")) ?? "status";
-  if (!["status", "provider", "doctor"].includes(command)) {
+  if (!["status", "provider", "doctor", "stats"].includes(command)) {
     return { output: "usage: llm-quota --help", code: 3 };
+  }
+  if (command === "stats") {
+    const statsOutput = await fetchProjectStats(request);
+    return { output: statsOutput, code: 0 };
   }
   if (command === "provider" && !args[args.indexOf(command) + 1]) {
     return { output: "usage: llm-quota provider <id>", code: 3 };
