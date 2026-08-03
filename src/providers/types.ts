@@ -23,11 +23,17 @@ export interface QuotaResult {
   status: QuotaStatus;
   plan?: string;
   authSource?: string; // where the credential came from (file / user key)
+  sourceKind?: "official_ipc" | "official_client" | "documented_api" | "local_only" | "unavailable";
+  sourceLabel?: string;
+  sourceUpdatedAt?: string;
   metrics: QuotaMetric[];
   message?: string; // human explanation, esp. for non-ok statuses
   consoleUrl?: string; // where to check/top-up manually
   needsKey?: boolean; // frontend should render a key-entry field
-  loginUrl?: string; // frontend renders an OAuth login button (top-level navigation)
+  setupUrl?: string; // local opt-in integration endpoint
+  setupLabel?: string;
+  teardownUrl?: string; // reverses a local opt-in integration
+  teardownLabel?: string;
   raw?: unknown; // raw provider payload for debugging
   updatedAt: string;
 }

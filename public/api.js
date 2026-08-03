@@ -43,8 +43,16 @@ export async function saveProviderKey(id, key, request = fetch) {
   }, request));
 }
 
-export async function beginLogin(path, request = fetch) {
-  return requestJson(path, undefined, request);
+export async function installOfficialBridge(id, request = fetch) {
+  return provider(await requestJson(`/api/official-bridge/${encodeURIComponent(id)}`, {
+    method: "POST",
+  }, request));
+}
+
+export async function removeOfficialBridge(id, request = fetch) {
+  return provider(await requestJson(`/api/official-bridge/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  }, request));
 }
 
 function provider(body) {

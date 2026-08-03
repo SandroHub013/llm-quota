@@ -42,8 +42,9 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
   marcatore si illumina la card corrispondente, e viceversa.
 - ⚡ **Live senza ricaricare** — le quote si aggiornano silenziosamente ogni minuto, la spesa locale
   ogni cinque secondi e i countdown continuano tra una richiesta e l'altra. I dati invariati non ridisegnano l'interfaccia.
-- 🔑 **Riusa le sessioni che hai già** — legge i token OAuth che le CLI ufficiali (`claude`,
-  `codex`, `opencode`) hanno già scritto su disco. Per quasi tutti i provider, zero login nuovi.
+- 🔑 **Prima le superfici ufficiali** — Codex passa da `codex app-server`; Claude Code e
+  Antigravity consegnano volontariamente il JSON quota tramite bridge locali opt-in della status
+  line. LLM Quota non legge né rinnova mai il token OAuth di un altro client.
 - 💶 **Registro token locale** — somma la cronologia di Codex, Claude Code, OpenCode e Kimi
   Code per modello, effort e main/subagent, stimandone in euro il valore API equivalente e
   mostrando un indice di efficienza basato sul riuso del contesto. Un calendario giornaliero in
@@ -58,7 +59,7 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
 - 🪟 **Widget desktop Windows** — widget Tk flottante sempre in primo piano, lanciato dalla
   dashboard tramite il protocollo `llmquota://widget`. Aggiorna silenziosamente le quote ogni
   minuto, la spesa locale ogni cinque secondi e mantiene vivi i countdown tra una richiesta e l'altra.
-  Mostra solo i cinque provider con quote misurabili; OpenCode resta incluso nella spesa locale.
+  Mostra le cinque card provider; OpenCode resta incluso soltanto nella spesa locale.
 - ♿ **Accessibile** — navigazione da tastiera, `prefers-reduced-motion` rispettato, tutte le card
   principali a schermo senza scroll nei comuni viewport desktop e laptop.
 
@@ -76,8 +77,9 @@ bun install
 bun start          # → http://localhost:4747
 ```
 
-È tutta l'installazione. Le sessioni Claude Code e Codex esistenti popolano le rispettive card quota;
-le cronologie CLI supportate alimentano automaticamente il registro token locale.
+È tutta l'installazione. Codex si popola tramite il suo app-server ufficiale. Nelle card Claude e
+Gemini scegli una volta **Enable official bridge** per ricevere le quote dai rispettivi client
+ufficiali. Le cronologie CLI supportate alimentano automaticamente il registro token locale.
 
 <details>
 <summary>Installare la CLI globalmente</summary>
@@ -108,7 +110,9 @@ $env:PORT=8080; bun start    # porta personalizzata su Windows
 
 Nessun account, username, valore quota o totale di spesa runtime è legato all'autore del progetto:
 
-- Le card provider leggono credenziali e chiavi API della macchina corrente.
+- L'autenticazione Codex resta dentro `codex app-server`: LLM Quota non apre il relativo file auth.
+- I bridge Claude/Antigravity, attivati esplicitamente, salvano soltanto finestre quota e reset;
+  escludono identità, transcript e access token e preservano la status line personalizzata esistente.
 - Il registro token analizza la cronologia locale dell'utente per Codex, Claude Code, OpenCode e Kimi Code.
 - Il calendario contribution opzionale interroga l'utente autenticato nella CLI ufficiale GitHub.
   Esegui `gh auth login` per abilitarlo; senza `gh`, il calendario della spesa locale continua a funzionare.
@@ -122,13 +126,13 @@ credenziali o cronologie d'uso reali.
 
 ## Provider supportati
 
-| Provider | Credenziali lette da | Cosa ottieni |
+| Provider | Fonte supportata | Cosa ottieni |
 |---|---|---|
-| **Claude Code** | `~/.claude/.credentials.json` (OAuth) | Live: finestra 5h + quota settimanale %, orario reset |
-| **Codex** (ChatGPT) | `~/.codex/auth.json` (OAuth) | Piano attivo + finestre d'uso |
-| **z.ai** | Config `opencode` o chiave incollata | Live: token 5h + mensile %, stato web search |
-| **Gemini** | Login Google in-app o chiave AI Studio | Live: quota per modello via Code Assist / AI Studio |
-| **Moonshot** | Chiave API incollata | Live: credito residuo e utilizzo |
+| **Claude Code** | JSON ufficiale della status line (opt-in) | Quota 5h + settimanale %, reset e freschezza della fonte |
+| **Codex** (ChatGPT) | JSON-RPC ufficiale `codex app-server` | Piano attivo + finestre d'uso |
+| **z.ai** | Plugin ufficiale Usage Query / console | Stato non disponibile finché manca una API pubblica per dashboard |
+| **Gemini / Antigravity** | JSON ufficiale della status line Antigravity (opt-in) | Quota residua per bucket e reset |
+| **Kimi / Moonshot** | API balance documentata di Open Platform | Credito API; la quota Kimi Code resta nel comando `/usage` |
 
 OpenCode resta una fonte del registro token locale, ma Zen non compare nelle card quota: il suo
 endpoint pubblico espone il catalogo modelli, non utilizzo numerico, limiti o tempi di reset.
@@ -194,7 +198,8 @@ python widget.py --register-protocol --server-url http://localhost:8080
 - I loghi sono congelati nel repository di proposito: caricarli dal provider — o da un servizio di
   favicon, come faceva una versione precedente — direbbe a terzi quali abbonamenti AI possiedi, a
   ogni caricamento di pagina.
-- Le credenziali vengono lette da disco, usate per chiamare il provider, e mai scritte altrove.
+- I file OAuth di Codex, Claude, Gemini, OpenCode e Kimi non vengono letti né modificati. Le chiavi
+  Open Platform inserite dall'utente vengono usate soltanto con l'API documentata del provider.
 
 ---
 
@@ -202,8 +207,10 @@ python widget.py --register-protocol --server-url http://localhost:8080
 
 ```text
 src/
-├── server.ts          # Backend Hono (/api/quota, /api/key, /api/auth/gemini)
-├── credentials.ts     # Parser credenziali locali e config utente
+├── server.ts          # Backend Hono solo loopback (/api/quota, /api/key, /api/official-bridge)
+├── codex-app-server.ts# Client JSON-RPC ufficiale Codex
+├── official-bridge.ts # Wrapper status line Claude/Antigravity opt-in
+├── credentials.ts     # Config delle sole chiavi inserite dall'utente
 ├── cli.ts             # CLI per sviluppatori e agenti
 └── providers/         # Un adapter per provider (fetch → QuotaResult)
 public/                # SPA frontend — HTML, CSS, JS vanilla, nessun build step

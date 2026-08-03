@@ -1,27 +1,30 @@
 import { expect, test } from "bun:test";
-import { parseUsage } from "./codex.js";
+import { parseRateLimits } from "./codex.js";
 
-// Real payload slice from chatgpt.com/backend-api/wham/usage.
 const LIVE = {
-  rate_limit: {
-    allowed: false,
-    limit_reached: true,
-    primary_window: { used_percent: 100, limit_window_seconds: 604800, reset_at: 1785266702 },
-    secondary_window: null,
+  rateLimits: {
+    limitId: "codex",
+    primary: { usedPercent: 12.5, windowDurationMins: 300, resetsAt: 1785266702 },
+    secondary: { usedPercent: 34, windowDurationMins: 10080, resetsAt: 1785871502 },
   },
 };
 
-test("parseUsage reads the weekly window and labels it by duration", () => {
-  const m = parseUsage(LIVE);
-  expect(m).toHaveLength(1);
-  expect(m[0]!.label).toBe("Weekly (7d)");
-  expect(m[0]!.used).toBe(100);
-  expect(m[0]!.resetAt).toBe(new Date(1785266702 * 1000).toISOString());
+test("app-server limits map to session and weekly windows", () => {
+  const metrics = parseRateLimits(LIVE);
+  expect(metrics.map((metric) => [metric.label, metric.used])).toEqual([
+    ["Session (5h)", 12.5],
+    ["Weekly (7d)", 34],
+  ]);
+  expect(metrics[0]!.resetAt).toBe(new Date(1785266702 * 1000).toISOString());
 });
 
-test("5h window and empty payloads", () => {
-  expect(parseUsage({ rate_limit: { primary_window: { used_percent: 12, limit_window_seconds: 18000 } } })[0]!.label).toBe(
-    "Session (5h)",
-  );
-  expect(parseUsage({})).toEqual([]);
+test("multi-bucket app-server payloads remain distinguishable", () => {
+  const metrics = parseRateLimits({
+    rateLimitsByLimitId: {
+      codex: { limitId: "codex", limitName: "Codex", primary: { usedPercent: 20, windowDurationMins: 300 } },
+      review: { limitId: "review", limitName: "Code review", primary: { usedPercent: 40, windowDurationMins: 60 } },
+    },
+  });
+  expect(metrics.map((metric) => metric.label)).toEqual(["Codex \u00b7 Session (5h)", "Code review \u00b7 Session (5h)"]);
+  expect(parseRateLimits({})).toEqual([]);
 });
