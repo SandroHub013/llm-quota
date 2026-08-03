@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bklit UI - Data Visualization & Chart Components</title>
+  <meta name="description" content="Design engineered chart and data visualization components inspired by Bklit UI and built for high-density dashboards.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./bklit.css">
+</head>
+<body>
+  <!-- Canvas Grid Overlay -->
+  <div class="canvas-grid" aria-hidden="true"></div>
+
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="brand-logo" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: #fff">
+            <path d="M3 3v18h18"/>
+            <path d="M18 17V9"/>
+            <path d="M13 17V5"/>
+            <path d="M8 17v-3"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">Bklit UI Component Suite</h1>
+          <p class="brand-subtitle">Design Engineered Data Visualization Components</p>
+        </div>
+      </div>
+
+      <div class="theme-controls" aria-label="Color Scale Themes">
+        <button class="theme-btn active" data-theme="lagoon" id="theme-lagoon-btn">Lagoon</button>
+        <button class="theme-btn" data-theme="warm" id="theme-warm-btn">Warm</button>
+        <button class="theme-btn" data-theme="forest" id="theme-forest-btn">Forest</button>
+        <button class="theme-btn" data-theme="monochrome" id="theme-mono-btn">Monochrome</button>
+      </div>
+    </header>
+
+    <!-- Component Gallery Grid -->
+    <main class="component-grid">
+
+      <!-- 1. Area Chart -->
+      <section class="bklit-card" id="card-area-chart">
+        <div class="bklit-card-header">
+          <div class="card-title-group">
+            <h3>Bklit Area Chart</h3>
+            <p>Curved Dual-Series Gradient Visualization</p>
+          </div>
+          <div class="status-badge">
+            <span class="status-dot"></span> LIVE GRADIENT
+          </div>
+        </div>
+
+        <div class="metric-summary">
+          <span class="metric-value">142,850</span>
+          <span class="metric-delta positive">+14.2%</span>
+        </div>
+
+        <div class="chart-viewport">
+          <svg class="bklit-svg" id="area-chart-svg" aria-label="Area Chart"></svg>
+        </div>
+
+        <div class="chart-legend">
+          <div class="legend-item"><span class="legend-color" style="background: var(--chart-1)"></span> Primary Traffic</div>
+          <div class="legend-item"><span class="legend-color" style="background: var(--chart-3)"></span> Baseline</div>
+        </div>
+      </section>
+
+      <!-- 2. Stacked Bar Chart -->
+      <section class="bklit-card" id="card-bar-chart">
+        <div class="bklit-card-header">
+          <div class="card-title-group">
+            <h3>Bklit Bar Chart</h3>
+            <p>Grouped & Stacked Rounded Bars</p>
+          </div>
+          <div class="status-badge">
+            <span class="status-dot"></span> STACKED
+          </div>
+        </div>
+
+        <div class="metric-summary">
+          <span class="metric-value">$84,920</span>
+          <span class="metric-delta positive">+8.6%</span>
+        </div>
+
+        <div class="chart-viewport">
+          <svg class="bklit-svg" id="bar-chart-svg" aria-label="Bar Chart"></svg>
+        </div>
+
+        <div class="chart-legend">
+          <div class="legend-item"><span class="legend-color" style="background: var(--chart-1)"></span> Direct Sales</div>
+          <div class="legend-item"><span class="legend-color" style="background: var(--chart-3)"></span> Subscriptions</div>
+        </div>
+      </section>
+
+      <!-- 3. Speedometer Arc Gauge -->
+      <section class="bklit-card" id="card-gauge-chart">
+        <div class="bklit-card-header">
+          <div class="card-title-group">
+            <h3>Bklit Gauge Chart</h3>
+            <p>Speedometer Metric & Target Arc</p>
+          </div>
+          <div class="status-badge">
+            <span class="status-dot"></span> OPTIMAL
+          </div>
+        </div>
+
+        <div class="chart-viewport" style="display: flex; justify-content: center; align-items: center;">
+          <svg class="bklit-svg" id="gauge-chart-svg" aria-label="Gauge Chart"></svg>
+        </div>
+
+        <div class="chart-legend" style="justify-content: center;">
+          <span class="legend-item">Target Capacity: 100% (78% Reached)</span>
+        </div>
+      </section>
+
+      <!-- 4. Heatmap Matrix -->
+      <section class="bklit-card" id="card-heatmap-chart">
+        <div class="bklit-card-header">
+          <div class="card-title-group">
+            <h3>Bklit Heatmap</h3>
+            <p>24x7 Activity Intensity Matrix</p>
+          </div>
+          <div class="status-badge">
+            <span class="status-dot"></span> INTENSITY
+          </div>
+        </div>
+
+        <div class="metric-summary">
+          <span class="metric-value">96 Cells</span>
+          <span class="metric-delta positive">High Peak</span>
+        </div>
+
+        <div class="heatmap-grid" id="heatmap-container"></div>
+
+        <div class="chart-legend">
+          <div class="legend-item"><span class="legend-color" style="background: var(--bg-muted)"></span> Low</div>
+          <div class="legend-item"><span class="legend-color" style="background: var(--chart-3)"></span> Medium</div>
+          <div class="legend-item"><span class="legend-color" style="background: var(--chart-1)"></span> Peak</div>
+        </div>
+      </section>
+
+      <!-- 5. Profit & Loss Line -->
+      <section class="bklit-card" id="card-profit-loss">
+        <div class="bklit-card-header">
+          <div class="card-title-group">
+            <h3>Bklit Profit / Loss Line</h3>
+            <p>Baseline Zero-Threshold Split Fill</p>
+          </div>
+          <div class="status-badge">
+            <span class="status-dot"></span> BASELINE SPLIT
+          </div>
+        </div>
+
+        <div class="metric-summary">
+          <span class="metric-value">+$34,200</span>
+          <span class="metric-delta positive">+24.1%</span>
+        </div>
+
+        <div class="chart-viewport">
+          <svg class="bklit-svg" id="profit-loss-svg" aria-label="Profit Loss Chart"></svg>
+        </div>
+
+        <div class="chart-legend">
+          <div class="legend-item"><span class="legend-color" style="background: var(--chart-positive)"></span> Profit Above Zero</div>
+          <div class="legend-item"><span class="legend-color" style="background: var(--chart-negative)"></span> Loss Below Zero</div>
+        </div>
+      </section>
+
+      <!-- 6. Real-time Live Stream Line -->
+      <section class="bklit-card" id="card-live-stream">
+        <div class="bklit-card-header">
+          <div class="card-title-group">
+            <h3>Bklit Live Line Stream</h3>
+            <p>Real-time Telemetry WebSocket Buffer</p>
+          </div>
+          <div class="status-badge">
+            <span class="status-dot pulse" style="background: var(--chart-positive)"></span> STREAMING
+          </div>
+        </div>
+
+        <div class="metric-summary">
+          <span class="metric-value" id="live-stream-val">74.2 req/s</span>
+          <span class="metric-delta positive">1.0s Pulse</span>
+        </div>
+
+        <div class="chart-viewport">
+          <svg class="bklit-svg" id="live-stream-svg" aria-label="Live Stream Chart"></svg>
+        </div>
+
+        <div class="chart-legend">
+          <div class="legend-item"><span class="legend-color" style="background: var(--chart-1)"></span> Live Telemetry Buffer</div>
+        </div>
+      </section>
+
+      <!-- 7. Radar Spider Chart -->
+      <section class="bklit-card" id="card-radar-chart">
+        <div class="bklit-card-header">
+          <div class="card-title-group">
+            <h3>Bklit Radar Spider Chart</h3>
+            <p>Multivariate Performance Grid</p>
+          </div>
+          <div class="status-badge">
+            <span class="status-dot"></span> 6 AXES
+          </div>
+        </div>
+
+        <div class="chart-viewport" style="display: flex; justify-content: center; align-items: center;">
+          <svg class="bklit-svg" id="radar-svg" aria-label="Radar Chart"></svg>
+        </div>
+
+        <div class="chart-legend" style="justify-content: center;">
+          <span class="legend-item">Overall Score: 85.8 / 100</span>
+        </div>
+      </section>
+
+      <!-- 8. Conversion Funnel Chart -->
+      <section class="bklit-card" id="card-funnel-chart">
+        <div class="bklit-card-header">
+          <div class="card-title-group">
+            <h3>Bklit Conversion Funnel</h3>
+            <p>Pipeline Stage Conversion Drop</p>
+          </div>
+          <div class="status-badge">
+            <span class="status-dot"></span> FUNNEL
+          </div>
+        </div>
+
+        <div class="chart-viewport">
+          <svg class="bklit-svg" id="funnel-svg" aria-label="Funnel Chart"></svg>
+        </div>
+
+        <div class="chart-legend">
+          <div class="legend-item">Overall Conversion: 4.0% (120k → 4.8k)</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="./bklit.js"></script>
+</body>
+</html>
