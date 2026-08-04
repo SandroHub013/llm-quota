@@ -89,10 +89,18 @@ function resetIso(value: any): string | undefined {
   return seconds == null ? undefined : new Date(Date.now() + seconds * 1000).toISOString();
 }
 
+/**
+ * Antigravity splits the plan into a Gemini pool and a third-party pool
+ * (Claude, GPT) and names the latter "3p", which reads as noise in the widget.
+ * Unknown bucket names still fall through to plain title case.
+ */
+const BUCKET_WORDS: Record<string, string> = { "3p": "Third-party" };
+
 function readableBucket(value: string): string {
   return value
-    .replace(/[_-]+/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    .split(/[_-]+/)
+    .map((word) => BUCKET_WORDS[word.toLowerCase()] ?? word.replace(/^\w/, (letter) => letter.toUpperCase()))
+    .join(" ");
 }
 
 function number(value: unknown): number | undefined {

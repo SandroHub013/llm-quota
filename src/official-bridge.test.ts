@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -102,14 +103,17 @@ test("Claude and Z.ai share one wrapper instead of chaining into each other", as
 // The Antigravity CLI splits the status-line command itself instead of handing it
 // to a shell, so a quoted path reaches PowerShell with the quotes still attached
 // and -File rejects it. Only a path that would split on a space may be quoted.
-test("the generated command quotes the script path only when it contains a space", async () => {
+// Claude Code hands the same command to a POSIX shell, which eats every
+// backslash of an unquoted path, so the path is spelled with forward slashes.
+test("the generated command uses forward slashes and quotes the path only when it contains a space", async () => {
   if (process.platform !== "win32") return;
   const plain = await mkdtemp(join(tmpdir(), "llm-quota-plain-"));
   homes.push(plain);
   const plainPaths = officialBridgePaths("gemini", plain);
   await installOfficialBridge("gemini", plain);
   const plainCommand = JSON.parse(await readFile(plainPaths.config, "utf8")).statusLine.command;
-  expect(plainCommand).toContain(`-File ${plainPaths.script}`);
+  expect(plainCommand).toContain(`-File ${plainPaths.script.replace(/\\/g, "/")}`);
+  expect(plainCommand).not.toContain("\\");
   expect(plainCommand).not.toContain('"');
 
   const spaced = await mkdtemp(join(tmpdir(), "llm-quota spaced-"));
@@ -117,7 +121,21 @@ test("the generated command quotes the script path only when it contains a space
   const spacedPaths = officialBridgePaths("gemini", spaced);
   await installOfficialBridge("gemini", spaced);
   const spacedCommand = JSON.parse(await readFile(spacedPaths.config, "utf8")).statusLine.command;
-  expect(spacedCommand).toContain(`-File "${spacedPaths.script}"`);
+  expect(spacedCommand).toContain(`-File "${spacedPaths.script.replace(/\\/g, "/")}"`);
+});
+
+// A forward-slash command must still be recognised as ours, or a reinstall would
+// capture the bridge as the "previous" status line and chain it into itself.
+test("a forward-slash bridge command is still recognised on reinstall", async () => {
+  if (process.platform !== "win32") return;
+  const home = await mkdtemp(join(tmpdir(), "llm-quota-slashes-"));
+  homes.push(home);
+  const paths = officialBridgePaths("claude", home);
+  await installOfficialBridge("claude", home);
+  await installOfficialBridge("claude", home);
+  const previous = existsSync(paths.previous) ? await readFile(paths.previous, "utf8") : "";
+  expect(previous).not.toContain("statusline-bridge.ps1");
+  expect(await officialBridgeInstalled("claude", home)).toBe(true);
 });
 
 test("upgrading an older install keeps its restore target", async () => {
@@ -189,4 +207,114 @@ test("PowerShell bridge writes a minimal cache and keeps the previous status lin
   expect(cache).toContain('"used_percentage":23');
   expect(cache).not.toContain("must-not-be-cached");
   expect(cache).not.toContain("transcript");
+});
+
+// A captured POSIX status line runs under cmd.exe, which does not expand `~` and
+// resolves `bash` to WSL, whose home holds none of these files. The command fails
+// to stderr, the bridge discards it, and the status line silently goes blank.
+test("a captured POSIX status line is chained through Git Bash, other commands verbatim", async () => {
+  if (process.platform !== "win32") return;
+  const home = await mkdtemp(join(tmpdir(), "llm-quota-prev-"));
+  homes.push(home);
+  const paths = officialBridgePaths("claude", home);
+  await Bun.write(paths.config, JSON.stringify({
+    statusLine: { type: "command", command: "bash ~/.claude/statusline-command.sh" },
+  }));
+  await installOfficialBridge("claude", home);
+
+  const wrapper = await readFile(paths.previous, "utf8");
+  expect(wrapper).toContain('set "LLMQ_PREV=bash ~/.claude/statusline-command.sh"');
+  expect(wrapper).toContain("bin\\bash.exe");
+
+  // A non-POSIX command has no reason to go through bash, and a quoted one cannot
+  // survive `set "VAR=..."`. Both keep the previous verbatim behaviour.
+  const plain = await mkdtemp(join(tmpdir(), "llm-quota-prev-plain-"));
+  homes.push(plain);
+  const plainPaths = officialBridgePaths("claude", plain);
+  await Bun.write(plainPaths.config, JSON.stringify({
+    statusLine: { type: "command", command: 'node "status line.js"' },
+  }));
+  await installOfficialBridge("claude", plain);
+  expect(await readFile(plainPaths.previous, "utf8")).toBe('@echo off\r\nnode "status line.js"\r\n');
+});
+
+// The wrapper is only useful if cmd.exe, which is what the bridge spawns, can
+// actually run a POSIX command through it.
+test("the generated wrapper runs a POSIX command when cmd.exe executes it", async () => {
+  if (process.platform !== "win32") return;
+  const home = await mkdtemp(join(tmpdir(), "llm-quota-prevrun-"));
+  homes.push(home);
+  const script = join(home, "probe.sh");
+  await Bun.write(script, "#!/bin/sh\necho CHAINED-LINE\n");
+  const msys = "/" + script.replace(/\\/g, "/").replace(/^([A-Za-z]):/, (_m, drive) => drive.toLowerCase());
+
+  const paths = officialBridgePaths("claude", home);
+  await Bun.write(paths.config, JSON.stringify({
+    statusLine: { type: "command", command: `bash ${msys}` },
+  }));
+  await installOfficialBridge("claude", home);
+
+  const processHandle = Bun.spawn({
+    cmd: [process.env.ComSpec ?? "cmd.exe", "/d", "/c", paths.previous],
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  processHandle.stdin.write("{}");
+  processHandle.stdin.end();
+  expect(await processHandle.exited).toBe(0);
+  expect(await new Response(processHandle.stdout).text()).toContain("CHAINED-LINE");
+});
+
+// Forcing the console InputEncoding makes the reader surface the UTF-8 preamble
+// as a leading U+FEFF. ConvertFrom-Json rejects it, and the script used to exit
+// before writing the cache or printing anything at all.
+test("PowerShell bridge parses a payload that arrives with a UTF-8 BOM", async () => {
+  if (process.platform !== "win32") return;
+  const home = await mkdtemp(join(tmpdir(), "llm-quota-bom-"));
+  homes.push(home);
+  const paths = officialBridgePaths("claude", home);
+  await Bun.write(paths.script, buildPowerShellBridge("claude", groupCaches("claude", home), paths.previous));
+
+  const processHandle = Bun.spawn({
+    cmd: ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", paths.script],
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  processHandle.stdin.write("﻿" + JSON.stringify({
+    model: { display_name: "Opus" },
+    rate_limits: { five_hour: { used_percentage: 41 } },
+  }));
+  processHandle.stdin.end();
+  expect(await processHandle.exited).toBe(0);
+  expect(await readFile(paths.cache, "utf8")).toContain('"used_percentage":41');
+});
+
+// Hosts decode this stdout as UTF-8. Under the default ANSI/OEM console
+// codepage the separator reaches the status line as U+FFFD.
+test("PowerShell bridge emits UTF-8 so the separator survives the host", async () => {
+  if (process.platform !== "win32") return;
+  const home = await mkdtemp(join(tmpdir(), "llm-quota-encoding-"));
+  homes.push(home);
+  const paths = officialBridgePaths("claude", home);
+  await Bun.write(paths.script, buildPowerShellBridge("claude", groupCaches("claude", home), paths.previous));
+
+  const processHandle = Bun.spawn({
+    cmd: ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", paths.script],
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  processHandle.stdin.write(JSON.stringify({
+    model: { display_name: "Gemini 3.6 Flash (High)" },
+    context_window: { used_percentage: 12 },
+    rate_limits: { five_hour: { used_percentage: 23 } },
+  }));
+  processHandle.stdin.end();
+  expect(await processHandle.exited).toBe(0);
+
+  const line = await new Response(processHandle.stdout).text();
+  expect(line).toContain("·");
+  expect(line).not.toContain("�");
 });

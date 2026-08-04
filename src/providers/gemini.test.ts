@@ -21,6 +21,29 @@ test("official Antigravity status-line quota maps remaining fractions and resets
   expect(metrics[0]!.resetAt).toBe("2026-08-09T10:00:00.000Z");
 });
 
+// "3p" is how Antigravity names the Claude/GPT pool; the raw key reads as noise.
+test("the third-party pool gets a readable label and unknown buckets stay title case", () => {
+  const metrics = parseQuota({
+    version: 1,
+    provider: "antigravity",
+    capturedAt: "2026-08-03T10:00:00Z",
+    data: {
+      quota: {
+        "3p-5h": { remaining_fraction: 1, reset_in_seconds: 60 },
+        "3p-weekly": { remaining_fraction: 0.5, reset_in_seconds: 60 },
+        "gemini-5h": { remaining_fraction: 0.9, reset_in_seconds: 60 },
+        "future-bucket": { remaining_fraction: 0.8, reset_in_seconds: 60 },
+      },
+    },
+  });
+  expect(metrics.map((metric) => metric.label).sort()).toEqual([
+    "Future Bucket",
+    "Gemini 5h",
+    "Third-party 5h",
+    "Third-party Weekly",
+  ]);
+});
+
 test("Antigravity buckets without numeric quota are ignored", () => {
   expect(parseQuota()).toEqual([]);
   expect(parseQuota({
