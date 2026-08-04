@@ -12,7 +12,6 @@ cloudflared.log
 cloudflared.exe
 
 # Build & runtime cache
-.vercel/
 __pycache__/
 *.pyc
 .impeccable/
