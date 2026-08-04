@@ -39,8 +39,20 @@ test("the landing page does not animate a card the product no longer ships", asy
 test("the landing page logo strip carries no retired provider", async () => {
   const site = await read("docs/index.html");
   const strip = site.match(/<div class="strip">([\s\S]*?)<\/div>/)?.[1] ?? "";
-  for (const retired of ["moonshot", "zai"]) {
+  for (const retired of ["moonshot", "zai", "opencode-zen"]) {
     expect(strip).not.toContain(`logos/${retired}`);
+  }
+});
+
+// The Zen adapter, its card scaffolding and its mark are gone; OpenCode stays only as a
+// local ledger source, which reads a database and needs no branding of its own.
+test("nothing reintroduces the OpenCode Zen gateway", async () => {
+  const [app, types] = await Promise.all([read("public/app.js"), read("src/providers/types.ts")]);
+
+  expect(app).not.toContain("opencode-zen");
+  expect(types).not.toContain("availability");
+  for (const dir of ["public/logos", "docs/logos"]) {
+    expect(await Bun.file(`${dir}/opencode-zen.png`).exists()).toBe(false);
   }
 });
 

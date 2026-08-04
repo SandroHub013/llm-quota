@@ -135,10 +135,10 @@ credenziali o cronologie d'uso reali.
 | **z.ai** | Card disabilitata | La status line del GLM Coding Plan non espone alcun campo quota; i token restano nel registro locale |
 | **Kimi / Moonshot** | Card disabilitata | La quota del piano Kimi Code non ha una fonte machine-readable conforme; i token restano nel registro locale |
 
-Oggi vengono spedite tre card provider. OpenCode resta una fonte del registro token locale, ma
-Zen non compare nelle card quota: il suo
-endpoint pubblico espone il catalogo modelli, non utilizzo numerico, limiti o tempi di reset.
-Kimi è escluso per lo stesso motivo: la sua status line ufficiale non porta campi di quota, rate
+Oggi vengono spedite tre card provider. OpenCode resta una fonte del registro token locale; il suo
+gateway Zen è stato rimosso del tutto, perché l'endpoint pubblico espone il catalogo modelli e non
+utilizzo numerico, limiti o tempi di reset.
+Kimi è disabilitato per lo stesso motivo: la sua status line ufficiale non porta campi di quota, rate
 limit o abbonamento, le finestre del piano dietro `/usage` sono raggiungibili solo con il token
 OAuth della CLI Kimi Code, e il balance documentato di Open Platform è credito API, non quota del
 piano. Nemmeno il plugin di Z.ai pubblica un campo quota, quindi la sua card è stata ritirata
