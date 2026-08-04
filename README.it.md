@@ -7,13 +7,12 @@
 
 **Una sola dashboard live per tutti gli abbonamenti AI che paghi.**
 
-Claude Code · Codex · Gemini · z.ai — su un unico asse dei reset.
+Claude Code · Codex · Gemini — su un unico asse dei reset.
 Gira sulla tua macchina. Non parla con nessuno tranne i provider.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml/badge.svg)](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml)
 [![Runtime: Bun](https://img.shields.io/badge/runtime-Bun-000?logo=bun)](https://bun.sh)
-[![npm downloads](https://img.shields.io/npm/dm/llm-quota?color=blue&logo=npm)](https://www.npmjs.com/package/llm-quota)
 [![GitHub Release Downloads](https://img.shields.io/github/downloads/SandroHub013/llm-quota/total?color=green&logo=github)](https://github.com/SandroHub013/llm-quota/releases)
 
 **[→ Sito llm-quota](https://sandrohub013.github.io/llm-quota/)**
@@ -40,7 +39,7 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
 
 ## Caratteristiche
 
-- ⏳ **Orizzonte reset** — i reset dei cinque provider misurabili su un solo asse temporale. Passando su un
+- ⏳ **Orizzonte reset** — i reset di ogni provider misurabile su un solo asse temporale. Passando su un
   marcatore si illumina la card corrispondente, e viceversa.
 - ⚡ **Live senza ricaricare** — le quote si aggiornano silenziosamente ogni minuto, la spesa locale
   ogni cinque secondi e i countdown continuano tra una richiesta e l'altra. I dati invariati non ridisegnano l'interfaccia.
@@ -61,7 +60,7 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
 - 🪟 **Widget desktop Windows** — widget Tk flottante sempre in primo piano, lanciato dalla
   dashboard tramite il protocollo `llmquota://widget`. Aggiorna silenziosamente le quote ogni
   minuto, la spesa locale ogni cinque secondi e mantiene vivi i countdown tra una richiesta e l'altra.
-  Mostra le cinque card provider; OpenCode resta incluso soltanto nella spesa locale.
+  Mostra le stesse card della dashboard; OpenCode resta incluso soltanto nella spesa locale.
 - ♿ **Accessibile** — navigazione da tastiera, `prefers-reduced-motion` rispettato, tutte le card
   principali a schermo senza scroll nei comuni viewport desktop e laptop.
 
@@ -132,16 +131,18 @@ credenziali o cronologie d'uso reali.
 |---|---|---|
 | **Claude Code** | JSON ufficiale della status line (opt-in) | Quota 5h + settimanale %, reset e freschezza della fonte |
 | **Codex** (ChatGPT) | JSON-RPC ufficiale `codex app-server` | Piano attivo + finestre d'uso |
-| **z.ai** | Plugin ufficiale Usage Query / console | Stato non disponibile finché manca una API pubblica per dashboard |
 | **Gemini / Antigravity** | JSON ufficiale della status line Antigravity (opt-in) | Quota residua per bucket e reset |
+| **z.ai** | Card disabilitata | La status line del GLM Coding Plan non espone alcun campo quota; i token restano nel registro locale |
 | **Kimi / Moonshot** | Card disabilitata | La quota del piano Kimi Code non ha una fonte machine-readable conforme; i token restano nel registro locale |
 
-OpenCode resta una fonte del registro token locale, ma Zen non compare nelle card quota: il suo
+Oggi vengono spedite tre card provider. OpenCode resta una fonte del registro token locale, ma
+Zen non compare nelle card quota: il suo
 endpoint pubblico espone il catalogo modelli, non utilizzo numerico, limiti o tempi di reset.
 Kimi è escluso per lo stesso motivo: la sua status line ufficiale non porta campi di quota, rate
 limit o abbonamento, le finestre del piano dietro `/usage` sono raggiungibili solo con il token
 OAuth della CLI Kimi Code, e il balance documentato di Open Platform è credito API, non quota del
-piano.
+piano. Nemmeno il plugin di Z.ai pubblica un campo quota, quindi la sua card è stata ritirata
+invece di restare a promettere un dato che non arriva.
 
 Le chiavi inserite a mano restano in locale in `~/.llm-quota/config.json`. Non vengono mai inviate
 a nessuno tranne al provider a cui appartengono, e mai committate.
@@ -161,6 +162,7 @@ bun run cli status            # riepilogo testuale compatto
 bun run cli status --json     # JSON sanitizzato, sicuro da incollare in un prompt
 bun run cli provider codex    # un solo provider
 bun run cli doctor            # health check
+bun run cli stats             # contatori di download pubblici del progetto
 ```
 
 Gli exit code la rendono scriptabile — e permettono a un agente di decidere da solo se partire:
@@ -216,8 +218,10 @@ src/
 ├── server.ts          # Backend Hono solo loopback (/api/quota, /api/key, /api/official-bridge)
 ├── codex-app-server.ts# Client JSON-RPC ufficiale Codex
 ├── official-bridge.ts # Wrapper status line Claude/Antigravity opt-in
+├── usage.ts           # Cronologia CLI locale → registro token e calendario spesa
 ├── credentials.ts     # Config delle sole chiavi inserite dall'utente
 ├── cli.ts             # CLI per sviluppatori e agenti
+├── cli-core.ts        # Riepilogo quota, formattazione ed exit code
 └── providers/         # Un adapter per provider (fetch → QuotaResult)
 public/                # SPA frontend — HTML, CSS, JS vanilla, nessun build step
 ├── fonts/             # Font variabili self-hosted (woff2, subset latino)
@@ -229,8 +233,9 @@ Stack: [Bun](https://bun.sh) + [Hono](https://hono.dev) + TypeScript. Una sola d
 Nessun bundler, nessun framework, nessun build step per il frontend.
 
 ```bash
-bun test          # 31 test
+bun test                        # TypeScript: server, provider, CLI, guard frontend
 bun run typecheck
+python -m unittest widget_test  # Python: il widget Windows
 ```
 
 ---
