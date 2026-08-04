@@ -199,7 +199,12 @@ test("runtime and marketing surfaces stay English and describe synthetic preview
   const surfaces = [app, dashboard, site, widget, credentials, generator].join("\n");
 
   expect(surfaces).not.toContain('"it-IT"');
-  expect(surfaces).not.toMatch(/\b(?:modalità|caratteristiche|giorni|dinamico|fallita|telemetria|spesa|avviso)\b/i);
+  // The list is what has actually leaked so far. "varia" and "altri" are here because
+  // they shipped inside the model catalogue for months: the guard only ever catches the
+  // words it already knows, so every escape earns its entry.
+  expect(surfaces).not.toMatch(
+    /\b(?:modalità|caratteristiche|giorni|dinamico|fallita|telemetria|spesa|avviso|varia|altri|totale|lista)\b/i,
+  );
   expect(site).toContain("Current interface rendered with synthetic sample data.");
   expect(site).toContain("Live without reloads");
   expect(site).not.toContain("Six providers");
