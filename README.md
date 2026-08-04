@@ -147,13 +147,13 @@ credentials, or real usage history.
 | **z.ai** | Card disabled | The GLM Coding Plan status line carries no quota field to read; token spend still appears in the local ledger |
 | **Kimi / Moonshot** | Card disabled | Kimi Code plan quota has no compliant machine-readable source; token spend still appears in the local ledger |
 
-Three provider cards ship today. OpenCode remains a source for the local token ledger, but Zen is
-intentionally omitted from the quota cards: its public endpoint exposes a model catalog, not numeric
-usage, limits or reset times. Kimi is omitted for the same reason: its official status line carries
-no quota, rate limit or subscription field, the plan windows behind `/usage` are reachable only with
-the Kimi Code CLI's own OAuth token, and the documented Open Platform balance is API credit rather
-than plan quota. Z.ai's own plugin publishes no quota field either, so its card was withdrawn rather
-than left showing an empty promise.
+Three provider cards ship today. OpenCode remains a source for the local token ledger; its Zen
+gateway was dropped entirely, because the public endpoint exposes a model catalog rather than
+numeric usage, limits or reset times. Kimi is disabled for the same reason: its official status line
+carries no quota, rate limit or subscription field, the plan windows behind `/usage` are reachable
+only with the Kimi Code CLI's own OAuth token, and the documented Open Platform balance is API credit
+rather than plan quota. Z.ai's own plugin publishes no quota field either, so its card was withdrawn
+rather than left showing an empty promise.
 
 Keys you paste yourself are stored locally in `~/.llm-quota/config.json`. They are never sent
 anywhere except to the provider they belong to, and never committed.
