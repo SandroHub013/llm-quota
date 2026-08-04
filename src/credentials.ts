@@ -16,7 +16,8 @@ export async function readJson<T = any>(path: string): Promise<T | undefined> {
 }
 
 /**
- * Best-effort JSON write (a no-op on read-only filesystems such as Vercel).
+ * Best-effort JSON write: a read-only or full home directory must not take the
+ * dashboard down, since every provider read passes through this config.
  *
  * Written 0600: this file holds provider API keys, and the default 0644 leaves them
  * readable by every other account on a shared machine.
