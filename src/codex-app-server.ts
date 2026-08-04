@@ -93,7 +93,7 @@ export function readCodexRateLimits(timeoutMs = 8_000): Promise<CodexAppServerRe
         clientInfo: {
           name: "llm_quota",
           title: "LLM Quota",
-          version: "0.1.0",
+          version: "0.2.0",
         },
       },
     });
