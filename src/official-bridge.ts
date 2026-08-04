@@ -149,7 +149,15 @@ export async function installOfficialBridge(
   };
   await writeJsonAtomic(paths.metadata, metadata);
 
-  await writeFile(paths.script, buildPowerShellBridge(paths.group, groupCaches(paths.group, home), paths.previous), "utf8");
+  await writeFile(
+    paths.script,
+    buildPowerShellBridge(
+      paths.group,
+      groupCaches(paths.group, home, installedMembers(paths.group, home, provider)),
+      paths.previous,
+    ),
+    "utf8",
+  );
   settings.statusLine = { ...(current ?? {}), type: "command", command };
   await writeJsonAtomic(paths.config, settings);
   return { installed: true, configPath: paths.config };
@@ -172,11 +180,16 @@ export async function removeOfficialBridge(
   await Promise.all([rm(paths.metadata, { force: true }), rm(paths.cache, { force: true })]);
 
   // The shared wrapper stays until the last provider on this settings file leaves.
-  const siblings = GROUP_MEMBERS[paths.group].filter((member) => member !== provider);
-  for (const sibling of siblings) {
-    if (existsSync(officialBridgePaths(sibling, home).metadata)) {
-      return { installed: false, configPath: paths.config };
-    }
+  // Rewrite it without this provider first, or the script the sibling keeps alive
+  // would recreate the cache file just deleted above on its next run.
+  const remaining = installedMembers(paths.group, home);
+  if (remaining.length) {
+    await writeFile(
+      paths.script,
+      buildPowerShellBridge(paths.group, groupCaches(paths.group, home, remaining), paths.previous),
+      "utf8",
+    );
+    return { installed: false, configPath: paths.config };
   }
 
   const origin = await readJson<BridgeOrigin>(paths.origin);
@@ -221,13 +234,36 @@ async function migrateLegacyOrigin(
   }
 }
 
-export function groupCaches(group: BridgeGroup, home = homedir()): Record<OfficialBridgeSource, string> {
+export function groupCaches(
+  group: BridgeGroup,
+  home = homedir(),
+  members: OfficialBridgeProvider[] = GROUP_MEMBERS[group],
+): Record<OfficialBridgeSource, string> {
   const caches = {} as Record<OfficialBridgeSource, string>;
-  for (const member of GROUP_MEMBERS[group]) {
+  for (const member of members) {
     const paths = officialBridgePaths(member, home);
     caches[paths.source] = paths.cache;
   }
   return caches;
+}
+
+/**
+ * Members of this group the user has actually opted in for, plus `also` for the
+ * install being performed right now (its metadata is not on disk yet).
+ *
+ * The script is shared, so without this filter enabling one provider would start
+ * capturing quota for every sibling on the same settings file. The sibling's card
+ * would then light up with live data the user never opted into, and — because its
+ * own install metadata is missing — offer no way to switch it back off.
+ */
+function installedMembers(
+  group: BridgeGroup,
+  home: string,
+  also?: OfficialBridgeProvider,
+): OfficialBridgeProvider[] {
+  return GROUP_MEMBERS[group].filter(
+    (member) => member === also || existsSync(officialBridgePaths(member, home).metadata),
+  );
 }
 
 export function buildPowerShellBridge(
@@ -257,8 +293,8 @@ Save-Snapshot ${psLiteral(caches.antigravity)} 'antigravity' $antigravityData`);
 }`
     : `if ($null -ne $state.rate_limits.five_hour.used_percentage) {
   $parts.Add("5h $([Math]::Round([double]$state.rate_limits.five_hour.used_percentage))% used")
-}
-if ($null -ne $zaiData) { $parts.Add('Z.ai GLM plugin sync') }`;
+}${caches.zai ? `
+if ($null -ne $zaiData) { $parts.Add('Z.ai GLM plugin sync') }` : ""}`;
 
   return `$ErrorActionPreference = 'SilentlyContinue'
 

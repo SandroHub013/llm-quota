@@ -318,3 +318,44 @@ test("PowerShell bridge emits UTF-8 so the separator survives the host", async (
   expect(line).toContain("·");
   expect(line).not.toContain("�");
 });
+
+// The wrapper is shared by everything on one settings file, so it used to capture every
+// sibling's quota the moment any one of them was enabled. The sibling's card then showed
+// live data nobody opted into, and — with no install metadata of its own — offered no
+// way to turn it back off.
+test("enabling one provider does not start capturing its group siblings", async () => {
+  if (process.platform !== "win32") return;
+  const home = await mkdtemp(join(tmpdir(), "llm-quota-bridge-"));
+  homes.push(home);
+  const paths = officialBridgePaths("claude", home);
+
+  await installOfficialBridge("claude", home);
+  const claudeOnly = await readFile(paths.script, "utf8");
+
+  expect(claudeOnly).toContain(officialBridgePaths("claude", home).cache);
+  expect(claudeOnly).not.toContain(officialBridgePaths("zai", home).cache);
+  expect(claudeOnly).not.toContain("Z.ai GLM plugin sync");
+
+  await installOfficialBridge("zai", home);
+  const both = await readFile(paths.script, "utf8");
+  expect(both).toContain(officialBridgePaths("zai", home).cache);
+});
+
+// Removing one member leaves the shared script alive for the others. Without rewriting
+// it, the next status-line run recreated the cache file the teardown had just deleted.
+test("removing one provider stops the shared wrapper writing its cache", async () => {
+  if (process.platform !== "win32") return;
+  const home = await mkdtemp(join(tmpdir(), "llm-quota-bridge-"));
+  homes.push(home);
+  const paths = officialBridgePaths("claude", home);
+
+  await installOfficialBridge("claude", home);
+  await installOfficialBridge("zai", home);
+  await removeOfficialBridge("zai", home);
+
+  const script = await readFile(paths.script, "utf8");
+  expect(existsSync(paths.script)).toBe(true);
+  expect(script).not.toContain(officialBridgePaths("zai", home).cache);
+  expect(script).toContain(officialBridgePaths("claude", home).cache);
+  expect(await officialBridgeInstalled("claude", home)).toBe(true);
+});
