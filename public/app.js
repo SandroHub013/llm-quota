@@ -79,7 +79,6 @@ const BRAND = {
   claude: { b1: "#d97757", b2: "#a85438" },
   codex: { b1: "#10a37f", b2: "#0b6e56" },
   zai: { b1: "#4f7cff", b2: "#2b4fb8" },
-  "opencode-zen": { b1: "#9b5bff", b2: "#6a2fd0" },
   gemini: { b1: "#4285f4", b2: "#9b72cf" },
   moonshot: { b1: "#0ea5e9", b2: "#3b82f6" },
 };
@@ -96,7 +95,6 @@ const LOGO = {
   claude: { src: "/logos/claude.png", fill: true },
   codex: { src: "/logos/codex.webp", fill: true },
   zai: { src: "/logos/zai.svg" },
-  "opencode-zen": { src: "/logos/opencode-zen.png", fill: true },
   gemini: { src: "/logos/gemini.svg", plate: "#f6f8fc" },
   moonshot: { src: "/logos/moonshot.png", fill: true },
 };
@@ -108,7 +106,6 @@ const GLYPH = {
   claude: `<g ${S}><path d="M12 3.5v5M12 15.5v5M3.5 12h5M15.5 12h5M6 6l3.5 3.5M14.5 14.5 18 18M18 6l-3.5 3.5M9.5 14.5 6 18"/></g>`,
   codex: `<g ${S} stroke-linejoin="round"><path d="M5 7.5 9.5 12 5 16.5"/><path d="M12.5 16.5H19"/></g>`,
   zai: `<path d="M14.5 2.5 6 13.5h4.2L8.5 21.5 18 10h-4.2z" fill="currentColor"/>`,
-  "opencode-zen": `<g ${S}><path d="M16.8 5.4a7.6 7.6 0 1 0 2.6 4.4"/></g>`,
   gemini: `<path d="M12 2.2c0 5.4 4.4 9.8 9.8 9.8-5.4 0-9.8 4.4-9.8 9.8 0-5.4-4.4-9.8-9.8-9.8 5.4 0 9.8-4.4 9.8-9.8z" fill="currentColor"/>`,
   moonshot: `<path d="M20.2 14.8A8.6 8.6 0 0 1 9.2 3.8a8.6 8.6 0 1 0 11 11z" fill="currentColor"/>`,
 };
@@ -159,13 +156,6 @@ const MODELS = {
     { n: "GLM-5V-Turbo", ctx: "200K", eff: "reasoning · no effort levels" },
     { n: "GLM-4.7", ctx: "204.8K", eff: "reasoning · no effort levels" },
     { n: "GLM-4.5-Air", ctx: "131K", eff: "reasoning · no effort levels" },
-  ],
-  "opencode-zen": [
-    { n: "Claude Fable 5 / Opus 4.8 / Sonnet 5", ctx: "1M", eff: "low · medium · high · xhigh · max" },
-    { n: "GPT-5.6 Sol / Terra / Luna", ctx: "1.05M", eff: "varies by gateway" },
-    { n: "Gemini 3.1 Pro / 3.5–3.6 Flash", ctx: "1M", eff: "varies by model" },
-    { n: "GLM-5.2 · Kimi K2.7-Code · Grok 4.5 · DeepSeek v4", ctx: "varies", eff: "varies" },
-    { n: "+ 58 in total", ctx: "—", eff: "live list: opencode.ai/zen/v1/models" },
   ],
   gemini: [
     { n: "Gemini 3.6 Flash", ctx: "1,048,576", eff: "dynamic thinking" },
@@ -519,17 +509,15 @@ function usedPct(m) {
 
 // `index` ties the rendered countdown back to the metric it belongs to. Matching the
 // two by DOM position instead would drift: a metric carrying a resetAt does not always
-// render a .reset node (see expiredUnused below), and the availability row renders one
-// that is not a countdown at all. Either case shifts every later row onto the wrong metric.
+// render a .reset node (see expiredUnused below), so a gap would shift every later row
+// onto the wrong metric.
 function metricHtml(m, index) {
   const used = usedPct(m);
   const remainingPct = used == null ? null : Math.max(0, 100 - used);
   const cls = used == null ? "" : used >= 90 ? "crit" : used >= 70 ? "hot" : "";
   // Say what the number means. "0% / 100%" told the user nothing.
   const right =
-    m.availability === "listed"
-      ? "free · fair use"
-      : m.remaining != null
+    m.remaining != null
       ? fmt(m.remaining, m.unit) + " left"
       : remainingPct != null
         ? remainingPct + "% left"
@@ -541,9 +529,6 @@ function metricHtml(m, index) {
     ? `<div class="reset" data-reset="${index}">${resetText(m.resetAt)}</div>`
     : "";
   const head = `<div class="metric-head"><span>${escapeHtml(m.label)}</span><span class="val">${right}</span></div>`;
-  if (m.availability === "listed") {
-    return `<div class="metric metric-availability"><div class="availability-orb" aria-hidden="true"></div><div class="metric-body">${head}<div class="reset">No numeric quota published</div></div></div>`;
-  }
   if (remainingPct != null) {
     return `<div class="metric">${donutHtml(remainingPct)}<div class="metric-body">${head}${reset}</div></div>`;
   }
