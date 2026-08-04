@@ -599,10 +599,8 @@
         <div class="strip">
           <figure><img src="./logos/claude.png" alt="" /> Claude Code</figure>
           <figure><img src="./logos/codex.webp" alt="" /> Codex</figure>
-          <figure><img src="./logos/zai.svg" alt="" /> z.ai</figure>
-          <figure><img src="./logos/opencode-zen.png" alt="" /> OpenCode logs</figure>
           <figure><img src="./logos/gemini.svg" alt="" /> Gemini</figure>
-          <figure><img src="./logos/moonshot.png" alt="" /> Moonshot</figure>
+          <figure><img src="./logos/opencode-zen.png" alt="" /> OpenCode logs</figure>
         </div>
       </div>
 
@@ -761,8 +759,8 @@
                   <tbody>
                     <tr><td>Claude Code</td><td>Official status-line JSON (opt-in)</td><td>5h + weekly quota %, reset time</td></tr>
                     <tr><td>Codex (ChatGPT)</td><td>Official <code>codex app-server</code></td><td>Active plan + usage windows</td></tr>
-                    <tr><td>z.ai</td><td>Official Usage Query plugin / console</td><td>Unavailable until a public dashboard API exists</td></tr>
                     <tr><td>Gemini / Antigravity</td><td>Official Antigravity status-line JSON (opt-in)</td><td>Per-bucket quota and reset time</td></tr>
+                    <tr><td>z.ai</td><td>Card disabled</td><td>Its status line exposes no quota field; token spend stays in the local ledger</td></tr>
                     <tr><td>Kimi / Moonshot</td><td>Card disabled</td><td>No compliant machine-readable plan quota; token spend stays in the local ledger</td></tr>
                   </tbody>
                 </table>
@@ -911,9 +909,10 @@ bun run cli provider codex</code></pre>
         moonshot: `<path d="M20.2 14.8A8.6 8.6 0 0 1 9.2 3.8a8.6 8.6 0 1 0 11 11z" fill="currentColor"/>`,
       };
 
-      // Minutes from load. Each one has to stay plausible for its own window — a
-      // "Session (5h)" cannot reset in three days — while landing far enough apart on
-      // the sqrt axis that six 21px dots do not collapse into one blob.
+      // One entry per window the three shipped cards actually publish. Each has to stay
+      // plausible for its own window — a "Session (5h)" cannot reset in three days —
+      // while landing far enough apart on the sqrt axis that the 21px dots do not
+      // collapse into one blob.
       // `win` is the length of each provider's window. Once a reset elapses the demo
       // rolls it forward by one window instead of parking it at "in 0m" — which is
       // what the real thing does, and it keeps the rail honest on a tab left open.
@@ -921,10 +920,9 @@ bun run cli provider codex</code></pre>
       const EVENTS = [
         { id: "claude", name: "Claude Code", label: "Session (5h)", min: 72, win: 300, pct: 68 },
         { id: "gemini", name: "Gemini", label: "Models · Session (5h)", min: 278, win: 300, pct: 24 },
-        { id: "moonshot", name: "Kimi (Moonshot)", label: "Daily (24h)", min: 1145, win: 1440, pct: 12 },
+        { id: "gemini", name: "Gemini", label: "Weekly (7d)", min: 1420, win: 10080, pct: 40 },
         { id: "claude", name: "Claude Code", label: "Weekly (7d)", min: 3720, win: 10080, pct: 16 },
         { id: "codex", name: "Codex", label: "Weekly (7d)", min: 6240, win: 10080, pct: 3 },
-        { id: "zai", name: "z.ai", label: "Tokens (month)", min: 8820, win: 43200, pct: 1 },
       ];
 
       const TICKS_FULL = [

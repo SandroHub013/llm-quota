@@ -54,7 +54,9 @@ export async function run(args: string[], request: Request = fetch): Promise<Run
   if (args.includes("--help") || args.includes("-h") || args[0] === "help") {
     return { output: HELP, code: 0 };
   }
-  const command = args.find((arg) => !arg.startsWith("-")) ?? "status";
+  // Operands only: `provider --json codex` must read "codex", not the flag between them.
+  const operands = args.filter((arg) => !arg.startsWith("-"));
+  const command = operands[0] ?? "status";
   if (!["status", "provider", "doctor", "stats"].includes(command)) {
     return { output: "usage: llm-quota --help", code: 3 };
   }
@@ -62,7 +64,7 @@ export async function run(args: string[], request: Request = fetch): Promise<Run
     const statsOutput = await fetchProjectStats(request);
     return { output: statsOutput, code: 0 };
   }
-  if (command === "provider" && !args[args.indexOf(command) + 1]) {
+  if (command === "provider" && !operands[1]) {
     return { output: "usage: llm-quota provider <id>", code: 3 };
   }
   try {
@@ -73,7 +75,7 @@ export async function run(args: string[], request: Request = fetch): Promise<Run
       const providers = await response.json() as unknown[];
       return { output: `ok ${providers.length} providers`, code: 0 };
     }
-    const id = command === "provider" ? args[args.indexOf(command) + 1] : undefined;
+    const id = command === "provider" ? operands[1] : undefined;
     const path = id ? `/api/quota/${encodeURIComponent(id)}` : "/api/quota";
     const response = await request(`${base}${path}`);
     if (!response.ok) return { output: `server http_${response.status}`, code: 3 };

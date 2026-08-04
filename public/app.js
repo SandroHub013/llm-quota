@@ -139,6 +139,7 @@ const orderOf = (id) => Math.max(0, LINEUP.indexOf(id));
 const MODELS = {
   claude: [
     { n: "Claude Fable 5", ctx: "1M", eff: "low · medium · high · xhigh · max" },
+    { n: "Claude Opus 5", ctx: "1M", eff: "low · medium · high · xhigh · max" },
     { n: "Claude Opus 4.8", ctx: "1M", eff: "low · medium · high · xhigh · max" },
     { n: "Claude Sonnet 5", ctx: "1M", eff: "low · medium · high · xhigh · max" },
     { n: "Claude Haiku 4.5", ctx: "200K", eff: "extended thinking · no effort" },
@@ -161,10 +162,10 @@ const MODELS = {
   ],
   "opencode-zen": [
     { n: "Claude Fable 5 / Opus 4.8 / Sonnet 5", ctx: "1M", eff: "low · medium · high · xhigh · max" },
-    { n: "GPT-5.6 Sol / Terra / Luna", ctx: "1.05M", eff: "varia per gateway" },
-    { n: "Gemini 3.1 Pro / 3.5–3.6 Flash", ctx: "1M", eff: "varia per modello" },
-    { n: "GLM-5.2 · Kimi K2.7-Code · Grok 4.5 · DeepSeek v4", ctx: "varia", eff: "varia" },
-    { n: "+ altri, 58 in totale", ctx: "—", eff: "lista live: opencode.ai/zen/v1/models" },
+    { n: "GPT-5.6 Sol / Terra / Luna", ctx: "1.05M", eff: "varies by gateway" },
+    { n: "Gemini 3.1 Pro / 3.5–3.6 Flash", ctx: "1M", eff: "varies by model" },
+    { n: "GLM-5.2 · Kimi K2.7-Code · Grok 4.5 · DeepSeek v4", ctx: "varies", eff: "varies" },
+    { n: "+ 58 in total", ctx: "—", eff: "live list: opencode.ai/zen/v1/models" },
   ],
   gemini: [
     { n: "Gemini 3.6 Flash", ctx: "1,048,576", eff: "dynamic thinking" },
@@ -516,7 +517,11 @@ function usedPct(m) {
   return null;
 }
 
-function metricHtml(m) {
+// `index` ties the rendered countdown back to the metric it belongs to. Matching the
+// two by DOM position instead would drift: a metric carrying a resetAt does not always
+// render a .reset node (see expiredUnused below), and the availability row renders one
+// that is not a countdown at all. Either case shifts every later row onto the wrong metric.
+function metricHtml(m, index) {
   const used = usedPct(m);
   const remainingPct = used == null ? null : Math.max(0, 100 - used);
   const cls = used == null ? "" : used >= 90 ? "crit" : used >= 70 ? "hot" : "";
@@ -532,7 +537,9 @@ function metricHtml(m) {
           ? fmt(m.used, m.unit)
           : "";
   const expiredUnused = remainingPct === 100 && m.resetAt && new Date(m.resetAt).getTime() <= Date.now();
-  const reset = m.resetAt && !expiredUnused ? `<div class="reset">${resetText(m.resetAt)}</div>` : "";
+  const reset = m.resetAt && !expiredUnused
+    ? `<div class="reset" data-reset="${index}">${resetText(m.resetAt)}</div>`
+    : "";
   const head = `<div class="metric-head"><span>${escapeHtml(m.label)}</span><span class="val">${right}</span></div>`;
   if (m.availability === "listed") {
     return `<div class="metric metric-availability"><div class="availability-orb" aria-hidden="true"></div><div class="metric-body">${head}<div class="reset">No numeric quota published</div></div></div>`;
@@ -835,9 +842,10 @@ setInterval(() => {
   for (const [id, p] of latest) {
     const card = cards.get(id);
     if (!card) continue;
-    const nodes = card.querySelectorAll(".reset");
-    const withReset = (p.metrics || []).filter((m) => m.resetAt);
-    nodes.forEach((n, i) => withReset[i] && (n.textContent = resetText(withReset[i].resetAt)));
+    for (const node of card.querySelectorAll(".reset[data-reset]")) {
+      const metric = (p.metrics || [])[Number(node.dataset.reset)];
+      if (metric?.resetAt) node.textContent = resetText(metric.resetAt);
+    }
   }
 }, 30000);
 

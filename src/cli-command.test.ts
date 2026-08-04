@@ -109,3 +109,23 @@ test("LLM_QUOTA_URL overrides the legacy server environment variable", async () 
   }
   expect(urls).toEqual(["http://new-brand.test/api/quota"]);
 });
+
+// `args.indexOf(command) + 1` used to take whatever followed the subcommand, so a flag
+// written between the two was requested as if it were the provider id.
+test("a flag between the subcommand and the id is not mistaken for the id", async () => {
+  const urls: string[] = [];
+  const request = async (url: string | URL | Request) => {
+    urls.push(String(url));
+    return Response.json(quota.providers[0]);
+  };
+
+  const result = await run(["provider", "--json", "codex"], request);
+
+  expect(urls).toEqual(["http://localhost:4747/api/quota/codex"]);
+  expect(JSON.parse(result.output).providers[0].id).toBe("codex");
+});
+
+test("provider with no id at all still reports usage", async () => {
+  const result = await run(["provider", "--json"], async () => Response.json(quota));
+  expect(result).toEqual({ output: "usage: llm-quota provider <id>", code: 3 });
+});

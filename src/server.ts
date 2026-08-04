@@ -12,6 +12,49 @@ import { collectGitHubContributions } from "./github-contributions.prototype.js"
 const app = new Hono();
 const PUBLIC = resolve(dirname(fileURLToPath(import.meta.url)), "..", "public");
 
+/**
+ * The server binds to loopback, which stops other machines but not other pages on
+ * this one. Two gaps stay open without an explicit check:
+ *
+ *   - DNS rebinding. A site whose name is re-resolved to 127.0.0.1 becomes
+ *     same-origin with this server and can then read /api/quota and /api/usage,
+ *     which carry the plan and local spend history. Pinning Host closes it.
+ *   - CSRF. POST /api/official-bridge/:id needs no body and no custom header, so
+ *     it is a "simple request": the browser sends it cross-origin with no preflight
+ *     and the side effect lands — a status-line script written and the official
+ *     client's settings rewritten. The response is unreadable; the write is not
+ *     undone by that. A non-JSON POST to /api/key/:id likewise deletes a stored key.
+ *
+ * Same-origin browser requests either omit Origin or send this server's own.
+ */
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+function hostAllowed(host: string): boolean {
+  if (!host) return false;
+  const name = host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : host.split(":")[0]!;
+  return LOOPBACK_HOSTS.has(name.toLowerCase());
+}
+
+app.use("*", async (context, next) => {
+  // Bun builds request.url from the Host header, so the two agree over real HTTP; the
+  // URL is the one that is always populated (HTTP/2 carries :authority instead).
+  const host = context.req.header("host") || new URL(context.req.url).host;
+  if (!hostAllowed(host)) return context.json({ error: "host not allowed" }, 403);
+
+  const origin = context.req.header("origin");
+  if (origin && context.req.method !== "GET" && context.req.method !== "HEAD") {
+    const allowed = (() => {
+      try {
+        return hostAllowed(new URL(origin).host);
+      } catch {
+        return false;
+      }
+    })();
+    if (!allowed) return context.json({ error: "cross-origin request refused" }, 403);
+  }
+  await next();
+});
+
 async function fetchOne(id: string): Promise<QuotaResult> {
   const provider = getProvider(id)!;
   const config = await readConfig();
