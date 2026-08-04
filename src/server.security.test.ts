@@ -57,3 +57,16 @@ test("same-origin requests that send no Origin header keep working", async () =>
   const response = await at("http://localhost:4747/api/key/unknown-provider", { method: "POST" });
   expect(response.status).toBe(404);
 });
+
+// The README calls this a loopback-only backend, and the Host guard above only holds
+// while the app is served by its own Bun entry point. A serverless adapter re-exporting
+// `app` would publish /api/usage and /api/key to the open internet — which is exactly
+// what api/index.ts plus vercel.json did before they were removed.
+test("no serverless adapter re-exports the local app", async () => {
+  for (const path of ["api/index.ts", "api/index.js", "vercel.json", "netlify.toml"]) {
+    expect(await Bun.file(path).exists()).toBe(false);
+  }
+
+  const server = await Bun.file("src/server.ts").text();
+  expect(server).toContain('hostname: "127.0.0.1"');
+});
