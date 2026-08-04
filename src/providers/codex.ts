@@ -96,10 +96,16 @@ function readPlan(body: any): string | undefined {
   return plan ? String(plan) : undefined;
 }
 
+/**
+ * Name the window after the duration Codex actually reported. The previous version
+ * printed a literal "Session (5h)" for anything up to six hours, so a one-hour bucket
+ * claimed a window five times its length.
+ */
 function windowLabel(minutes?: number): string {
   if (!minutes) return "Window";
-  if (minutes <= 6 * 60) return "Session (5h)";
-  if (minutes <= 8 * 24 * 60) return "Weekly (7d)";
+  if (minutes < 60) return `Session (${minutes}m)`;
+  if (minutes <= 6 * 60) return `Session (${Math.round(minutes / 60)}h)`;
+  if (minutes <= 8 * 24 * 60) return `Weekly (${Math.round(minutes / 1440)}d)`;
   return `Window (${Math.round(minutes / 1440)}d)`;
 }
 

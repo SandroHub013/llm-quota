@@ -4,13 +4,12 @@
 
 **One live dashboard for every AI subscription you pay for.**
 
-Claude Code · Codex · Gemini · z.ai — quotas, reset times, and local token spend.
+Claude Code · Codex · Gemini — quotas, reset times, and local token spend.
 Runs on your machine. Talks to nobody but the providers.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml/badge.svg)](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml)
 [![Runtime: Bun](https://img.shields.io/badge/runtime-Bun-000?logo=bun)](https://bun.sh)
-[![npm downloads](https://img.shields.io/npm/dm/llm-quota?color=blue&logo=npm)](https://www.npmjs.com/package/llm-quota)
 [![GitHub Release Downloads](https://img.shields.io/github/downloads/SandroHub013/llm-quota/total?color=green&logo=github)](https://github.com/SandroHub013/llm-quota/releases)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Stars](https://img.shields.io/github/stars/SandroHub013/llm-quota?style=social)](https://github.com/SandroHub013/llm-quota/stargazers)
@@ -57,8 +56,8 @@ glance which subscription is free, which is cooling down, and exactly when to co
   exit codes, so an agent can check its own budget before starting a long job.
 - 🪟 **Windows desktop widget** — a floating always-on-top Tk widget, launched from the dashboard
   via the `llmquota://widget` protocol. It silently refreshes quotas every minute, local spend
-  every five seconds, and keeps reset countdowns moving between requests. It shows the five provider
-  cards; OpenCode remains included only in local spend.
+  every five seconds, and keeps reset countdowns moving between requests. It shows the same provider
+  cards as the dashboard; OpenCode remains included only in local spend.
 - ♿ **Accessible** — full keyboard navigation, `prefers-reduced-motion` respected, all primary
   providers on screen without scrolling from 1280×800 up.
 
@@ -144,15 +143,17 @@ credentials, or real usage history.
 |---|---|---|
 | **Claude Code** | Official status-line JSON (opt-in) | 5h + weekly quota %, reset time and source freshness |
 | **Codex** (ChatGPT) | Official `codex app-server` JSON-RPC | Active plan + usage windows |
-| **z.ai** | Official Usage Query plugin / console | Honest unavailable state until a public dashboard API exists |
 | **Gemini / Antigravity** | Official Antigravity status-line JSON (opt-in) | Per-bucket remaining quota and reset time |
+| **z.ai** | Card disabled | The GLM Coding Plan status line carries no quota field to read; token spend still appears in the local ledger |
 | **Kimi / Moonshot** | Card disabled | Kimi Code plan quota has no compliant machine-readable source; token spend still appears in the local ledger |
 
-OpenCode remains a source for the local token ledger, but Zen is intentionally omitted from the
-quota cards: its public endpoint exposes a model catalog, not numeric usage, limits or reset times.
-Kimi is omitted for the same reason: its official status line carries no quota, rate limit or
-subscription field, the plan windows behind `/usage` are reachable only with the Kimi Code CLI's own
-OAuth token, and the documented Open Platform balance is API credit rather than plan quota.
+Three provider cards ship today. OpenCode remains a source for the local token ledger, but Zen is
+intentionally omitted from the quota cards: its public endpoint exposes a model catalog, not numeric
+usage, limits or reset times. Kimi is omitted for the same reason: its official status line carries
+no quota, rate limit or subscription field, the plan windows behind `/usage` are reachable only with
+the Kimi Code CLI's own OAuth token, and the documented Open Platform balance is API credit rather
+than plan quota. Z.ai's own plugin publishes no quota field either, so its card was withdrawn rather
+than left showing an empty promise.
 
 Keys you paste yourself are stored locally in `~/.llm-quota/config.json`. They are never sent
 anywhere except to the provider they belong to, and never committed.
@@ -172,6 +173,7 @@ bun run cli status            # compact text summary
 bun run cli status --json     # sanitized JSON, safe to paste into a prompt
 bun run cli provider codex    # one provider only
 bun run cli doctor            # health check
+bun run cli stats             # public download counters for the project
 ```
 
 Exit codes make it scriptable — and let an agent decide for itself whether to start a job:
@@ -227,8 +229,10 @@ src/
 ├── server.ts          # loopback-only Hono backend (/api/quota, /api/key, /api/official-bridge)
 ├── codex-app-server.ts# official Codex JSON-RPC client
 ├── official-bridge.ts # opt-in Claude/Antigravity status-line wrappers
+├── usage.ts           # local CLI history → token ledger and spend calendar
 ├── credentials.ts     # user-supplied key config only
 ├── cli.ts             # CLI for developers and agents
+├── cli-core.ts        # quota summary, formatting and exit codes
 └── providers/         # one adapter per provider (fetch → QuotaResult)
 public/                # frontend SPA — HTML, CSS, vanilla JS, no build step
 ├── fonts/             # self-hosted variable fonts (woff2, latin subset)
@@ -240,8 +244,9 @@ Stack: [Bun](https://bun.sh) + [Hono](https://hono.dev) + TypeScript. One runtim
 No bundler, no framework, no build step for the frontend.
 
 ```bash
-bun test          # 31 tests
+bun test                        # TypeScript: server, providers, CLI, frontend guards
 bun run typecheck
+python -m unittest widget_test  # Python: the Windows widget
 ```
 
 ---

@@ -23,3 +23,11 @@ jobs:
 
       - name: Test
         run: bun test
+
+      # CONTRIBUTING asks contributors to run these; nothing was checking that they pass.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Widget tests
+        run: python -m unittest widget_test

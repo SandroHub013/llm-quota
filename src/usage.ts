@@ -305,17 +305,42 @@ async function walk(root: string, name: string): Promise<string[]> {
   return found;
 }
 
+/**
+ * Read one local history file, reusing the previous parse while size and mtime hold.
+ *
+ * Returns undefined instead of throwing. The supported CLIs rotate and delete their
+ * own session files while this dashboard polls, so a path listed by `walk` can be
+ * gone by the time it is read. Letting that escape would abandon the whole source
+ * and discard every row already collected, dropping the spend total to zero.
+ */
 async function cachedFile<T>(
   cache: Map<string, FileCacheEntry<T>>,
   path: string,
   read: () => Promise<T>,
-): Promise<T> {
-  const info = await stat(path);
-  const cached = cache.get(path);
-  if (cached && cached.size === info.size && cached.mtimeMs === info.mtimeMs) return cached.value;
-  const value = await read();
-  cache.set(path, { size: info.size, mtimeMs: info.mtimeMs, value });
-  return value;
+): Promise<T | undefined> {
+  try {
+    const info = await stat(path);
+    const cached = cache.get(path);
+    if (cached && cached.size === info.size && cached.mtimeMs === info.mtimeMs) return cached.value;
+    const value = await read();
+    cache.set(path, { size: info.size, mtimeMs: info.mtimeMs, value });
+    return value;
+  } catch {
+    cache.delete(path);
+    return undefined;
+  }
+}
+
+/**
+ * Forget files that this scan no longer sees. The caches are keyed by path and the
+ * server is meant to run for days, so without this every session file ever read
+ * stays resident long after the CLI has deleted it.
+ */
+function pruneCache<T>(cache: Map<string, FileCacheEntry<T>>, live: Iterable<string>): void {
+  const keep = new Set(live);
+  for (const path of cache.keys()) {
+    if (!keep.has(path)) cache.delete(path);
+  }
 }
 
 const rawRow = (
@@ -712,9 +737,11 @@ export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<
       ...await walk(paths.codex, ".jsonl"),
       ...(paths.codexArchived ? await walk(paths.codexArchived, ".jsonl") : []),
     ];
+    pruneCache(codexCache, files);
     const sessions = new Map<string, CodexFileUsage>();
     for (const file of files) {
       const usage = await cachedFile(codexCache, file, () => scanCodex(file));
+      if (!usage) continue;
       const current = sessions.get(usage.sessionId);
       const tokens = usage.rows.reduce((sum, row) => sum + totalOf(row), 0);
       const currentTokens = current?.rows.reduce((sum, row) => sum + totalOf(row), 0) ?? -1;
@@ -733,10 +760,11 @@ export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<
 
   try {
     const files = await walk(paths.claude, ".jsonl");
+    pruneCache(claudeCache, files);
     const messages = new Map<string, RawUsageRow>();
     for (const file of files) {
       const records = await cachedFile(claudeCache, file, () => scanClaude(file));
-      for (const { id, row } of records) {
+      for (const { id, row } of records ?? []) {
         const current = messages.get(id);
         const hasMoreTokens = !current || totalOf(row) > totalOf(current);
         const isCanonicalSubagent = current && totalOf(row) === totalOf(current) &&
@@ -757,7 +785,10 @@ export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<
 
   try {
     const files = await walk(paths.kimi, "wire.jsonl");
-    for (const file of files) raw.push(...await cachedFile(kimiCache, file, () => scanKimi(file)));
+    pruneCache(kimiCache, files);
+    for (const file of files) {
+      raw.push(...(await cachedFile(kimiCache, file, () => scanKimi(file)) ?? []));
+    }
     sources.push({
       id: "kimi",
       name: SOURCE_NAMES.kimi,

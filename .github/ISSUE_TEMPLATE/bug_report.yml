@@ -9,10 +9,8 @@ body:
       options:
         - Claude Code
         - Codex (ChatGPT)
-        - z.ai
-        - OpenCode Zen
         - Gemini
-        - Moonshot
+        - Local token ledger (Codex / Claude / OpenCode / Kimi history)
         - Dashboard / UI (not provider-specific)
         - CLI
         - Windows widget
