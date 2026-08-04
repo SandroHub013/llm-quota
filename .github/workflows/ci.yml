@@ -24,7 +24,14 @@ jobs:
       - name: Test
         run: bun test
 
-      # CONTRIBUTING asks contributors to run these; nothing was checking that they pass.
+  # CONTRIBUTING asks contributors to run these; nothing was checking that they pass.
+  # Its own job on Windows: widget.py imports winreg to register the llmquota://
+  # protocol, so the module does not even load on a Linux runner.
+  widget:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
