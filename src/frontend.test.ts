@@ -50,7 +50,6 @@ test("provider logos are local files with no external references", async () => {
     claude: "claude.png",
     codex: "codex.webp",
     zai: "zai.svg",
-    "opencode-zen": "opencode-zen.png",
     gemini: "gemini.svg",
     moonshot: "moonshot.png",
   };
@@ -97,7 +96,7 @@ test("every visible quota provider ships a static skeleton card", async () => {
   }
   // Disabled providers must not reserve a skeleton, or the grid paints a card
   // that never arrives. Moonshot and Z.ai: see the comments in src/providers/index.ts.
-  for (const id of ["opencode-zen", "moonshot", "zai"]) {
+  for (const id of ["moonshot", "zai"]) {
     expect(html).not.toContain(`class="card is-skeleton" data-provider="${id}"`);
   }
   expect(app).toContain('const LINEUP = ["claude", "codex", "gemini"]');
