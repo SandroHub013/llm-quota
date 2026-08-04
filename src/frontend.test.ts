@@ -92,15 +92,15 @@ test("fonts are served from the repo, not a CDN", async () => {
 // layout down after first paint. Losing them would bring the layout shift back.
 test("every visible quota provider ships a static skeleton card", async () => {
   const [html, app] = await Promise.all([read("public/index.html"), read("public/app.js")]);
-  for (const id of ["claude", "codex", "zai", "gemini"]) {
+  for (const id of ["claude", "codex", "gemini"]) {
     expect(html).toContain(`class="card is-skeleton" data-provider="${id}"`);
   }
   // Disabled providers must not reserve a skeleton, or the grid paints a card
-  // that never arrives. Moonshot: see the comment in src/providers/index.ts.
-  for (const id of ["opencode-zen", "moonshot"]) {
+  // that never arrives. Moonshot and Z.ai: see the comments in src/providers/index.ts.
+  for (const id of ["opencode-zen", "moonshot", "zai"]) {
     expect(html).not.toContain(`class="card is-skeleton" data-provider="${id}"`);
   }
-  expect(app).toContain('const LINEUP = ["claude", "codex", "zai", "gemini"]');
+  expect(app).toContain('const LINEUP = ["claude", "codex", "gemini"]');
 });
 
 test("local token usage sits beside the widget and opens an accessible dialog", async () => {
@@ -126,6 +126,29 @@ test("local token usage sits beside the widget and opens an accessible dialog", 
   expect(app).toContain("cache read + cache write");
 });
 
+// The dialog body is rebuilt on every 5-second poll, so how the table is being
+// looked at has to live outside the DOM or each refresh would reset it.
+test("the usage dialog keeps currency, filters and sort out of the markup it rebuilds", async () => {
+  const app = await read("public/app.js");
+
+  expect(app).toContain('const USAGE_VIEW_KEY = "llmquota.usageView"');
+  expect(app).toContain("localStorage.setItem(USAGE_VIEW_KEY");
+  expect(app).toContain("function visibleUsageRows(summary)");
+  expect(app).toContain("usageView.source === \"all\" || row.source === usageView.source");
+  expect(app).toContain("usageView.agent === \"all\" || row.agent === usageView.agent");
+
+  // Both currencies come straight from the API, so neither is converted here.
+  expect(app).toContain("row.costUsd");
+  expect(app).toContain("summary.estimatedCostUsd");
+  expect(app).not.toContain("usdPerEur *");
+
+  for (const key of ["model", "input", "cache", "output", "efficiency", "cost"]) {
+    expect(app).toContain(`${key}:`);
+  }
+  expect(app).toContain('usageBody.addEventListener("click"');
+  expect(app).toContain('usageBody.addEventListener("change"');
+});
+
 test("dashboard data refreshes silently and the spend total counts to each new value", async () => {
   const [html, app, github] = await Promise.all([
     read("public/index.html"),
@@ -137,7 +160,9 @@ test("dashboard data refreshes silently and the spend total counts to each new v
   expect(app).toContain("const QUOTA_REFRESH_MS = 60_000");
   expect(app).toContain("const USAGE_REFRESH_MS = 5_000");
   expect(app).toContain('document.addEventListener("visibilitychange"');
-  expect(app).toContain("animateUsageAmount(summary.estimatedCostEur)");
+  // The headline still animates to every new total; which figure it animates to
+  // now follows the currency the dialog is set to.
+  expect(app).toContain('animateUsageAmount(usageView.currency === "usd" ? summary.estimatedCostUsd : summary.estimatedCostEur)');
   expect(app).toContain("nextSignature === providerSignatures.get(p.id)");
   expect(github).toContain("const CONTRIBUTION_REFRESH_MS = 10 * 60_000");
   expect(github).toContain('data-activity-view="github"');

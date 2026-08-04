@@ -128,7 +128,7 @@ export async function installOfficialBridge(
   }
 
   if (!alreadyBridged) {
-    if (currentCommand) await writeFile(paths.previous, `@echo off\r\n${currentCommand}\r\n`, "utf8");
+    if (currentCommand) await writeFile(paths.previous, previousWrapper(currentCommand), "utf8");
     else await rm(paths.previous, { force: true });
     const origin: BridgeOrigin = {
       version: 1,
@@ -262,6 +262,16 @@ if ($null -ne $zaiData) { $parts.Add('Z.ai GLM plugin sync') }`;
 
   return `$ErrorActionPreference = 'SilentlyContinue'
 
+# Hosts read this script's stdout as UTF-8. Windows PowerShell defaults the
+# console streams to the ANSI/OEM codepage, which turns the separator and any
+# non-ASCII model name into U+FFFD once the host decodes it.
+try {
+  $utf8 = New-Object Text.UTF8Encoding($false)
+  [Console]::InputEncoding = $utf8
+  [Console]::OutputEncoding = $utf8
+  $OutputEncoding = $utf8
+} catch {}
+
 function Save-Snapshot([string]$cachePath, [string]$providerName, $data) {
   if ($null -eq $data) { return }
   $temporary = $null
@@ -285,6 +295,9 @@ function Save-Snapshot([string]$cachePath, [string]$providerName, $data) {
 }
 
 $payload = [Console]::In.ReadToEnd()
+# Setting InputEncoding above makes the reader surface the UTF-8 preamble as a
+# leading U+FEFF, which ConvertFrom-Json rejects as an invalid JSON primitive.
+$payload = $payload.TrimStart([char]0xFEFF)
 if ([string]::IsNullOrWhiteSpace($payload)) { exit 0 }
 
 try { $state = $payload | ConvertFrom-Json } catch { exit 0 }
@@ -313,23 +326,64 @@ Write-Output ($parts -join (' ' + [char]0x00B7 + ' '))
 }
 
 /**
- * Quote the script path only when it contains whitespace. Hosts do not agree on
- * how this command is parsed: Claude Code hands it to a shell, which strips the
- * quotes, while the Antigravity CLI splits the arguments itself and passes them
- * through verbatim — there, quotes become part of the path and PowerShell fails
- * with "Caratteri non validi nel percorso". Unquoted works in both, so quote
- * only for the paths that would otherwise split on a space.
+ * Wrap the status-line command the host had before us, so the bridge can chain it.
+ *
+ * The wrapper is a .cmd run by cmd.exe, but hosts run their status line through a
+ * POSIX shell: a captured `bash ~/.claude/statusline.sh` breaks twice under cmd,
+ * which neither expands `~` nor resolves `bash` the same way (on Windows `bash`
+ * on PATH is usually WSL, whose `~` is a Linux home that holds none of these
+ * files). The command then fails to stderr, which the bridge discards, and the
+ * status line silently goes blank.
+ *
+ * So the captured command is handed to Git Bash when it is present, which expands
+ * the tilde and resolves `bash` to itself. Git Bash is located from `git` on PATH
+ * at run time rather than baked in, so the wrapper survives a Git upgrade. A
+ * command containing a double quote cannot survive `set "VAR=..."`, and one that
+ * is not POSIX in the first place has no reason to go through bash, so both fall
+ * back to running the command verbatim, exactly as before.
+ */
+function previousWrapper(command: string): string {
+  if (command.includes('"') || !/^(bash|sh|zsh)\b/.test(command)) {
+    return `@echo off\r\n${command}\r\n`;
+  }
+  return [
+    "@echo off",
+    "setlocal",
+    `set "LLMQ_PREV=${command}"`,
+    "for /f \"delims=\" %%G in ('where git 2^>nul') do if not defined LLMQ_BASH for %%H in (\"%%~dpG..\\bin\\bash.exe\") do if exist \"%%~fH\" set \"LLMQ_BASH=%%~fH\"",
+    'if defined LLMQ_BASH ("%LLMQ_BASH%" -c "%LLMQ_PREV%") else (%LLMQ_PREV%)',
+    "",
+  ].join("\r\n");
+}
+
+/**
+ * Spell the script path with forward slashes, and quote it only when it contains
+ * whitespace. Hosts do not agree on how this command is parsed: Claude Code hands
+ * it to a POSIX shell, while the Antigravity CLI splits the arguments itself and
+ * passes them through verbatim. That rules out both obvious spellings — quotes
+ * become part of the path under Antigravity and PowerShell fails with "Caratteri
+ * non validi nel percorso", while an unquoted `C:\\Users\\...` loses every
+ * backslash to the shell and PowerShell fails with "-File ... does not exist",
+ * leaving the status line blank. PowerShell accepts forward slashes on Windows
+ * and neither host rewrites them, so that spelling survives both; quoting is then
+ * needed only for the paths that would otherwise split on a space.
  */
 function bridgeCommand(script: string): string {
-  const path = /\s/.test(script) ? `"${script}"` : script;
+  const posix = script.replace(/\\/g, "/");
+  const path = /\s/.test(posix) ? `"${posix}"` : posix;
   return `powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ${path}`;
 }
 
-/** True for any wrapper this tool generated, including quoted and pre-shared-script layouts. */
+/**
+ * True for any wrapper this tool generated, including quoted, backslash-spelled
+ * and pre-shared-script layouts. Slashes are folded because the command now
+ * spells the path with forward slashes while `root` is a native Windows path —
+ * a mismatch here would make an install chain the bridge into itself.
+ */
 function isOwnBridgeCommand(command: string, root: string): boolean {
   if (!command) return false;
-  const normalized = command.replace(/"/g, "").toLowerCase();
-  return normalized.includes(root.toLowerCase()) && normalized.includes("-statusline-bridge.ps1");
+  const normalized = command.replace(/"/g, "").replace(/\\/g, "/").toLowerCase();
+  return normalized.includes(root.replace(/\\/g, "/").toLowerCase()) && normalized.includes("-statusline-bridge.ps1");
 }
 
 function commandOf(statusLine: unknown): string {
