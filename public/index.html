@@ -557,6 +557,64 @@
       .source-chip.is-missing::before { background: var(--dim); }
       .source-chip.is-error::before { background: var(--err); }
       .source-chip.is-unsupported::before { background: var(--warn); }
+      .usage-controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .usage-currency {
+        display: inline-flex;
+        border: 1px solid var(--line);
+        border-radius: var(--r-full);
+        overflow: hidden;
+      }
+      .usage-currency button {
+        padding: 5px 11px;
+        border: 0;
+        background: transparent;
+        color: var(--dim);
+        font: 500 var(--t-xs) / 1 "JetBrains Mono", "Mono Fallback", monospace;
+        letter-spacing: 0.4px;
+      }
+      .usage-currency button.is-active { color: var(--fg); background: rgba(91, 140, 255, 0.16); }
+      .usage-filter {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--dim);
+        font-size: var(--t-xs);
+      }
+      .usage-filter select {
+        padding: 4px 8px;
+        border: 1px solid var(--line);
+        border-radius: var(--r-full);
+        background: #0d1320;
+        color: var(--muted);
+        font: 500 var(--t-xs) / 1 "JetBrains Mono", "Mono Fallback", monospace;
+      }
+      .usage-rowcount { margin-left: auto; color: var(--dim); font-size: var(--t-xs); }
+      .usage-sort {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 5px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        letter-spacing: inherit;
+        text-align: inherit;
+        text-transform: inherit;
+      }
+      /* Numeric columns are right-aligned, so their marker leads instead of trails. */
+      .usage-table th:not(:first-child) .usage-sort { flex-direction: row-reverse; }
+      .usage-table th:first-child .usage-sort { justify-content: flex-start; }
+      .usage-sort:hover, .usage-sort.is-active { color: var(--fg); }
+      .usage-sort span { font-size: 8px; }
       .usage-table-wrap {
         border: 1px solid var(--line);
         border-radius: var(--r-md);

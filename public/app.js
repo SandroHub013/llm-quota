@@ -16,11 +16,32 @@ const liveStatusText = document.getElementById("liveStatusText");
 let usageLoad;
 let quotaLoad;
 let usageSignature;
+let lastUsageSummary;
 let displayedUsageCost = 0;
 let hasUsageCost = false;
 let usageAmountFrame;
 let lastQuotaAttemptAt = 0;
 let lastUsageAttemptAt = 0;
+
+// How the usage dialog is being looked at, kept out of the DOM because the poll
+// re-renders the whole body every time the underlying figures change.
+const USAGE_VIEW_KEY = "llmquota.usageView";
+const usageView = {
+  currency: "eur",
+  sortKey: "cost",
+  sortDir: "desc",
+  source: "all",
+  agent: "all",
+};
+try {
+  Object.assign(usageView, JSON.parse(localStorage.getItem(USAGE_VIEW_KEY) || "{}"));
+} catch {}
+
+function saveUsageView() {
+  try {
+    localStorage.setItem(USAGE_VIEW_KEY, JSON.stringify(usageView));
+  } catch {}
+}
 
 const QUOTA_REFRESH_MS = 60_000;
 const USAGE_REFRESH_MS = 5_000;
@@ -179,9 +200,31 @@ const exactTokens = new Intl.NumberFormat("en-US");
 const oneDecimal = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 const efficiencyFormula = "Cache read / (input + cache read + cache write). Measures context reuse, not answer quality.";
 
+const usd = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 function fmtEur(value) {
   if (value > 0 && value < 0.01) return "< " + eur.format(0.01);
   return eur.format(value || 0);
+}
+
+function fmtUsd(value) {
+  if (value > 0 && value < 0.01) return "< " + usd.format(0.01);
+  return usd.format(value || 0);
+}
+
+// The prices are quoted in USD and converted, so both currencies are exact
+// figures the API already carries; neither is derived in the browser.
+function fmtMoney(value) {
+  return usageView.currency === "usd" ? fmtUsd(value) : fmtEur(value);
+}
+
+function rowCost(row) {
+  return usageView.currency === "usd" ? row.costUsd : row.costEur;
 }
 
 function fmtToken(value) {
@@ -197,7 +240,48 @@ function fmtPct(value) {
 }
 
 function usageAmountText(value) {
-  return "≈ " + fmtEur(value);
+  return "≈ " + fmtMoney(value);
+}
+
+const USAGE_SORTS = {
+  model: (row) => `${row.sourceName} ${row.model} ${row.effort}`.toLowerCase(),
+  input: (row) => row.input || 0,
+  cache: (row) => (row.cacheRead || 0) + (row.cacheWrite || 0),
+  output: (row) => row.output || 0,
+  efficiency: (row) => row.contextReusePct,
+  cost: (row) => rowCost(row),
+};
+
+// Rows without a public price sort last in both directions: they carry no figure
+// to rank, and burying them under a descending sort would hide them entirely.
+function compareUsageRows(a, b) {
+  const read = USAGE_SORTS[usageView.sortKey] ?? USAGE_SORTS.cost;
+  const left = read(a);
+  const right = read(b);
+  if (left == null || right == null) {
+    if (left == null && right == null) return 0;
+    return left == null ? 1 : -1;
+  }
+  const order = typeof left === "string" ? left.localeCompare(right) : left - right;
+  return usageView.sortDir === "asc" ? order : -order;
+}
+
+function visibleUsageRows(summary) {
+  return (summary.rows || [])
+    .filter((row) => row.total > 0)
+    .filter((row) => usageView.source === "all" || row.source === usageView.source)
+    .filter((row) => usageView.agent === "all" || row.agent === usageView.agent)
+    .sort(compareUsageRows);
+}
+
+function usageSortHead(key, label, cls = "") {
+  const active = usageView.sortKey === key;
+  const arrow = active ? (usageView.sortDir === "asc" ? "▲" : "▼") : "";
+  const next = active && usageView.sortDir === "desc" ? "ascending" : "descending";
+  return `<th class="${cls}" aria-sort="${active ? (usageView.sortDir === "asc" ? "ascending" : "descending") : "none"}">
+    <button type="button" class="usage-sort${active ? " is-active" : ""}" data-sort="${key}"
+      title="Sort by ${escapeHtml(label)}, ${next}">${escapeHtml(label)}<span aria-hidden="true">${arrow}</span></button>
+  </th>`;
 }
 
 // Animate from the number currently on screen, not from zero on every poll. A new
@@ -212,7 +296,7 @@ function animateUsageAmount(value) {
     displayedUsageCost = target;
     usageAmount.textContent = usageAmountText(target);
     usageAmount.setAttribute("aria-live", "polite");
-    usageButton.setAttribute("aria-label", `Open local token usage, estimated ${fmtEur(target)}`);
+    usageButton.setAttribute("aria-label", `Open local token usage, estimated ${fmtMoney(target)}`);
   };
 
   if (reduced.matches || usageAmountText(startValue) === usageAmountText(target)) {
@@ -257,7 +341,8 @@ function renderUsage(summary) {
       ${escapeHtml(source.name)}
     </span>`;
   }).join("");
-  const rows = (summary.rows || []).filter((row) => row.total > 0).map((row) => {
+  const visibleRows = visibleUsageRows(summary);
+  const rows = visibleRows.map((row) => {
     const cache = row.cacheWrite
       ? `${fmtToken(row.cacheRead)} / ${fmtToken(row.cacheWrite)}`
       : fmtToken(row.cacheRead);
@@ -270,9 +355,9 @@ function renderUsage(summary) {
     const efficiency = row.contextReusePct == null
       ? `<span title="No input context recorded">—</span>`
       : `<span title="${escapeHtml(efficiencyFormula)}">${escapeHtml(fmtPct(row.contextReusePct))}</span>`;
-    const cost = row.costEur == null
+    const cost = rowCost(row) == null
       ? `<span title="No public price found">—</span>`
-      : `<span title="${escapeHtml(row.costBasis === "recorded" ? "Recorded by the CLI" : "Public API list price")}">${escapeHtml(fmtEur(row.costEur))}</span>`;
+      : `<span title="${escapeHtml(row.costBasis === "recorded" ? "Recorded by the CLI" : "Public API list price")}">${escapeHtml(fmtMoney(rowCost(row)))}</span>`;
     return `<tr>
       <td class="usage-model"><strong title="${escapeHtml(row.model)}">${escapeHtml(row.model)}</strong><span>${escapeHtml(row.sourceName)}</span></td>
       <td class="usage-mode"><span>${escapeHtml(row.effort)}</span><br /><span class="agent-pill${row.agent === "subagent" ? " is-subagent" : ""}">${escapeHtml(row.agent)}</span></td>
@@ -283,15 +368,33 @@ function renderUsage(summary) {
       <td class="usage-cost">${cost}</td>
     </tr>`;
   }).join("");
+  // Options come from the rows themselves, so a source that stops reporting
+  // disappears from the filter instead of leaving a dead choice behind.
+  const countedRows = (summary.rows || []).filter((row) => row.total > 0);
+  const sourceNames = new Map(countedRows.map((row) => [row.source, row.sourceName]));
+  const sourceOptions = [["all", "All sources"], ...sourceNames]
+    .map(([value, label]) => `<option value="${escapeHtml(value)}"${usageView.source === value ? " selected" : ""}>${escapeHtml(label)}</option>`)
+    .join("");
+  const agentOptions = [["all", "All agents"], ["main", "main"], ["subagent", "subagent"]]
+    .map(([value, label]) => `<option value="${value}"${usageView.agent === value ? " selected" : ""}>${label}</option>`)
+    .join("");
+
   const unpriced = summary.unpricedModels?.length
     ? `<br /><b>Not priced:</b> ${escapeHtml(summary.unpricedModels.join(", "))}. Their tokens remain in every token total.`
     : "";
 
+  // The headline follows the filters: once the table is narrowed to one source,
+  // the number worth reading is what that source costs, not the untouched total.
+  const filtered = usageView.source !== "all" || usageView.agent !== "all";
+  const total = filtered
+    ? visibleRows.reduce((sum, row) => sum + (rowCost(row) ?? 0), 0)
+    : (usageView.currency === "usd" ? summary.estimatedCostUsd : summary.estimatedCostEur);
+
   usageBody.innerHTML = `
     <section class="usage-total">
       <div>
-        <span class="usage-total-label">Estimated API equivalent</span>
-        <strong>${escapeHtml(fmtEur(summary.estimatedCostEur))}</strong>
+        <span class="usage-total-label">${filtered ? "Estimated API equivalent, filtered" : "Estimated API equivalent"}</span>
+        <strong>${escapeHtml(fmtMoney(total))}</strong>
         <small>${escapeHtml(summary.pricing.note)}</small>
       </div>
       <span class="coverage-pill">${escapeHtml(coverage)}</span>
@@ -307,10 +410,31 @@ function renderUsage(summary) {
     </div>
     <div class="usage-section-head usage-coverage-head"><h3>Local coverage</h3><div class="source-chips">${sourceChips}</div></div>
     <div class="usage-section-head"><h3>Models &amp; effort</h3><span>reasoning is included in output</span></div>
+    <div class="usage-controls">
+      <div class="usage-currency" role="group" aria-label="Currency">
+        <button type="button" data-currency="eur"${usageView.currency === "eur" ? ' class="is-active" aria-pressed="true"' : ' aria-pressed="false"'}>EUR</button>
+        <button type="button" data-currency="usd"${usageView.currency === "usd" ? ' class="is-active" aria-pressed="true"' : ' aria-pressed="false"'}>USD</button>
+      </div>
+      <label class="usage-filter">Source
+        <select data-filter="source">${sourceOptions}</select>
+      </label>
+      <label class="usage-filter">Agent
+        <select data-filter="agent">${agentOptions}</select>
+      </label>
+      <span class="usage-rowcount">${visibleRows.length} of ${countedRows.length} rows</span>
+    </div>
     <div class="usage-table-wrap">
       <table class="usage-table">
-        <thead><tr><th>Model / source</th><th>Effort / agent</th><th>Input</th><th>Cache R / W</th><th>Output</th><th>Efficiency</th><th>Estimate</th></tr></thead>
-        <tbody>${rows || `<tr><td class="usage-model" colspan="7">No local token records found.</td></tr>`}</tbody>
+        <thead><tr>
+          ${usageSortHead("model", "Model / source")}
+          <th>Effort / agent</th>
+          ${usageSortHead("input", "Input")}
+          ${usageSortHead("cache", "Cache R / W")}
+          ${usageSortHead("output", "Output")}
+          ${usageSortHead("efficiency", "Efficiency", "usage-efficiency")}
+          ${usageSortHead("cost", "Estimate", "usage-cost")}
+        </tr></thead>
+        <tbody>${rows || `<tr><td class="usage-model" colspan="7">${filtered ? "No rows match these filters." : "No local token records found."}</td></tr>`}</tbody>
       </table>
     </div>
     <p class="usage-note">
@@ -332,19 +456,20 @@ async function loadUsageSummary() {
     try {
       const summary = await loadUsage();
       dispatchEvent(new CustomEvent("llmquota:usage", { detail: summary }));
+      lastUsageSummary = summary;
       const nextSignature = dataSignature(summary);
       if (nextSignature !== usageSignature) {
         renderUsage(summary);
         usageSignature = nextSignature;
       }
-      animateUsageAmount(summary.estimatedCostEur);
+      animateUsageAmount(usageView.currency === "usd" ? summary.estimatedCostUsd : summary.estimatedCostEur);
       usageButton.title = `Open local token usage · ${summary.pricingCoveragePct}% priced`;
       setLiveResult("usage", null);
     } catch (error) {
       setLiveResult("usage", error);
       // Keep the last good total and dialog visible through a transient failure.
       if (usageSignature == null) {
-        usageAmount.textContent = "€ ?";
+        usageAmount.textContent = usageView.currency === "usd" ? "$ ?" : "€ ?";
         usageBody.innerHTML = `<div class="usage-loading usage-error"><div>Could not read local token usage. Retrying automatically.<br /><small>${escapeHtml(error instanceof Error ? error.message : "error")}</small></div></div>`;
       }
     } finally {
@@ -833,6 +958,44 @@ async function teardownOfficialBridge(btn) {
     btn.textContent = `Retry: ${error instanceof Error ? error.message : "error"}`;
   }
 }
+
+// The body is rebuilt on every poll, so the controls are handled by delegation
+// and re-rendered from usageView rather than read back out of the DOM.
+function applyUsageView() {
+  saveUsageView();
+  if (lastUsageSummary) {
+    renderUsage(lastUsageSummary);
+    const headline = usageView.currency === "usd"
+      ? lastUsageSummary.estimatedCostUsd
+      : lastUsageSummary.estimatedCostEur;
+    animateUsageAmount(headline);
+  }
+}
+
+usageBody.addEventListener("click", (event) => {
+  const currency = event.target.closest("[data-currency]");
+  if (currency) {
+    usageView.currency = currency.dataset.currency;
+    applyUsageView();
+    return;
+  }
+  const sort = event.target.closest("[data-sort]");
+  if (sort) {
+    const key = sort.dataset.sort;
+    // Re-picking the active column flips it; a new column starts descending,
+    // which is what "who costs most" wants on every numeric column.
+    if (usageView.sortKey === key) usageView.sortDir = usageView.sortDir === "desc" ? "asc" : "desc";
+    else { usageView.sortKey = key; usageView.sortDir = key === "model" ? "asc" : "desc"; }
+    applyUsageView();
+  }
+});
+
+usageBody.addEventListener("change", (event) => {
+  const filter = event.target.closest("[data-filter]");
+  if (!filter) return;
+  usageView[filter.dataset.filter] = filter.value;
+  applyUsageView();
+});
 
 usageButton.addEventListener("click", () => usageDialog.showModal());
 document.getElementById("closeUsage").addEventListener("click", () => usageDialog.close());
