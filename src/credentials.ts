@@ -41,6 +41,8 @@ export const paths = {
 // --- LLM Quota user config (~/.llm-quota/config.json) ---
 export interface LlmQuotaConfig {
   keys: Record<string, string>; // providerId -> api key
+  /** Shared usage-table filters; dashboard, its button and the widget all read them. */
+  usageView?: { source?: string; agent?: string };
 }
 /**
  * `keys` is always present, even when the file on disk is a bare `{}` or was edited
