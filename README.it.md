@@ -78,19 +78,21 @@ bun install
 bun start          # → http://localhost:4747
 ```
 
-È tutta l'installazione. Codex si popola tramite il suo app-server ufficiale. Su Windows, nelle
-card Claude e Gemini puoi scegliere una volta **Enable official bridge** per ricevere le quote dai
-rispettivi client ufficiali. L'installer del bridge è attualmente solo per Windows; app-server Codex
-e registro token locale restano disponibili anche su macOS e Linux.
+È tutta l'installazione. Codex si popola tramite il suo app-server ufficiale. Nelle card Claude e
+Gemini puoi scegliere una volta **Enable official bridge** per ricevere le quote dai rispettivi
+client ufficiali, su Windows, macOS e Linux allo stesso modo. Si installa con un clic, si rimuove
+con un clic, e in entrambi i casi la status line che già usavi resta al suo posto.
 
 <details>
 <summary>Installare la CLI globalmente</summary>
 
 ```bash
-bun add -g github:SandroHub013/llm-quota
+bun add -g llm-quota      # oppure: npm install -g llm-quota
 llm-quota status
 ```
-Vengono registrati sia `llm-quota` sia `webquota`.
+Vengono registrati sia `llm-quota` sia `webquota`. Il pacchetto gira comunque su Bun: npm è solo il
+canale di distribuzione. Per seguire il branch invece di una release, usa
+`bun add -g github:SandroHub013/llm-quota`.
 </details>
 
 <details>
