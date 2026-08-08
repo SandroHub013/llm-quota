@@ -500,11 +500,22 @@ def get_json(path, timeout=40):
 
 
 def fetch_usage_cost():
-    """Read the live local API-equivalent spend, preserving zero as valid data."""
+    """Read the live local API-equivalent spend, preserving zero as valid data.
+
+    Returns (cost_eur, filtered). The headline follows the server-side usage view
+    shared with the dashboard, so the widget shows the same figure the dashboard
+    button and dialog show; older servers without it fall back to the grand total.
+    """
     try:
-        value = float(get_json("/api/usage", timeout=40)["estimatedCostEur"])
-        return value if isfinite(value) and value >= 0 else None
-    except (OSError, ValueError, TypeError, KeyError):
+        data = get_json("/api/usage", timeout=40)
+        raw = data.get("headlineCostEur")
+        if raw is None:
+            raw = data["estimatedCostEur"]
+        value = float(raw)
+        if not isfinite(value) or value < 0:
+            return None
+        return value, bool(data.get("usageFiltered"))
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
         return None
 
 
@@ -627,6 +638,7 @@ class Widget(tk.Tk):
         self._quota_signature = None
         self._last_data_at = time.monotonic()
         self.usage_cost = None
+        self.usage_filtered = False
         self.displayed_usage_cost = None
         self._row_reset_labels = {}
         self._minibar_reset_labels = {}
@@ -926,13 +938,15 @@ class Widget(tk.Tk):
         self._usage_job = self.after(USAGE_POLL_MS, self.refresh_usage)
 
     def _load_usage(self):
-        cost = fetch_usage_cost()
-        self.after(0, lambda: self._finish_usage(cost))
+        result = fetch_usage_cost()
+        self.after(0, lambda: self._finish_usage(result))
 
-    def _finish_usage(self, cost):
+    def _finish_usage(self, result):
         self._usage_loading = False
-        if cost is not None:
+        if result is not None:
+            cost, filtered = result
             self.usage_cost = cost
+            self.usage_filtered = filtered
             self._animate_usage_cost(cost)
 
     def _animate_usage_cost(self, target):
@@ -961,6 +975,12 @@ class Widget(tk.Tk):
                 self._update_spend_labels()
 
         step()
+
+    def _spend_tooltip(self):
+        text = "Live local API-equivalent token spend"
+        if self.usage_filtered:
+            text += "\nfollows the dashboard's source/agent filters"
+        return text
 
     def _update_spend_labels(self):
         text = "€ …" if self.displayed_usage_cost is None else f"≈ {format_eur(self.displayed_usage_cost)}"
@@ -1199,7 +1219,7 @@ class Widget(tk.Tk):
         controls = tk.Frame(self.minibar_frame, bg=PANEL)
         spend = tk.Label(controls, text="€ …", bg=PANEL, fg="#b8f1c0", font=MONO)
         spend.pack(side="left", padx=(4, 3), pady=2)
-        Tooltip(spend, "Live local API-equivalent token spend")
+        Tooltip(spend, self._spend_tooltip)
         self._spend_labels.append(spend)
 
         live = tk.Label(controls, text="● LIVE", bg=PANEL, fg=STATUS_DOT["ok"], font=("Cascadia Mono", 8))
@@ -1298,7 +1318,7 @@ class Widget(tk.Tk):
 
         spend = tk.Label(self.footer_frame, text="€ …", bg=BG, fg="#b8f1c0", font=MONO)
         spend.pack(side="right", padx=(4, 0), pady=(4, 6))
-        Tooltip(spend, "Live local API-equivalent token spend")
+        Tooltip(spend, self._spend_tooltip)
         self._spend_labels.append(spend)
 
         self.footer_frame.pack(fill="x")

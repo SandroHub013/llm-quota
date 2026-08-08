@@ -91,8 +91,21 @@ class FetchAllTest(unittest.TestCase):
 
     @patch("widget.get_json", return_value={"estimatedCostEur": 12.34})
     def test_reads_live_local_spend(self, get_json):
-        self.assertEqual(widget.fetch_usage_cost(), 12.34)
+        self.assertEqual(widget.fetch_usage_cost(), (12.34, False))
         get_json.assert_called_once_with("/api/usage", timeout=40)
+
+    @patch("widget.get_json")
+    def test_prefers_the_shared_headline_so_widget_and_dashboard_agree(self, get_json):
+        get_json.return_value = {
+            "estimatedCostEur": 2412.71,
+            "headlineCostEur": 2347.27,
+            "usageFiltered": True,
+        }
+        self.assertEqual(widget.fetch_usage_cost(), (2347.27, True))
+
+    @patch("widget.get_json", return_value={"headlineCostEur": "oops"})
+    def test_malformed_headline_keeps_widget_offline(self, _get_json):
+        self.assertIsNone(widget.fetch_usage_cost())
 
 
 class ResetHorizonTest(unittest.TestCase):

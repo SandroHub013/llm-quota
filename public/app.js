@@ -1,4 +1,4 @@
-import { installOfficialBridge, loadProvider, loadQuota, loadUsage, removeOfficialBridge, saveProviderKey } from "./api.js";
+import { installOfficialBridge, loadProvider, loadQuota, loadUsage, loadUsageView, removeOfficialBridge, saveProviderKey, storeUsageView } from "./api.js";
 import { dataSignature, escapeHtml } from "./ui.js";
 import { mountGitHubContributionPrototype } from "./github-contributions.prototype.js";
 
@@ -25,6 +25,8 @@ let lastUsageAttemptAt = 0;
 
 // How the usage dialog is being looked at, kept out of the DOM because the poll
 // re-renders the whole body every time the underlying figures change.
+// source/agent are server-side state shared with the desktop widget; the
+// localStorage copy is only an offline fallback until the server answers.
 const USAGE_VIEW_KEY = "llmquota.usageView";
 const usageView = {
   currency: "eur",
@@ -41,6 +43,26 @@ function saveUsageView() {
   try {
     localStorage.setItem(USAGE_VIEW_KEY, JSON.stringify(usageView));
   } catch {}
+}
+
+// The server holds the view of record. On boot it wins over the local copy, so
+// a filter chosen here also decides what the desktop widget displays.
+async function syncUsageViewFromServer() {
+  try {
+    const view = await loadUsageView();
+    if (view.source === usageView.source && view.agent === usageView.agent) return;
+    usageView.source = view.source;
+    usageView.agent = view.agent;
+    applyUsageView();
+  } catch {
+    // Server offline: keep the local prefs until it answers.
+  }
+}
+
+function pushUsageViewToServer() {
+  storeUsageView({ source: usageView.source, agent: usageView.agent }).catch(() => {
+    // Offline server keeps the local choice; the next successful boot resyncs.
+  });
 }
 
 const QUOTA_REFRESH_MS = 60_000;
@@ -265,6 +287,19 @@ function visibleUsageRows(summary) {
     .sort(compareUsageRows);
 }
 
+// Button and dialog headline must always show the same figure: once the table is
+// narrowed by filters, both read the filtered sum, not the untouched grand total.
+function usageFiltersActive() {
+  return usageView.source !== "all" || usageView.agent !== "all";
+}
+
+function usageHeadlineTotal(summary) {
+  if (usageFiltersActive()) {
+    return visibleUsageRows(summary).reduce((sum, row) => sum + (rowCost(row) ?? 0), 0);
+  }
+  return usageView.currency === "usd" ? summary.estimatedCostUsd : summary.estimatedCostEur;
+}
+
 function usageSortHead(key, label, cls = "") {
   const active = usageView.sortKey === key;
   const arrow = active ? (usageView.sortDir === "asc" ? "▲" : "▼") : "";
@@ -376,10 +411,8 @@ function renderUsage(summary) {
 
   // The headline follows the filters: once the table is narrowed to one source,
   // the number worth reading is what that source costs, not the untouched total.
-  const filtered = usageView.source !== "all" || usageView.agent !== "all";
-  const total = filtered
-    ? visibleRows.reduce((sum, row) => sum + (rowCost(row) ?? 0), 0)
-    : (usageView.currency === "usd" ? summary.estimatedCostUsd : summary.estimatedCostEur);
+  const filtered = usageFiltersActive();
+  const total = usageHeadlineTotal(summary);
 
   usageBody.innerHTML = `
     <section class="usage-total">
@@ -453,8 +486,8 @@ async function loadUsageSummary() {
         renderUsage(summary);
         usageSignature = nextSignature;
       }
-      animateUsageAmount(usageView.currency === "usd" ? summary.estimatedCostUsd : summary.estimatedCostEur);
-      usageButton.title = `Open local token usage · ${summary.pricingCoveragePct}% priced`;
+      animateUsageAmount(usageHeadlineTotal(summary));
+      usageButton.title = `Open local token usage · ${summary.pricingCoveragePct}% priced${usageFiltersActive() ? " · filters active" : ""}`;
       setLiveResult("usage", null);
     } catch (error) {
       setLiveResult("usage", error);
@@ -958,10 +991,7 @@ function applyUsageView() {
   saveUsageView();
   if (lastUsageSummary) {
     renderUsage(lastUsageSummary);
-    const headline = usageView.currency === "usd"
-      ? lastUsageSummary.estimatedCostUsd
-      : lastUsageSummary.estimatedCostEur;
-    animateUsageAmount(headline);
+    animateUsageAmount(usageHeadlineTotal(lastUsageSummary));
   }
 }
 
@@ -988,6 +1018,7 @@ usageBody.addEventListener("change", (event) => {
   if (!filter) return;
   usageView[filter.dataset.filter] = filter.value;
   applyUsageView();
+  pushUsageViewToServer();
 });
 
 usageButton.addEventListener("click", () => usageDialog.showModal());
@@ -1104,5 +1135,6 @@ if (fine) {
 }
 
 loadAll();
+syncUsageViewFromServer();
 loadUsageSummary();
 mountGitHubContributionPrototype();

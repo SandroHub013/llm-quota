@@ -7,6 +7,7 @@ import type { QuotaResult } from "./providers/types.js";
 import { readConfig, writeConfig } from "./credentials.js";
 import { installOfficialBridge, removeOfficialBridge, type OfficialBridgeProvider } from "./official-bridge.js";
 import { collectUsage } from "./usage.js";
+import { normalizeUsageView, usageFiltersActive, usageHeadlineCosts } from "./usage-view.js";
 import { collectGitHubContributions } from "./github-contributions.prototype.js";
 
 const app = new Hono();
@@ -103,7 +104,36 @@ app.get("/api/quota", async (context) => {
 let usageRequest: Promise<Awaited<ReturnType<typeof collectUsage>>> | undefined;
 app.get("/api/usage", async (context) => {
   usageRequest ??= collectUsage().finally(() => { usageRequest = undefined; });
-  return context.json(await usageRequest, 200, { "Cache-Control": "no-store" });
+  const summary = await usageRequest;
+  const view = normalizeUsageView((await readConfig()).usageView);
+  const headline = usageHeadlineCosts(summary, view);
+  return context.json(
+    {
+      ...summary,
+      usageView: view,
+      usageFiltered: usageFiltersActive(view),
+      headlineCostEur: headline.eur,
+      headlineCostUsd: headline.usd,
+    },
+    200,
+    { "Cache-Control": "no-store" },
+  );
+});
+
+// The usage view is shared state: the widget has no filter UI of its own, so it
+// follows whatever the dashboard last stored here.
+app.get("/api/usage-view", async (context) => {
+  const view = normalizeUsageView((await readConfig()).usageView);
+  return context.json(view, 200, { "Cache-Control": "no-store" });
+});
+
+app.put("/api/usage-view", async (context) => {
+  const body = await context.req.json<Record<string, unknown>>().catch(() => undefined);
+  if (body == null || typeof body !== "object") return context.json({ error: "invalid view" }, 400);
+  const view = normalizeUsageView(body);
+  const config = await readConfig();
+  await writeConfig({ ...config, usageView: view });
+  return context.json(view, 200, { "Cache-Control": "no-store" });
 });
 
 app.get("/api/prototype/github-contributions", async (context) => {
