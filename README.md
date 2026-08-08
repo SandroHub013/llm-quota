@@ -45,7 +45,8 @@ glance which subscription is free, which is cooling down, and exactly when to co
 - 🔑 **Official-surface first** — Codex is queried through `codex app-server`; Claude Code and
   Antigravity deliberately deliver quota JSON through opt-in local status-line bridges. LLM Quota
   never reads or refreshes another client's OAuth token.
-- 💶 **Local token ledger** — totals Codex, Claude Code, OpenCode and Kimi Code history by
+- 💶 **Local token ledger** — totals Codex, Claude Code, OpenCode, Kimi Code, pi, Prime Agent
+  and NikCLI history by
   model, effort and main/subagent, with an estimated API-equivalent value in euros and a
   context-reuse efficiency index. A GitHub-style daily calendar shows when those tokens and euros
   were spent; its optional GitHub view always uses the locally authenticated `gh` account.
@@ -125,7 +126,8 @@ No runtime account, username, quota, or spend total is tied to the project autho
 - Codex authentication remains inside `codex app-server`; LLM Quota never opens Codex's auth file.
 - Opt-in Claude/Antigravity bridges cache only quota windows and reset times. They exclude account
   identity, transcripts and access tokens, and preserve an existing custom status line.
-- The token ledger scans the current user's local Codex, Claude Code, OpenCode, and Kimi Code history.
+- The token ledger scans the current user's local Codex, Claude Code, OpenCode, Kimi Code, pi,
+  Prime Agent and NikCLI history. Hermes keeps no local token record, so its spend cannot be counted.
 - The optional contribution calendar queries the viewer authenticated by the official GitHub CLI.
   Run `gh auth login` to enable it; without `gh`, the local spend calendar continues to work.
 - A dashboard running on a custom local port passes its own origin to the Windows widget automatically.
@@ -147,7 +149,8 @@ credentials, or real usage history.
 | **z.ai** | Card disabled | The GLM Coding Plan status line carries no quota field to read; token spend still appears in the local ledger |
 | **Kimi / Moonshot** | Card disabled | Kimi Code plan quota has no compliant machine-readable source; token spend still appears in the local ledger |
 
-Three provider cards ship today. OpenCode remains a source for the local token ledger; its Zen
+Three provider cards ship today. OpenCode, pi, Prime Agent and NikCLI are ledger-only sources: they
+publish no plan quota, so they contribute local spend and no card. OpenCode's Zen
 gateway was dropped entirely, because the public endpoint exposes a model catalog rather than
 numeric usage, limits or reset times. Kimi is disabled for the same reason: its official status line
 carries no quota, rate limit or subscription field, the plan windows behind `/usage` are reachable
@@ -217,8 +220,8 @@ This is the point of the project, so it is worth being precise:
 - Provider logos are frozen in the repo deliberately: loading them from the provider — or from a
   favicon service, as an earlier version did — would tell a third party which AI subscriptions
   you hold, on every page load.
-- OAuth credential files belonging to Codex, Claude, Gemini, OpenCode and Kimi are not read or
-  modified. User-supplied Open Platform keys are used only with their documented provider API.
+- OAuth credential files belonging to Codex, Claude, Gemini, OpenCode, Kimi, pi, Prime Agent and
+  NikCLI are not read or modified. Only their session transcripts and local databases are scanned. User-supplied Open Platform keys are used only with their documented provider API.
 
 ---
 

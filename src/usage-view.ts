@@ -1,4 +1,4 @@
-import type { UsageSummary } from "./usage.js";
+import { USAGE_SOURCE_IDS, type UsageSummary } from "./usage.js";
 
 /**
  * The usage table filters (source / agent) are shared state, not a browser
@@ -13,7 +13,7 @@ export interface UsageView {
 
 export const DEFAULT_USAGE_VIEW: UsageView = { source: "all", agent: "all" };
 
-const SOURCES = new Set(["all", "codex", "claude", "opencode", "kimi"]);
+const SOURCES = new Set<string>(["all", ...USAGE_SOURCE_IDS]);
 const AGENTS = new Set(["all", "main", "subagent"]);
 
 /** Unknown or hand-edited values fall back to "all" rather than breaking the view. */

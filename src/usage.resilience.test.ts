@@ -32,6 +32,9 @@ async function fixture(files: number): Promise<{ paths: UsagePaths; root: string
       claude,
       kimi: join(root, "kimi"),
       opencodeDb: join(root, "missing.db"),
+      pi: join(root, "pi"),
+      prime: join(root, "prime"),
+      nikcliDb: join(root, "missing-nikcli.db"),
     },
   };
 }
