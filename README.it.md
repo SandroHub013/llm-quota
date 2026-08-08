@@ -78,9 +78,10 @@ bun install
 bun start          # → http://localhost:4747
 ```
 
-È tutta l'installazione. Codex si popola tramite il suo app-server ufficiale. Nelle card Claude e
-Gemini scegli una volta **Enable official bridge** per ricevere le quote dai rispettivi client
-ufficiali. Le cronologie CLI supportate alimentano automaticamente il registro token locale.
+È tutta l'installazione. Codex si popola tramite il suo app-server ufficiale. Su Windows, nelle
+card Claude e Gemini puoi scegliere una volta **Enable official bridge** per ricevere le quote dai
+rispettivi client ufficiali. L'installer del bridge è attualmente solo per Windows; app-server Codex
+e registro token locale restano disponibili anche su macOS e Linux.
 
 <details>
 <summary>Installare la CLI globalmente</summary>

@@ -71,3 +71,11 @@ test("both READMEs state the shipped provider count and nothing larger", async (
     expect(readme).not.toMatch(/#\s*31\s+test/);
   }
 });
+
+test("public and landing metadata do not promise retired provider counts", async () => {
+  for (const path of ["public/index.html", "docs/index.html"]) {
+    const html = await read(path);
+    expect(html).not.toMatch(/\bFive measurable AI quotas\b/i);
+    expect(html).not.toMatch(/\bfive quota cards\b/i);
+  }
+});

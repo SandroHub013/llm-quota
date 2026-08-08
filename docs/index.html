@@ -17,15 +17,15 @@
     <meta property="og:title" content="LLM Quota — live quotas without refreshing" />
     <meta
       property="og:description"
-      content="Five measurable AI quotas, local token spend, and a Windows widget that update automatically. All local, zero telemetry."
+      content="Live measurable AI quotas, local token spend, and a Windows widget that update automatically. All local, zero telemetry."
     />
     <meta property="og:image" content="https://sandrohub013.github.io/llm-quota/og.jpg" />
-    <meta property="og:image:alt" content="LLM Quota live dashboard with five quota cards, a reset horizon, local token spend, and live status." />
+    <meta property="og:image:alt" content="LLM Quota live dashboard with quota cards, a reset horizon, local token spend, and live status." />
     <meta property="og:image:width" content="1280" />
     <meta property="og:image:height" content="640" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="LLM Quota — live quotas without refreshing" />
-    <meta name="twitter:description" content="Five measurable AI quotas, local token spend, and a Windows widget that update automatically." />
+    <meta name="twitter:description" content="Live measurable AI quotas, local token spend, and a Windows widget that update automatically." />
     <meta name="twitter:image" content="https://sandrohub013.github.io/llm-quota/og.jpg" />
     <link rel="icon" type="image/svg+xml" href="./logo.svg" />
 
@@ -398,7 +398,10 @@
         border-block: 1px solid var(--line);
       }
       .strip figure { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--muted); font-size: 14px; }
-      .strip img { width: 24px; height: 24px; object-fit: contain; border-radius: 5px; }
+      .strip img {
+        width: 24px; height: 24px; padding: 3px; object-fit: contain;
+        border-radius: 5px; background: #f4f4f1;
+      }
 
       /* ---------- sections ---------- */
       section { padding: clamp(52px, 7.5vw, 92px) 0; }
@@ -598,7 +601,7 @@
       <div class="shell">
         <div class="strip">
           <figure><img src="./logos/claude.png" alt="" /> Claude Code</figure>
-          <figure><img src="./logos/codex.webp" alt="" /> Codex</figure>
+          <figure><img src="./logos/codex.svg" alt="" /> Codex</figure>
           <figure><img src="./logos/gemini.svg" alt="" /> Gemini</figure>
         </div>
       </div>
@@ -718,7 +721,7 @@
             <div>
               <h2>The whole thing, on one screen</h2>
               <p class="section-lede">
-                Five quota cards plus local developer activity, one reset horizon, a live status,
+                Quota cards plus local developer activity, one reset horizon, a live status,
                 and a spend total that counts smoothly to every new value.
               </p>
               <p class="hero-alt" style="margin: 0">
@@ -842,7 +845,7 @@ bun run cli provider codex</code></pre>
 
       <section class="close">
         <div class="shell">
-          <h2>Stop checking five billing consoles</h2>
+          <h2>Stop checking multiple billing consoles</h2>
           <p class="section-lede" style="margin-inline: auto">
             Live dashboard, agent-friendly CLI, and Windows widget. MIT licensed, one runtime
             dependency, no build step.

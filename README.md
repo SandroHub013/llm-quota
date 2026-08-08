@@ -76,9 +76,10 @@ bun install
 bun start          # → http://localhost:4747
 ```
 
-That is the whole setup. Codex populates through its official app-server. On the Claude and Gemini
-cards, choose **Enable official bridge** once if you want their official clients to publish quota to
-LLM Quota. Existing CLI histories populate the local token ledger automatically.
+That is the whole setup. Codex populates through its official app-server. On Windows, the Claude
+and Gemini cards can install the PowerShell **Enable official bridge** once so their official
+clients publish quota to LLM Quota. The bridge installer is currently Windows-only; Codex app-server
+and the local ledger remain available on macOS and Linux.
 
 <details>
 <summary>One-liner install</summary>

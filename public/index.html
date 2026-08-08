@@ -14,15 +14,15 @@
     <meta property="og:title" content="LLM Quota — live quotas without refreshing" />
     <meta
       property="og:description"
-      content="Five measurable AI quotas, local token spend, and a Windows widget that update automatically. All local, zero telemetry."
+      content="Live measurable AI quotas, local token spend, and a Windows widget that update automatically. All local, zero telemetry."
     />
     <meta property="og:image" content="/og.jpg" />
-    <meta property="og:image:alt" content="LLM Quota live dashboard with five quota cards, a reset horizon, local token spend, and live status." />
+    <meta property="og:image:alt" content="LLM Quota live dashboard with quota cards, a reset horizon, local token spend, and live status." />
     <meta property="og:image:width" content="1280" />
     <meta property="og:image:height" content="640" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="LLM Quota — live quotas without refreshing" />
-    <meta name="twitter:description" content="Five measurable AI quotas, local token spend, and a Windows widget that update automatically." />
+    <meta name="twitter:description" content="Live measurable AI quotas, local token spend, and a Windows widget that update automatically." />
     <meta name="twitter:image" content="/og.jpg" />
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
 
@@ -819,7 +819,8 @@
         transition: transform 0.25s var(--ease-out);
       }
       .hz-dot svg { width: 12px; height: 12px; }
-      .hz-dot img { padding: 3.5px; }
+      /* The dot clips the same full-bleed mark into its circular silhouette. */
+      .hz-dot img { padding: 0; }
       @keyframes dotin { from { opacity: 0; transform: scale(0.2); } }
       .hz-mark:hover .hz-stem,
       .hz-mark:focus-visible .hz-stem,
@@ -933,6 +934,8 @@
         overflow: hidden;
       }
       .avatar > *, .hz-dot > * { grid-area: 1 / 1; }
+      /* Keep the fallback underneath the real mark without leaking through its transparent holes. */
+      .has-logo .mark-fallback { visibility: hidden; }
       .avatar img, .hz-dot img { width: 100%; height: 100%; object-fit: contain; display: block; }
       /* Icons that arrive with their own brand background cover the plate entirely,
          so nothing of ours tints them. */
@@ -947,7 +950,8 @@
       }
       .card:hover .avatar, .card.linked .avatar { transform: scale(1.06) rotate(-3deg); }
       .avatar svg { width: 22px; height: 22px; }
-      .avatar img { padding: 7px; }
+      /* Local marks already carry a tight viewBox; let them fill the dedicated plate. */
+      .avatar img { padding: 0; }
       .titles { flex: 1; min-width: 0; }
       .name {
         margin: 0;
@@ -1808,7 +1812,7 @@
           <span class="grad" id="title">LLM Quota</span>
         </h1>
         <p class="sub">
-          Five measurable AI subscriptions, <b>one horizon</b> — reads the CLI logins already on your disk, never leaves localhost.
+          Measurable AI subscriptions, <b>one horizon</b> — reads the CLI logins already on your disk, never leaves localhost.
         </p>
       </div>
       <div class="actions">

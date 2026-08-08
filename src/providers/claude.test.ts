@@ -26,3 +26,13 @@ test("missing optional Claude windows are ignored", () => {
   expect(parseBridgeUsage()).toEqual([]);
   expect(parseBridgeUsage({ ...SNAPSHOT, data: {} })).toEqual([]);
 });
+
+test("out-of-range Claude reset timestamps do not break the metric", () => {
+  const metrics = parseBridgeUsage({
+    ...SNAPSHOT,
+    data: { rateLimits: { five_hour: { used_percentage: 20, resets_at: Number.MAX_VALUE } } },
+  });
+  expect(metrics).toHaveLength(1);
+  expect(metrics[0]).toMatchObject({ label: "Session (5h)", used: 20, limit: 100 });
+  expect(metrics[0]!.resetAt).toBeUndefined();
+});

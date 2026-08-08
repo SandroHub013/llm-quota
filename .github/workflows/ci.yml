@@ -14,7 +14,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: '1.3.14'
 
       - run: bun install --frozen-lockfile
 
@@ -24,13 +24,24 @@ jobs:
       - name: Test
         run: bun test
 
-  # CONTRIBUTING asks contributors to run these; nothing was checking that they pass.
-  # Its own job on Windows: widget.py imports winreg to register the llmquota://
-  # protocol, so the module does not even load on a Linux runner.
+  # CONTRIBUTING asks contributors to run these; run Bun here too so the Windows-only
+  # PowerShell/status-line bridge path is exercised instead of being skipped on Ubuntu.
   widget:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+
+      - run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: TypeScript tests
+        run: bun test
 
       - uses: actions/setup-python@v5
         with:
