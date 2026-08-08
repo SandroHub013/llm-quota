@@ -3,6 +3,7 @@ import {
   parseClaudeRecords,
   parseCodexRecords,
   parseKimiRecords,
+  parsePiRecords,
   summarizeUsageRows,
   type RawUsageRow,
 } from "./usage.js";
@@ -302,4 +303,71 @@ test("context reuse measures cached context globally and per model", () => {
   expect(summary.rows.find((row) => row.model === "GPT-5.6 Sol")?.contextReusePct).toBe(30);
   expect(summary.rows.find((row) => row.model === "Claude Opus 5")?.contextReusePct).toBe(100);
   expect(summary.rows.find((row) => row.model === "output-only")?.contextReusePct).toBeNull();
+});
+
+test("pi keeps the model and thinking level in force until the next change record", () => {
+  const records = [
+    line({ type: "session", version: 3, id: "s-1", timestamp: "2026-08-01T09:00:00.000Z" }),
+    line({ type: "model_change", provider: "openai-codex", modelId: "gpt-5.6-sol" }),
+    line({ type: "thinking_level_change", thinkingLevel: "high" }),
+    line({
+      type: "message",
+      timestamp: "2026-08-01T09:00:10.000Z",
+      message: {
+        role: "assistant",
+        model: "gpt-5.6-sol",
+        usage: {
+          input: 1_000,
+          output: 200,
+          cacheRead: 500,
+          cacheWrite: 100,
+          reasoning: 80,
+          totalTokens: 1_800,
+          cost: { total: 0.02 },
+        },
+      },
+    }),
+    // A user turn carries no usage and must not count as a call.
+    line({ type: "message", message: { role: "user", content: [] } }),
+  ];
+
+  expect(parsePiRecords(records, "pi")).toEqual([{
+    source: "pi",
+    model: "gpt-5.6-sol",
+    effort: "high",
+    agent: "main",
+    calls: 1,
+    input: 1_000,
+    cacheRead: 500,
+    cacheWrite: 100,
+    output: 200,
+    reasoning: 80,
+    recordedCostUsd: 0.02,
+    recordedAt: "2026-08-01T09:00:10.000Z",
+  }]);
+});
+
+test("a Prime transcript spawned by another session is counted as a subagent", () => {
+  const records = [
+    line({
+      type: "session",
+      version: 3,
+      id: "s-2",
+      parentSession: "/home/x/.prime/agent/sessions/s-1.jsonl",
+      rlmDepth: 1,
+    }),
+    line({ type: "model_change", provider: "openai-codex", modelId: "gpt-5.6-luna" }),
+    line({
+      type: "message",
+      timestamp: "2026-08-08T08:51:00.000Z",
+      message: { role: "assistant", usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 } },
+    }),
+  ];
+
+  const rows = parsePiRecords(records, "prime");
+  expect(rows).toHaveLength(1);
+  expect(rows[0]!.agent).toBe("subagent");
+  // The model falls back to the last model_change when the message omits it.
+  expect(rows[0]!.model).toBe("gpt-5.6-luna");
+  expect(rows[0]!.recordedCostUsd).toBeUndefined();
 });
