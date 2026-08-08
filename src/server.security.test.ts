@@ -44,6 +44,37 @@ test("a cross-origin key deletion is refused", async () => {
   expect(response.status).toBe(403);
 });
 
+// A stored usage view decides what figure the widget and the dashboard headline
+// show, so a cross-origin page must not be able to rewrite it either.
+test("a cross-origin usage-view write is refused", async () => {
+  const response = await at("http://localhost:4747/api/usage-view", {
+    method: "PUT",
+    headers: { Origin: "https://evil.example", "Content-Type": "application/json" },
+    body: '{"source":"claude","agent":"main"}',
+  });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ error: "cross-origin request refused" });
+});
+
+// Same-origin read of the shared view always yields a valid shape, whether or
+// not the local config already stores one.
+test("the usage view endpoint always answers with a normalized view", async () => {
+  const response = await at("http://localhost:4747/api/usage-view");
+  expect(response.status).toBe(200);
+  const view = (await response.json()) as { source: string; agent: string };
+  expect(["all", "codex", "claude", "opencode", "kimi"]).toContain(view.source);
+  expect(["all", "main", "subagent"]).toContain(view.agent);
+});
+
+test("a non-JSON usage-view body is rejected without touching the config", async () => {
+  const response = await at("http://localhost:4747/api/usage-view", {
+    method: "PUT",
+    headers: { "Content-Type": "text/plain" },
+    body: "not json",
+  });
+  expect(response.status).toBe(400);
+});
+
 test("the dashboard's own origin is still allowed to write", async () => {
   const response = await at("http://localhost:4747/api/official-bridge/nope", {
     method: "POST",
