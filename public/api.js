@@ -31,6 +31,27 @@ export async function loadGitHubContributions(request = fetch) {
   return body;
 }
 
+// The usage view (source/agent filters) is server-side state shared with the
+// desktop widget; the browser keeps only display prefs like currency and sort.
+export async function loadUsageView(request = fetch) {
+  return usageView(await requestJson("/api/usage-view", undefined, request));
+}
+
+export async function storeUsageView(view, request = fetch) {
+  return usageView(await requestJson("/api/usage-view", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source: view.source, agent: view.agent }),
+  }, request));
+}
+
+function usageView(body) {
+  if (typeof body?.source !== "string" || typeof body?.agent !== "string") {
+    throw new Error("invalid_usage_view_response");
+  }
+  return { source: body.source, agent: body.agent };
+}
+
 export async function loadProvider(id, request = fetch) {
   return provider(await requestJson(`/api/quota/${encodeURIComponent(id)}`, undefined, request));
 }
