@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { summarizeUsageRows, type RawUsageRow } from "./usage.js";
+import { summarizeUsageRows, USAGE_SOURCE_IDS, type RawUsageRow } from "./usage.js";
 import {
   DEFAULT_USAGE_VIEW,
   normalizeUsageView,
@@ -55,4 +55,10 @@ test("a filtered headline sums only the visible rows, like the dashboard", () =>
   expect(usageHeadlineCosts(summary, { source: "kimi", agent: "all" }).usd).toBe(0);
   expect(usageHeadlineCosts(summary, { source: "all", agent: "main" }).eur)
     .toBeCloseTo(5 / 1.1485, 10);
+});
+
+test("a ledger source added to the scanner is selectable in the shared view", () => {
+  for (const source of USAGE_SOURCE_IDS) {
+    expect(normalizeUsageView({ source, agent: "all" }).source).toBe(source);
+  }
 });
