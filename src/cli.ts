@@ -7,7 +7,19 @@ export interface RunResult {
   code: 0 | 1 | 2 | 3;
 }
 
-type Request = (input: string | URL | globalThis.Request) => Promise<Response>;
+type Request = (input: string | URL | globalThis.Request, init?: RequestInit) => Promise<Response>;
+
+const PROJECT_STATS_TIMEOUT_MS = 10_000;
+
+async function requestWithTimeout(request: Request, input: string, timeoutMs = PROJECT_STATS_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await request(input, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const HELP = `llm-quota status [--json]
 llm-quota provider <id> [--json]
@@ -22,7 +34,7 @@ export async function fetchProjectStats(request: Request = fetch): Promise<strin
   let githubDownloads: number | string = "0";
 
   try {
-    const npmRes = await request("https://api.npmjs.org/downloads/point/last-month/llm-quota");
+    const npmRes = await requestWithTimeout(request, "https://api.npmjs.org/downloads/point/last-month/llm-quota");
     if (npmRes.ok) {
       const data = (await npmRes.json()) as { downloads?: number };
       if (typeof data.downloads === "number") npmDownloads = data.downloads.toString();
@@ -30,7 +42,7 @@ export async function fetchProjectStats(request: Request = fetch): Promise<strin
   } catch {}
 
   try {
-    const ghRes = await request("https://api.github.com/repos/SandroHub013/llm-quota/releases");
+    const ghRes = await requestWithTimeout(request, "https://api.github.com/repos/SandroHub013/llm-quota/releases");
     if (ghRes.ok) {
       const releases = (await ghRes.json()) as Array<{ assets?: Array<{ download_count?: number }> }>;
       if (Array.isArray(releases)) {
@@ -54,18 +66,30 @@ export async function run(args: string[], request: Request = fetch): Promise<Run
   if (args.includes("--help") || args.includes("-h") || args[0] === "help") {
     return { output: HELP, code: 0 };
   }
+  const jsonFlags = args.filter((arg) => arg === "--json");
+  const unknownFlags = args.filter((arg) => arg.startsWith("-") && arg !== "--json");
+  if (jsonFlags.length > 1 || unknownFlags.length) {
+    return { output: "usage: llm-quota --help", code: 3 };
+  }
+
   // Operands only: `provider --json codex` must read "codex", not the flag between them.
-  const operands = args.filter((arg) => !arg.startsWith("-"));
+  const operands = args.filter((arg) => arg !== "--json");
   const command = operands[0] ?? "status";
   if (!["status", "provider", "doctor", "stats"].includes(command)) {
+    return { output: "usage: llm-quota --help", code: 3 };
+  }
+  if (command === "status" && operands.length > 1) {
+    return { output: "usage: llm-quota --help", code: 3 };
+  }
+  if (command === "provider" && operands.length !== 2) {
+    return { output: "usage: llm-quota provider <id>", code: 3 };
+  }
+  if ((command === "doctor" || command === "stats") && (operands.length !== 1 || jsonFlags.length)) {
     return { output: "usage: llm-quota --help", code: 3 };
   }
   if (command === "stats") {
     const statsOutput = await fetchProjectStats(request);
     return { output: statsOutput, code: 0 };
-  }
-  if (command === "provider" && !operands[1]) {
-    return { output: "usage: llm-quota provider <id>", code: 3 };
   }
   try {
     const base = process.env.LLM_QUOTA_URL ?? process.env.WEBQUOTA_URL ?? "http://localhost:4747";
@@ -81,7 +105,7 @@ export async function run(args: string[], request: Request = fetch): Promise<Run
     if (!response.ok) return { output: `server http_${response.status}`, code: 3 };
     const body = await response.json() as QuotaResult | { providers: QuotaResult[] };
     const summary = summarize("providers" in body ? body.providers : [body]);
-    const output = args.includes("--json") ? JSON.stringify(summary) : formatStatus(summary);
+    const output = jsonFlags.length ? JSON.stringify(summary) : formatStatus(summary);
     return { output, code: exitCode(summary) };
   } catch (error) {
     return { output: `server offline: ${error instanceof Error ? error.message : String(error)}`, code: 3 };
