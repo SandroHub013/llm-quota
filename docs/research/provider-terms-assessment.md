@@ -4,7 +4,13 @@
 **Codice verificato:** branch `prototype/widget-liquid-glass`, commit `cd6fb55`  
 **Ambito:** OpenAI/Codex, Anthropic/Claude, Google Gemini/Antigravity, Z.ai, Moonshot/Kimi, OpenCode Zen, GitHub e raccolta locale dei token.
 
-> Questa è una valutazione tecnica preliminare basata sul codice corrente e su fonti ufficiali pubbliche. Non è un parere legale. I termini applicabili dipendono da paese, tipo di account, piano e accordi aggiuntivi sottoscritti dall'utente.
+> **Documento storico:** la verifica è stata eseguita sul branch
+> `prototype/widget-liquid-glass` al commit `cd6fb55`, non sul codice attuale di `main`.
+> Le descrizioni di OAuth, endpoint privati e riscrittura delle credenziali riportano quel
+> prototipo e non descrivono la release corrente. Non è un parere legale.
+>
+> I termini applicabili dipendono da paese, tipo di account, piano e accordi aggiuntivi
+> sottoscritti dall'utente.
 
 ## Risposta breve
 

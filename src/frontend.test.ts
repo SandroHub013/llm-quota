@@ -48,12 +48,16 @@ test("the documentation site loads no third-party assets", async () => {
 test("provider logos are local files with no external references", async () => {
   const logos = {
     claude: "claude.png",
-    codex: "codex.webp",
+    codex: "codex.svg",
     zai: "zai.svg",
     gemini: "gemini.svg",
     moonshot: "moonshot.png",
   };
-  const app = await read("public/app.js");
+  const [app, dashboard, site] = await Promise.all([
+    read("public/app.js"),
+    read("public/index.html"),
+    read("docs/index.html"),
+  ]);
 
   for (const [id, file] of Object.entries(logos)) {
     expect(app).toContain(`"/logos/${file}"`);
@@ -61,6 +65,18 @@ test("provider logos are local files with no external references", async () => {
     expect(await asset.exists()).toBe(true);
     expect(asset.size).toBeGreaterThan(500);
   }
+
+  // These are transparent marks, so the dashboard supplies the readable plate instead
+  // of putting a retired square image in the avatar or horizon dot.
+  expect(app).toContain('claude: { src: "/logos/claude.png", plate: "#f5eee8", foreground: "#181818" }');
+  expect(app).toContain('codex: { src: "/logos/codex.svg", plate: "#f4f4f1", foreground: "#181818" }');
+  expect(app).not.toContain('codex: { src: "/logos/codex.webp", fill: true }');
+  expect(app).toContain('class="mark-fallback"');
+  expect(app).toContain('classList.remove("has-logo")');
+  expect(dashboard).toContain('.avatar img { padding: 0; }');
+  expect(dashboard).toContain('.hz-dot img { padding: 0; }');
+  expect(site).toContain('./logos/codex.svg');
+  expect(site).not.toContain('./logos/codex.webp');
 
   // An SVG can pull in a remote image or stylesheet of its own; neither surface may.
   for (const dir of ["public/logos", "docs/logos"]) {
