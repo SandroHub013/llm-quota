@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { createInterface } from "node:readline";
 
-export type UsageSourceId = "codex" | "claude" | "opencode" | "kimi";
+export type UsageSourceId = "codex" | "claude" | "opencode" | "kimi" | "pi" | "prime" | "nikcli";
 export type AgentKind = "main" | "subagent";
 
 export interface TokenUsage {
@@ -43,7 +43,7 @@ export interface DailyUsage {
 }
 
 export interface UsageSourceStatus {
-  id: UsageSourceId | "gemini";
+  id: UsageSourceId | "gemini" | "hermes";
   name: string;
   status: "ok" | "missing" | "unsupported" | "error";
   files?: number;
@@ -122,6 +122,11 @@ export interface UsagePaths {
   claude: string;
   kimi: string;
   opencodeDb: string;
+  pi: string;
+  prime: string;
+  /** Prime keeps delegated subagent transcripts outside its session directory. */
+  primeArtifacts?: string;
+  nikcliDb: string;
 }
 
 const SOURCE_NAMES: Record<UsageSourceId, string> = {
@@ -129,6 +134,9 @@ const SOURCE_NAMES: Record<UsageSourceId, string> = {
   claude: "Claude Code",
   opencode: "OpenCode",
   kimi: "Kimi Code",
+  pi: "pi",
+  prime: "Prime Agent",
+  nikcli: "NikCLI",
 };
 
 // Public API list prices in USD per million tokens, checked 2026-08-02.
@@ -170,6 +178,8 @@ const FX_AS_OF = "2026-07-31";
 const codexCache = new Map<string, FileCacheEntry<CodexFileUsage>>();
 const claudeCache = new Map<string, FileCacheEntry<ClaudeMessage[]>>();
 const kimiCache = new Map<string, FileCacheEntry<RawUsageRow[]>>();
+const piCache = new Map<string, FileCacheEntry<RawUsageRow[]>>();
+const primeCache = new Map<string, FileCacheEntry<RawUsageRow[]>>();
 
 const emptyTokens = (): TokenUsage => ({
   input: 0,
@@ -529,6 +539,125 @@ async function scanKimi(path: string): Promise<RawUsageRow[]> {
   return parseKimiRecords(selected, agent);
 }
 
+/**
+ * pi and Prime Agent write the same versioned session log: a `session` header, then
+ * `model_change` and `thinking_level_change` records that stay in force until the next
+ * one, then one `message` record per turn carrying the assistant usage. `input` excludes
+ * both cache counters and `reasoning` is a subset of `output`, matching the other sources.
+ */
+export function parsePiRecords(
+  records: string[],
+  source: "pi" | "prime",
+  agent: AgentKind = "main",
+): RawUsageRow[] {
+  let model = "unknown";
+  let effort = "default";
+  let kind = agent;
+  const rows: RawUsageRow[] = [];
+  for (const line of records) {
+    let record: any;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (record.type === "session") {
+      // A delegated run names the transcript that spawned it and sits below its depth.
+      if (record.parentSession || number(record.rlmDepth) > 0) kind = "subagent";
+      continue;
+    }
+    if (record.type === "model_change") {
+      model = String(record.modelId ?? model);
+      continue;
+    }
+    if (record.type === "thinking_level_change") {
+      effort = String(record.thinkingLevel ?? effort);
+      continue;
+    }
+    if (record.type !== "message") continue;
+    const message = record.message;
+    const usage = message?.usage;
+    if (message?.role !== "assistant" || !usage) continue;
+
+    const row = rawRow(source, String(message.model ?? model), effort, kind);
+    row.calls = 1;
+    row.input = number(usage.input);
+    row.cacheRead = number(usage.cacheRead);
+    row.cacheWrite = number(usage.cacheWrite);
+    row.output = number(usage.output);
+    row.reasoning = number(usage.reasoning);
+    const cost = number(usage.cost?.total);
+    if (cost > 0) row.recordedCostUsd = cost;
+    const recordedAt = recordTimestamp(record);
+    if (recordedAt) row.recordedAt = recordedAt;
+    rows.push(row);
+  }
+  return rows;
+}
+
+async function scanPi(path: string, source: "pi" | "prime"): Promise<RawUsageRow[]> {
+  const selected: string[] = [];
+  for await (const line of lines(path)) {
+    if (line.includes('"usage"') || line.includes('_change"') || line.includes('"session"')) {
+      selected.push(line);
+    }
+  }
+  // Prime files under a `sub-<id>` artifact directory are delegated runs even when the
+  // transcript was truncated before its own session header was written.
+  const delegated = /[\\/]sub-[^\\/]+[\\/][^\\/]+\.jsonl$/i.test(path);
+  return parsePiRecords(selected, source, delegated ? "subagent" : "main");
+}
+
+/**
+ * NikCLI keeps one row per message in SQLite, with the token counters inside the JSON
+ * `info` blob. Unlike OpenCode it never stores a cost, so every row is priced from the
+ * public list instead.
+ */
+async function scanNikcli(path: string): Promise<RawUsageRow[]> {
+  if (!existsSync(path) || typeof Bun === "undefined") return [];
+  const { Database } = await import("bun:sqlite");
+  const db = new Database(path, { readonly: true });
+  try {
+    const messages = db.query(`
+      SELECT message_info.info AS info, session_info.parent_id AS parent_id
+      FROM message_info
+      LEFT JOIN session_info ON session_info.id = message_info.session_id
+      WHERE message_info.role = 'assistant'
+    `).all() as Record<string, unknown>[];
+
+    const rows: RawUsageRow[] = [];
+    for (const message of messages) {
+      let info: any;
+      try {
+        info = JSON.parse(String(message.info ?? "{}"));
+      } catch {
+        continue;
+      }
+      const tokens = info.tokens;
+      if (!tokens) continue;
+      const row = rawRow(
+        "nikcli",
+        String(info.modelID ?? "unknown"),
+        "default",
+        message.parent_id ? "subagent" : "main",
+      );
+      row.calls = 1;
+      row.input = number(tokens.input);
+      row.cacheRead = number(tokens.cache?.read);
+      row.cacheWrite = number(tokens.cache?.write);
+      row.output = number(tokens.output);
+      row.reasoning = number(tokens.reasoning);
+      if (number(info.cost) > 0) row.recordedCostUsd = number(info.cost);
+      const recordedAt = isoTimestamp(info.time?.created);
+      if (recordedAt) row.recordedAt = recordedAt;
+      rows.push(row);
+    }
+    return rows;
+  } finally {
+    db.close();
+  }
+}
+
 async function scanOpenCode(path: string): Promise<RawUsageRow[]> {
   if (!existsSync(path) || typeof Bun === "undefined") return [];
   const { Database } = await import("bun:sqlite");
@@ -725,6 +854,13 @@ const defaultPaths = (): UsagePaths => {
     claude: join(home, ".claude", "projects"),
     kimi: join(home, ".kimi-code", "sessions"),
     opencodeDb: join(home, ".local", "share", "opencode", "opencode.db"),
+    pi: join(home, ".pi", "agent", "sessions"),
+    prime: join(home, ".prime", "agent", "sessions"),
+    primeArtifacts: join(home, ".prime", "agent", "session-artifacts"),
+    // NikCLI follows the platform data directory instead of a dotfile in $HOME.
+    nikcliDb: process.env.LOCALAPPDATA
+      ? join(process.env.LOCALAPPDATA, "nikcli", "nikcli.db")
+      : join(home, ".local", "share", "nikcli", "nikcli.db"),
   };
 };
 
@@ -812,11 +948,66 @@ export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<
     sources.push({ id: "opencode", name: SOURCE_NAMES.opencode, status: "error" });
   }
 
+  try {
+    const files = await walk(paths.pi, ".jsonl");
+    pruneCache(piCache, files);
+    for (const file of files) {
+      raw.push(...(await cachedFile(piCache, file, () => scanPi(file, "pi")) ?? []));
+    }
+    sources.push({
+      id: "pi",
+      name: SOURCE_NAMES.pi,
+      status: files.length ? "ok" : "missing",
+      files: files.length,
+    });
+  } catch {
+    sources.push({ id: "pi", name: SOURCE_NAMES.pi, status: "error" });
+  }
+
+  try {
+    const files = [
+      ...await walk(paths.prime, ".jsonl"),
+      ...(paths.primeArtifacts ? await walk(paths.primeArtifacts, ".jsonl") : []),
+    ];
+    pruneCache(primeCache, files);
+    for (const file of files) {
+      raw.push(...(await cachedFile(primeCache, file, () => scanPi(file, "prime")) ?? []));
+    }
+    sources.push({
+      id: "prime",
+      name: SOURCE_NAMES.prime,
+      status: files.length ? "ok" : "missing",
+      files: files.length,
+    });
+  } catch {
+    sources.push({ id: "prime", name: SOURCE_NAMES.prime, status: "error" });
+  }
+
+  try {
+    raw.push(...await scanNikcli(paths.nikcliDb));
+    sources.push({
+      id: "nikcli",
+      name: SOURCE_NAMES.nikcli,
+      status: existsSync(paths.nikcliDb) ? "ok" : "missing",
+      files: existsSync(paths.nikcliDb) ? 1 : 0,
+    });
+  } catch {
+    sources.push({ id: "nikcli", name: SOURCE_NAMES.nikcli, status: "error" });
+  }
+
   sources.push({
     id: "gemini",
     name: "Gemini",
     status: "unsupported",
     message: "The local CLI history does not expose reliable token counters.",
+  });
+  // Hermes is a desktop app whose profile directory holds only Chromium state: no
+  // transcript, no token counter. Its spend stays server side, out of this ledger.
+  sources.push({
+    id: "hermes",
+    name: "Hermes",
+    status: "unsupported",
+    message: "The desktop app stores no local token record.",
   });
   return summarizeUsageRows(raw, sources);
 }
