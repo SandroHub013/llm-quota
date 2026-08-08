@@ -63,7 +63,7 @@ export function formatStatus(summary: QuotaSummary, now = new Date()): string {
   return lines.join("\n");
 }
 
-const FAILED = new Set<QuotaStatus>(["error", "unauthenticated", "rate_limited"]);
+const FAILED = new Set<QuotaStatus>(["error", "partial", "unauthenticated", "rate_limited"]);
 
 export function exitCode(summary: QuotaSummary): 0 | 1 | 2 {
   if (summary.providers.some((provider) => FAILED.has(provider.status))) return 2;

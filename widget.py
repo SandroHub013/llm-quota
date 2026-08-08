@@ -17,6 +17,7 @@ import ctypes
 import ctypes.wintypes as wintypes
 import json
 import os
+import queue
 import re
 import subprocess
 import sys
@@ -76,14 +77,21 @@ def configured_base_url(argv=None, environ=None):
     for argument in args:
         if not str(argument).lower().startswith("llmquota://"):
             continue
-        values = parse_qs(urlsplit(argument).query).get("server")
+        try:
+            values = parse_qs(urlsplit(argument).query).get("server")
+        except ValueError:
+            continue
         if not values:
             continue
         candidate = normalize_base_url(values[0])
         # A web page may invoke a custom protocol. Only the local dashboard may
         # choose the server implicitly; remote servers require an explicit flag
         # or environment variable.
-        if urlsplit(candidate).hostname in {"localhost", "127.0.0.1", "::1"}:
+        try:
+            hostname = urlsplit(candidate).hostname
+        except ValueError:
+            continue
+        if hostname in {"localhost", "127.0.0.1", "::1"}:
             return candidate
 
     return normalize_base_url(environment.get("LLM_QUOTA_URL") or environment.get("WEBQUOTA_URL"))
@@ -104,15 +112,17 @@ WAKE_PORT = 51122
 def wake_running_instance():
     """Try sending a wake signal to an already running instance."""
     import socket
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(1.0)
-        s.connect(("127.0.0.1", WAKE_PORT))
-        s.sendall(b"WAKE\n")
-        s.close()
-        return True
-    except Exception:
-        return False
+    for attempt in range(5):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(1.0)
+                sock.connect(("127.0.0.1", WAKE_PORT))
+                sock.sendall(b"WAKE\n")
+            return True
+        except OSError:
+            if attempt < 4:
+                time.sleep(0.05)
+    return False
 
 
 def acquire_single_instance(wake_callback=None):
@@ -132,20 +142,31 @@ def acquire_single_instance(wake_callback=None):
 
     if wake_callback:
         import socket
+
         def _listen():
             try:
-                srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                srv.bind(("127.0.0.1", WAKE_PORT))
-                srv.listen(1)
-                while True:
-                    conn, _ = srv.accept()
-                    data = conn.recv(64)
-                    conn.close()
-                    if b"WAKE" in data:
-                        wake_callback()
-            except Exception:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:
+                    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    srv.settimeout(1.0)
+                    srv.bind(("127.0.0.1", WAKE_PORT))
+                    srv.listen(1)
+                    while True:
+                        try:
+                            conn, _ = srv.accept()
+                        except socket.timeout:
+                            continue
+                        try:
+                            conn.settimeout(1.0)
+                            data = conn.recv(64)
+                        except OSError:
+                            data = b""
+                        finally:
+                            conn.close()
+                        if b"WAKE" in data:
+                            wake_callback()
+            except OSError:
                 pass
+
         t = threading.Thread(target=_listen, daemon=True)
         t.start()
 
@@ -331,12 +352,15 @@ def register_protocol():
         winreg.SetValueEx(key, "", 0, winreg.REG_SZ, command)
     return command
 
-DOMAIN_MAP = {
-    "claude": "claude.ai",
-    "codex": "chatgpt.com",
-    "zai": "z.ai",
-    "gemini": "gemini.google.com",
-    "moonshot": "kimi.com",
+# Tk can load PNG directly. Other repository marks are SVG/WebP and intentionally
+# fall back to the local initials below rather than contacting a favicon service.
+LOCAL_LOGO_FILES = {
+    # Tk's PhotoImage handles PNG but not SVG/WebP. These PNGs are local raster
+    # companions of the faithful SVG marks used by the dashboard.
+    "claude": os.path.join("public", "logos", "claude.png"),
+    "codex": os.path.join("public", "logos", "codex.png"),
+    "gemini": os.path.join("public", "logos", "gemini.png"),
+    "moonshot": os.path.join("public", "logos", "moonshot.png"),
 }
 
 WIDGET_HIDDEN_PROVIDER_IDS = frozenset({"opencode-zen"})
@@ -515,7 +539,7 @@ def fetch_usage_cost():
         if not isfinite(value) or value < 0:
             return None
         return value, bool(data.get("usageFiltered"))
-    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+    except Exception:
         return None
 
 
@@ -523,7 +547,7 @@ def fetch_all():
     """Return [{id, name, status, remaining, reset_str, details_str}]"""
     try:
         providers = get_json("/api/quota", timeout=40)["providers"]
-    except (OSError, ValueError, TypeError, KeyError):
+    except Exception:
         return None
     try:
         out = []
@@ -587,7 +611,7 @@ def fetch_all():
                 "details_str": details_str,
             })
         return out
-    except (ValueError, TypeError, KeyError):
+    except Exception:
         return None
 
 
@@ -635,8 +659,13 @@ class Widget(tk.Tk):
         self._loading = False
         self._usage_loading = False
         self._quota_online = False
+        self._quota_stale = False
+        self._usage_stale = False
         self._quota_signature = None
         self._last_data_at = time.monotonic()
+        self._ui_queue = queue.Queue()
+        self._ui_queue_job = None
+        self._closing = False
         self.usage_cost = None
         self.usage_filtered = False
         self.displayed_usage_cost = None
@@ -683,9 +712,45 @@ class Widget(tk.Tk):
         self.surface.attributes("-alpha", 0.0)
         self._fade(0.0)
         self.after_idle(self._apply_window_effects)
+        self._ui_queue_job = self.after(50, self._drain_ui_queue)
         self.refresh()
         self.refresh_usage()
         self._tick_job = self.after(COUNTDOWN_TICK_MS, self._tick_live_values)
+
+    def _queue_ui(self, callback):
+        """Queue a callback for the Tk thread; workers must never call Tk directly."""
+        if not self._closing:
+            self._ui_queue.put(callback)
+
+    def _drain_ui_queue(self):
+        if self._closing:
+            return
+        while True:
+            try:
+                callback = self._ui_queue.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                callback()
+            except Exception:
+                # A callback can race with a window close; the next poll must live.
+                pass
+        if not self._closing:
+            self._ui_queue_job = self.after(50, self._drain_ui_queue)
+
+    def destroy(self):
+        if self.__dict__.get("_closing", False):
+            return
+        self._closing = True
+        for name in ("_refresh_job", "_usage_job", "_tick_job", "_ui_queue_job", "_cost_animation_job"):
+            job = getattr(self, name, None)
+            if job is not None:
+                try:
+                    self.after_cancel(job)
+                except tk.TclError:
+                    pass
+                setattr(self, name, None)
+        super().destroy()
 
     def _apply_window_effects(self):
         self.update_idletasks()
@@ -712,27 +777,32 @@ class Widget(tk.Tk):
                 ])
 
     def _load_icons(self):
-        def _fetch(pid, domain):
+        root = os.path.dirname(os.path.abspath(__file__))
+        for pid, relative in LOCAL_LOGO_FILES.items():
             try:
-                url = f"https://www.google.com/s2/favicons?domain={domain}&sz=32"
-                with urllib.request.urlopen(url, timeout=5) as r:
-                    raw = r.read()
-                self.after(0, lambda p=pid, data=raw: self._set_icon(p, data))
-            except Exception:
+                with open(os.path.join(root, relative), "rb") as icon_file:
+                    self._set_icon(pid, icon_file.read())
+            except (OSError, tk.TclError):
+                # Missing/unsupported local marks reveal the deterministic initials.
                 pass
-
-        for pid, domain in DOMAIN_MAP.items():
-            threading.Thread(target=_fetch, args=(pid, domain), daemon=True).start()
 
     def _set_icon(self, pid, raw):
         try:
             img = tk.PhotoImage(data=raw).subsample(2, 2)
-            if pid == "codex":
-                # Il logo di OpenAI ha tratti neri: convertiamo i tratti scuri in bianco brillante per la dark mode
+            if pid in {"codex", "claude"}:
+                # OpenAI's and Anthropic's marks are dark; convert their strokes to
+                # bright white for the widget's dark panel.
                 w, h = img.width(), img.height()
                 new_img = tk.PhotoImage(width=w, height=h)
                 for x in range(w):
                     for y in range(h):
+                        # Transparent pixels report black through PhotoImage.get;
+                        # do not turn the whole transparent canvas into white.
+                        try:
+                            if img.transparency_get(x, y):
+                                continue
+                        except tk.TclError:
+                            pass
                         r, g, b = img.get(x, y)
                         if r < 120 and g < 120 and b < 120:
                             new_img.put("#ffffff", (x, y))
@@ -842,7 +912,7 @@ class Widget(tk.Tk):
         self.after_idle(self._apply_window_effects)
 
     def wake_up(self):
-        self.after(0, self._do_wake_up)
+        self._queue_ui(self._do_wake_up)
 
     def _do_wake_up(self):
         if self.view_mode == "q":
@@ -895,6 +965,8 @@ class Widget(tk.Tk):
             self.after_idle(self._apply_window_effects)
 
     def refresh(self):
+        if self.__dict__.get("_closing", False):
+            return
         if self._refresh_job is not None:
             self.after_cancel(self._refresh_job)
         if not self._loading:
@@ -903,13 +975,17 @@ class Widget(tk.Tk):
         self._refresh_job = self.after(POLL_MS, self.refresh)
 
     def _load(self):
-        data = fetch_all()
-        self.after(0, lambda: self._finish_load(data))
+        try:
+            data = fetch_all()
+        except Exception:
+            data = None
+        self._queue_ui(lambda: self._finish_load(data))
 
     def _finish_load(self, data):
         self._loading = False
         if data is None:
             self._quota_online = False
+            self._quota_stale = self.last_data is not None
             if self.last_data is None:
                 self._render(None)
             self._update_live_status()
@@ -919,6 +995,7 @@ class Widget(tk.Tk):
         changed = signature != self._quota_signature
         self._last_data_at = time.monotonic()
         self._quota_online = True
+        self._quota_stale = False
         if changed:
             self._quota_signature = signature
             self._render(data)
@@ -930,6 +1007,8 @@ class Widget(tk.Tk):
         self._update_live_status()
 
     def refresh_usage(self):
+        if self.__dict__.get("_closing", False):
+            return
         if self._usage_job is not None:
             self.after_cancel(self._usage_job)
         if not self._usage_loading:
@@ -938,16 +1017,23 @@ class Widget(tk.Tk):
         self._usage_job = self.after(USAGE_POLL_MS, self.refresh_usage)
 
     def _load_usage(self):
-        result = fetch_usage_cost()
-        self.after(0, lambda: self._finish_usage(result))
+        try:
+            result = fetch_usage_cost()
+        except Exception:
+            result = None
+        self._queue_ui(lambda: self._finish_usage(result))
 
     def _finish_usage(self, result):
         self._usage_loading = False
-        if result is not None:
-            cost, filtered = result
-            self.usage_cost = cost
-            self.usage_filtered = filtered
-            self._animate_usage_cost(cost)
+        if result is None:
+            self._usage_stale = True
+            self._update_spend_labels()
+            return
+        cost, filtered = result
+        self.usage_cost = cost
+        self.usage_filtered = filtered
+        self._usage_stale = False
+        self._animate_usage_cost(cost)
 
     def _animate_usage_cost(self, target):
         target = max(0, float(target))
@@ -978,12 +1064,16 @@ class Widget(tk.Tk):
 
     def _spend_tooltip(self):
         text = "Live local API-equivalent token spend"
+        if self.__dict__.get("_usage_stale", False):
+            text += "\nlast successful value; update unavailable"
         if self.usage_filtered:
             text += "\nfollows the dashboard's source/agent filters"
         return text
 
     def _update_spend_labels(self):
         text = "€ …" if self.displayed_usage_cost is None else f"≈ {format_eur(self.displayed_usage_cost)}"
+        if self.__dict__.get("_usage_stale", False) and self.displayed_usage_cost is not None:
+            text += " · stale"
         for label in self._spend_labels:
             try:
                 label.config(text=text)
@@ -991,8 +1081,12 @@ class Widget(tk.Tk):
                 pass
 
     def _update_live_status(self):
-        text = "● LIVE" if self._quota_online else "● RETRY"
-        color = STATUS_DOT["ok"] if self._quota_online else STATUS_DOT["rate_limited"]
+        if self.__dict__.get("_quota_online", False) and not self.__dict__.get("_quota_stale", False):
+            text, color = "● LIVE", STATUS_DOT["ok"]
+        elif self.__dict__.get("_quota_stale", False):
+            text, color = "● STALE", STATUS_DOT["rate_limited"]
+        else:
+            text, color = "● RETRY", STATUS_DOT["rate_limited"]
         for label in self._live_labels:
             try:
                 label.config(text=text, fg=color)

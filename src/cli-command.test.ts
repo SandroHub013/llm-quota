@@ -129,3 +129,17 @@ test("provider with no id at all still reports usage", async () => {
   const result = await run(["provider", "--json"], async () => Response.json(quota));
   expect(result).toEqual({ output: "usage: llm-quota provider <id>", code: 3 });
 });
+
+test("unknown flags and extra operands return usage without HTTP", async () => {
+  let calls = 0;
+  const request = async () => {
+    calls++;
+    return Response.json(quota);
+  };
+
+  expect(await run(["status", "--bogus"], request)).toEqual({ output: "usage: llm-quota --help", code: 3 });
+  expect(await run(["provider", "codex", "--bogus"], request)).toEqual({ output: "usage: llm-quota --help", code: 3 });
+  expect(await run(["status", "codex"], request)).toEqual({ output: "usage: llm-quota --help", code: 3 });
+  expect(await run(["doctor", "--json"], request)).toEqual({ output: "usage: llm-quota --help", code: 3 });
+  expect(calls).toBe(0);
+});

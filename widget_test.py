@@ -1,5 +1,8 @@
+import inspect
+import os
+import queue
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import widget
 
@@ -64,6 +67,14 @@ class FetchAllTest(unittest.TestCase):
 
     @patch("widget.get_json", return_value={"providers": [{"id": "broken"}]})
     def test_malformed_provider_payload_marks_widget_offline(self, _get_json):
+        self.assertIsNone(widget.fetch_all())
+
+    @patch("widget.get_json", return_value={"providers": ["not-a-provider"]})
+    def test_non_object_provider_payload_marks_widget_offline(self, _get_json):
+        self.assertIsNone(widget.fetch_all())
+
+    @patch("widget.get_json", return_value={"providers": [{"id": "codex", "name": "Codex", "metrics": ["not-a-metric"]}]})
+    def test_non_object_metric_payload_marks_widget_offline(self, _get_json):
         self.assertIsNone(widget.fetch_all())
 
     @patch("widget.parse_reset_sec", side_effect=[3600, widget.HORIZON_SEC + 1])
@@ -191,6 +202,23 @@ class ProtocolRegistrationTest(unittest.TestCase):
             ),
             "http://localhost:9000",
         )
+        self.assertEqual(
+            widget.configured_base_url(
+                ["widget.py", "llmquota://[malformed"],
+                {"LLM_QUOTA_URL": "http://localhost:9000"},
+            ),
+            "http://localhost:9000",
+        )
+
+    def test_widget_icons_use_bundled_files_only(self):
+        self.assertNotIn("www.google.com", widget.LOCAL_LOGO_FILES.values())
+        for provider in ("claude", "codex", "gemini", "moonshot"):
+            self.assertIn(provider, widget.LOCAL_LOGO_FILES)
+            relative = widget.LOCAL_LOGO_FILES[provider]
+            self.assertTrue(relative.startswith("public"))
+            self.assertTrue(relative.endswith(".png"))
+            self.assertTrue(os.path.exists(os.path.join(os.path.dirname(widget.__file__), relative)))
+        self.assertIn("transparency_get", inspect.getsource(widget.Widget._set_icon))
 
     def test_currency_uses_english_number_formatting(self):
         self.assertEqual(widget.format_eur(2721.62), "€2,721.62")
@@ -283,6 +311,48 @@ class WakeBehaviorTest(unittest.TestCase):
 
 
 class PollingTest(unittest.TestCase):
+    def test_worker_results_are_drained_on_the_ui_thread(self):
+        fake = object.__new__(widget.Widget)
+        fake._ui_queue = queue.Queue()
+        fake._closing = False
+        fake.after = Mock(return_value="next")
+        fake._ui_queue_job = None
+        seen = []
+
+        widget.Widget._queue_ui(fake, lambda: seen.append("done"))
+        self.assertEqual(seen, [])
+        widget.Widget._drain_ui_queue(fake)
+        self.assertEqual(seen, ["done"])
+        fake.after.assert_called_once()
+
+    def test_failed_quota_poll_marks_existing_data_stale(self):
+        fake = object.__new__(widget.Widget)
+        fake._loading = True
+        fake._quota_online = True
+        fake._quota_stale = False
+        fake.last_data = [{"id": "codex"}]
+        fake._render = Mock()
+        fake._update_live_status = Mock()
+        fake._update_live_values = Mock()
+
+        widget.Widget._finish_load(fake, None)
+
+        self.assertFalse(fake._quota_online)
+        self.assertTrue(fake._quota_stale)
+        fake._render.assert_not_called()
+        fake._update_live_status.assert_called_once_with()
+
+    def test_failed_usage_poll_marks_existing_spend_stale(self):
+        fake = object.__new__(widget.Widget)
+        fake._usage_loading = True
+        fake._usage_stale = False
+        fake._update_spend_labels = Mock()
+
+        widget.Widget._finish_usage(fake, None)
+
+        self.assertTrue(fake._usage_stale)
+        fake._update_spend_labels.assert_called_once_with()
+
     def test_live_intervals_match_each_data_source(self):
         self.assertEqual(widget.POLL_MS, 60_000)
         self.assertEqual(widget.USAGE_POLL_MS, 5_000)

@@ -236,6 +236,15 @@ def api_handler(route: Route, quota: dict, usage: dict) -> None:
 def capture(page, url: str, width: int, height: int) -> bytes:
     page.set_viewport_size({"width": width, "height": height})
     page.goto(url, wait_until="networkidle")
+    page.wait_for_function(
+        """(() => {
+            const cards = [...document.querySelectorAll('#grid > .card:not(.is-skeleton)')];
+            return cards.length >= 3 && cards.every((card) => {
+                const visible = Number(getComputedStyle(card).opacity) >= 0.99;
+                return visible && card.getBoundingClientRect().height > 0;
+            });
+        })()"""
+    )
     page.wait_for_function("document.querySelector('#liveStatusText')?.textContent === 'Live'")
     page.wait_for_timeout(600)
     return page.screenshot(type="png", full_page=False)
