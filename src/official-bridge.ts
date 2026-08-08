@@ -54,17 +54,28 @@ interface BridgeOrigin {
   capturedAt: string;
 }
 
-export function officialBridgePaths(provider: OfficialBridgeProvider, home = homedir()) {
+/**
+ * Windows drives the status line through PowerShell; everywhere else the same
+ * work is done by a script Bun runs, because a POSIX shell cannot read the JSON
+ * the host pipes in without a JSON parser this project cannot assume is present.
+ */
+export function officialBridgePaths(
+  provider: OfficialBridgeProvider,
+  home = homedir(),
+  platform: NodeJS.Platform = process.platform,
+) {
   const source = SOURCES[provider];
   const group = GROUPS[provider];
   const root = join(home, ".llm-quota", "official");
+  const windows = platform === "win32";
   return {
     source,
     group,
     root,
+    windows,
     cache: join(root, `${source}.json`),
-    script: join(root, `${group}-statusline-bridge.ps1`),
-    previous: join(root, `${group}-previous-statusline.cmd`),
+    script: join(root, `${group}-statusline-bridge.${windows ? "ps1" : "mjs"}`),
+    previous: join(root, `${group}-previous-statusline.${windows ? "cmd" : "sh"}`),
     origin: join(root, `${group}-bridge-origin.json`),
     metadata: join(root, `${source}-bridge-install.json`),
     config: group === "antigravity"
@@ -104,14 +115,11 @@ export async function officialBridgeInstalled(
 export async function installOfficialBridge(
   provider: OfficialBridgeProvider,
   home = homedir(),
+  platform: NodeJS.Platform = process.platform,
 ): Promise<{ installed: true; configPath: string }> {
-  if (process.platform !== "win32") {
-    throw new Error("official_bridge_windows_prototype");
-  }
-
-  const paths = officialBridgePaths(provider, home);
+  const paths = officialBridgePaths(provider, home, platform);
   const settings = await readSettings(paths.config);
-  const command = bridgeCommand(paths.script);
+  const command = bridgeCommand(paths);
   const current = isRecord(settings.statusLine) ? settings.statusLine : undefined;
   const currentCommand = commandOf(current);
   // Never chain one of our own wrappers into another: that is what recursed.
@@ -128,7 +136,7 @@ export async function installOfficialBridge(
   }
 
   if (!alreadyBridged) {
-    if (currentCommand) await writeFile(paths.previous, previousWrapper(currentCommand), "utf8");
+    if (currentCommand) await writeFile(paths.previous, previousWrapper(currentCommand, paths.windows), "utf8");
     else await rm(paths.previous, { force: true });
     const origin: BridgeOrigin = {
       version: 1,
@@ -151,10 +159,11 @@ export async function installOfficialBridge(
 
   await writeFile(
     paths.script,
-    buildPowerShellBridge(
+    buildBridgeScript(
       paths.group,
       groupCaches(paths.group, home, installedMembers(paths.group, home, provider)),
       paths.previous,
+      paths.windows,
     ),
     "utf8",
   );
@@ -167,8 +176,9 @@ export async function installOfficialBridge(
 export async function removeOfficialBridge(
   provider: OfficialBridgeProvider,
   home = homedir(),
+  platform: NodeJS.Platform = process.platform,
 ): Promise<{ installed: false; configPath: string }> {
-  const paths = officialBridgePaths(provider, home);
+  const paths = officialBridgePaths(provider, home, platform);
   const metadata = await readJson<BridgeMetadata>(paths.metadata);
   if (metadata?.version !== 1 || metadata.provider !== provider) throw new Error("bridge_metadata_missing");
 
@@ -186,7 +196,7 @@ export async function removeOfficialBridge(
   if (remaining.length) {
     await writeFile(
       paths.script,
-      buildPowerShellBridge(paths.group, groupCaches(paths.group, home, remaining), paths.previous),
+      buildBridgeScript(paths.group, groupCaches(paths.group, home, remaining), paths.previous, paths.windows),
       "utf8",
     );
     return { installed: false, configPath: paths.config };
@@ -264,6 +274,114 @@ function installedMembers(
   return GROUP_MEMBERS[group].filter(
     (member) => member === also || existsSync(officialBridgePaths(member, home).metadata),
   );
+}
+
+export function buildBridgeScript(
+  group: BridgeGroup,
+  caches: Partial<Record<OfficialBridgeSource, string>>,
+  previousCommandPath: string,
+  windows = process.platform === "win32",
+): string {
+  return windows
+    ? buildPowerShellBridge(group, caches, previousCommandPath)
+    : buildPosixBridge(group, caches, previousCommandPath);
+}
+
+/**
+ * The POSIX bridge is JavaScript rather than shell because it has to read the
+ * JSON the host pipes in and cache a few fields out of it. `jq` and `python3`
+ * are both absent often enough on a fresh macOS or Linux box to rule them out,
+ * while Bun is already a hard requirement of this project — so the interpreter
+ * baked into the status-line command is the very Bun running the install.
+ *
+ * It stays a readable file on disk on purpose: a tool that installs itself into
+ * another client's config has to let the user read exactly what it installed.
+ */
+export function buildPosixBridge(
+  group: BridgeGroup,
+  caches: Partial<Record<OfficialBridgeSource, string>>,
+  previousCommandPath: string,
+): string {
+  const captures: string[] = [];
+  if (caches.claude) {
+    captures.push(`const claudeData = state.rate_limits == null ? null : { rateLimits: state.rate_limits };
+save(${jsLiteral(caches.claude)}, "claude", claudeData);`);
+  }
+  if (caches.zai) {
+    // Only Z.ai's own plugin fields: state.rate_limits here is Claude's quota.
+    captures.push(`const zaiData = state.glm_quota != null
+  ? { glmQuota: state.glm_quota }
+  : state.zai_quota != null
+    ? { zaiQuota: state.zai_quota }
+    : null;
+save(${jsLiteral(caches.zai)}, "zai", zaiData);`);
+  }
+  if (caches.antigravity) {
+    captures.push(`const antigravityData = state.quota == null
+  ? null
+  : { quota: state.quota, planTier: state.plan_tier };
+save(${jsLiteral(caches.antigravity)}, "antigravity", antigravityData);`);
+  }
+
+  const summary = group === "antigravity"
+    ? `if (state.quota != null && typeof state.quota === "object") {
+  const remaining = Object.values(state.quota)
+    .map((bucket) => Number(bucket == null ? NaN : bucket.remaining_fraction))
+    .filter((value) => Number.isFinite(value));
+  if (remaining.length) parts.push(\`quota \${Math.round(Math.min(...remaining) * 100)}% left\`);
+}`
+    : `const fiveHour = Number(state.rate_limits?.five_hour?.used_percentage);
+if (Number.isFinite(fiveHour)) parts.push(\`5h \${Math.round(fiveHour)}% used\`);${caches.zai ? `
+if (zaiData != null) parts.push("Z.ai GLM plugin sync");` : ""}`;
+
+  return `// Generated by LLM Quota. Reads the JSON the official client already hands its
+// status line, caches only the quota fields, and prints the line the host shows.
+// Delete it by disabling the bridge from the dashboard.
+import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+
+function save(cachePath, provider, data) {
+  if (data == null) return;
+  const temporary = \`\${cachePath}.\${randomUUID()}.tmp\`;
+  try {
+    mkdirSync(dirname(cachePath), { recursive: true, mode: 0o700 });
+    const snapshot = { version: 1, provider, capturedAt: new Date().toISOString(), data };
+    writeFileSync(temporary, JSON.stringify(snapshot), { mode: 0o600 });
+    renameSync(temporary, cachePath);
+  } catch {
+    try { rmSync(temporary, { force: true }); } catch {}
+  }
+}
+
+let payload = "";
+try { payload = readFileSync(0, "utf8"); } catch {}
+// Hosts are free to prefix the payload with a UTF-8 BOM, which JSON.parse rejects.
+if (payload.charCodeAt(0) === 0xfeff) payload = payload.slice(1);
+if (!payload.trim()) process.exit(0);
+
+let state;
+try { state = JSON.parse(payload); } catch { process.exit(0); }
+if (state == null || typeof state !== "object") process.exit(0);
+
+${captures.join("\n\n")}
+
+const previousCommand = ${jsLiteral(previousCommandPath)};
+if (existsSync(previousCommand)) {
+  const chained = spawnSync("/bin/sh", [previousCommand], { input: payload, encoding: "utf8" });
+  if (chained.stdout) process.stdout.write(chained.stdout);
+  process.exit(0);
+}
+
+const parts = [];
+if (typeof state.model?.display_name === "string") parts.push(state.model.display_name);
+const context = Number(state.context_window?.used_percentage);
+if (Number.isFinite(context)) parts.push(\`context \${Math.round(context)}%\`);
+${summary}
+if (!parts.length) parts.push("LLM Quota official sync");
+process.stdout.write(parts.join(" \\u00b7 ") + "\\n");
+`;
 }
 
 export function buildPowerShellBridge(
@@ -378,7 +496,11 @@ Write-Output ($parts -join (' ' + [char]0x00B7 + ' '))
  * is not POSIX in the first place has no reason to go through bash, so both fall
  * back to running the command verbatim, exactly as before.
  */
-function previousWrapper(command: string): string {
+function previousWrapper(command: string, windows: boolean): string {
+  // Off Windows the captured command already is a POSIX command and the shell
+  // that runs this wrapper is the same one the host would have used, so it needs
+  // none of the translation below.
+  if (!windows) return `#!/bin/sh\n${command}\n`;
   if (command.includes('"') || !/^(bash|sh|zsh)\b/.test(command)) {
     return `@echo off\r\n${command}\r\n`;
   }
@@ -404,10 +526,33 @@ function previousWrapper(command: string): string {
  * and neither host rewrites them, so that spelling survives both; quoting is then
  * needed only for the paths that would otherwise split on a space.
  */
-function bridgeCommand(script: string): string {
-  const posix = script.replace(/\\/g, "/");
-  const path = /\s/.test(posix) ? `"${posix}"` : posix;
-  return `powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ${path}`;
+function bridgeCommand(paths: { script: string; windows: boolean }): string {
+  // A backslash is a legal character in a POSIX filename, so only the Windows
+  // spelling is rewritten.
+  if (!paths.windows) {
+    return `${quoteOnlyIfSpaced(bunExecutable())} run ${quoteOnlyIfSpaced(paths.script)}`;
+  }
+  const script = quoteOnlyIfSpaced(paths.script.replace(/\\/g, "/"));
+  return `powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ${script}`;
+}
+
+function quoteOnlyIfSpaced(path: string): string {
+  return /\s/.test(path) ? `"${path}"` : path;
+}
+
+/**
+ * Bake the absolute interpreter rather than relying on `bun` being on PATH: a
+ * status line runs in whatever environment the host was started from, and a
+ * desktop-launched editor routinely misses the shell profile that puts
+ * ~/.bun/bin there. Resolved at install time, so a Bun upgrade in place keeps
+ * working and a Bun that moved is fixed by re-enabling the bridge.
+ */
+function bunExecutable(): string {
+  const executable = process.execPath;
+  if (!executable || !/(^|[\\/])bun(\.exe)?$/i.test(executable)) {
+    throw new Error("official_bridge_requires_bun");
+  }
+  return executable;
 }
 
 /**
@@ -419,7 +564,8 @@ function bridgeCommand(script: string): string {
 function isOwnBridgeCommand(command: string, root: string): boolean {
   if (!command) return false;
   const normalized = command.replace(/"/g, "").replace(/\\/g, "/").toLowerCase();
-  return normalized.includes(root.replace(/\\/g, "/").toLowerCase()) && normalized.includes("-statusline-bridge.ps1");
+  return normalized.includes(root.replace(/\\/g, "/").toLowerCase())
+    && /-statusline-bridge\.(ps1|mjs)\b/.test(normalized);
 }
 
 function commandOf(statusLine: unknown): string {
@@ -455,6 +601,11 @@ function stripBom(text: string): string {
 
 function psLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
+}
+
+/** JSON is a subset of JS literal syntax, so it escapes Windows paths correctly too. */
+function jsLiteral(value: string): string {
+  return JSON.stringify(value);
 }
 
 function isRecord(value: unknown): value is Record<string, any> {

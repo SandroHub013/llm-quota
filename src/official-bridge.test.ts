@@ -2,8 +2,9 @@ import { afterEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
+  buildPosixBridge,
   buildPowerShellBridge,
   groupCaches,
   installOfficialBridge,
@@ -16,8 +17,9 @@ import {
 const homes: string[] = [];
 afterEach(async () => Promise.all(homes.splice(0).map((home) => rm(home, { recursive: true, force: true }))));
 
+const windows = process.platform === "win32";
+
 test("Claude bridge preserves and chains an existing status line", async () => {
-  if (process.platform !== "win32") return;
   const home = await mkdtemp(join(tmpdir(), "llm-quota-bridge-"));
   homes.push(home);
   const paths = officialBridgePaths("claude", home);
@@ -26,7 +28,7 @@ test("Claude bridge preserves and chains an existing status line", async () => {
   await installOfficialBridge("claude", home);
 
   const settings = JSON.parse(await readFile(paths.config, "utf8"));
-  expect(settings.statusLine.command).toContain("claude-statusline-bridge.ps1");
+  expect(settings.statusLine.command).toContain(basename(paths.script));
   expect(settings.statusLine.padding).toBe(2);
   expect(await readFile(paths.previous, "utf8")).toContain("node old-line.js");
   expect(await officialBridgeInstalled("claude", home)).toBe(true);
@@ -64,14 +66,17 @@ test("snapshot reader accepts only the expected minimal provider cache", async (
 });
 
 test("generated bridge stores no account identity or transcript fields", () => {
-  const script = buildPowerShellBridge("antigravity", { antigravity: "C:\\cache.json" }, "C:\\previous.cmd");
-  expect(script).toContain("remaining_fraction");
-  expect(script).not.toContain("state.email");
-  expect(script).not.toContain("transcript_path");
+  for (const script of [
+    buildPowerShellBridge("antigravity", { antigravity: "C:\\cache.json" }, "C:\\previous.cmd"),
+    buildPosixBridge("antigravity", { antigravity: "/tmp/cache.json" }, "/tmp/previous.sh"),
+  ]) {
+    expect(script).toContain("remaining_fraction");
+    expect(script).not.toContain("state.email");
+    expect(script).not.toContain("transcript_path");
+  }
 });
 
 test("Claude and Z.ai share one wrapper instead of chaining into each other", async () => {
-  if (process.platform !== "win32") return;
   const home = await mkdtemp(join(tmpdir(), "llm-quota-shared-"));
   homes.push(home);
   const claudePaths = officialBridgePaths("claude", home);
@@ -84,7 +89,7 @@ test("Claude and Z.ai share one wrapper instead of chaining into each other", as
 
   // The second install must not record the first wrapper as the previous command.
   expect(await readFile(claudePaths.previous, "utf8")).toContain("node old-line.js");
-  expect(await readFile(claudePaths.previous, "utf8")).not.toContain("statusline-bridge.ps1");
+  expect(await readFile(claudePaths.previous, "utf8")).not.toContain("statusline-bridge.");
   expect(await officialBridgeInstalled("claude", home)).toBe(true);
   expect(await officialBridgeInstalled("zai", home)).toBe(true);
 
@@ -106,7 +111,7 @@ test("Claude and Z.ai share one wrapper instead of chaining into each other", as
 // Claude Code hands the same command to a POSIX shell, which eats every
 // backslash of an unquoted path, so the path is spelled with forward slashes.
 test("the generated command uses forward slashes and quotes the path only when it contains a space", async () => {
-  if (process.platform !== "win32") return;
+  if (!windows) return;
   const plain = await mkdtemp(join(tmpdir(), "llm-quota-plain-"));
   homes.push(plain);
   const plainPaths = officialBridgePaths("gemini", plain);
@@ -124,22 +129,67 @@ test("the generated command uses forward slashes and quotes the path only when i
   expect(spacedCommand).toContain(`-File "${spacedPaths.script.replace(/\\/g, "/")}"`);
 });
 
+// A status line runs in whatever environment the host inherited, which routinely
+// misses the shell profile that puts ~/.bun/bin on PATH — so the interpreter is
+// spelled absolutely, and quoted under the same rule as the script path.
+test("the POSIX command runs the resolved Bun executable, not whatever is on PATH", async () => {
+  const plain = await mkdtemp(join(tmpdir(), "llm-quota-posix-"));
+  homes.push(plain);
+  const plainPaths = officialBridgePaths("gemini", plain, "linux");
+  await installOfficialBridge("gemini", plain, "linux");
+  const plainCommand = JSON.parse(await readFile(plainPaths.config, "utf8")).statusLine.command;
+  expect(plainCommand).toBe(`${process.execPath} run ${plainPaths.script}`);
+  expect(await officialBridgeInstalled("gemini", plain)).toBe(true);
+
+  const spaced = await mkdtemp(join(tmpdir(), "llm-quota spaced-"));
+  homes.push(spaced);
+  const spacedPaths = officialBridgePaths("gemini", spaced, "linux");
+  await installOfficialBridge("gemini", spaced, "linux");
+  const spacedCommand = JSON.parse(await readFile(spacedPaths.config, "utf8")).statusLine.command;
+  expect(spacedCommand).toContain(`run "${spacedPaths.script}"`);
+});
+
+// The whole install/uninstall round trip on the non-Windows spelling: a `.mjs`
+// wrapper, an `sh` previous-command file, and a settings file left exactly as it
+// was found.
+test("the POSIX install preserves and restores an existing status line", async () => {
+  const home = await mkdtemp(join(tmpdir(), "llm-quota-posix-roundtrip-"));
+  homes.push(home);
+  const paths = officialBridgePaths("claude", home, "linux");
+  await Bun.write(paths.config, JSON.stringify({
+    statusLine: { type: "command", command: "bash ~/.claude/statusline.sh", padding: 1 },
+  }));
+
+  await installOfficialBridge("claude", home, "linux");
+
+  expect(paths.script).toEndWith("claude-statusline-bridge.mjs");
+  expect(await readFile(paths.previous, "utf8")).toBe("#!/bin/sh\nbash ~/.claude/statusline.sh\n");
+  // The generator embeds paths as JS literals, so a Windows run of this POSIX
+  // simulation sees the escaped spelling rather than the raw one.
+  expect(await readFile(paths.script, "utf8")).toContain(JSON.stringify(paths.cache));
+  expect(await officialBridgeInstalled("claude", home)).toBe(true);
+
+  await removeOfficialBridge("claude", home, "linux");
+  const restored = JSON.parse(await readFile(paths.config, "utf8"));
+  expect(restored.statusLine).toEqual({ type: "command", command: "bash ~/.claude/statusline.sh", padding: 1 });
+  expect(existsSync(paths.script)).toBe(false);
+  expect(existsSync(paths.previous)).toBe(false);
+});
+
 // A forward-slash command must still be recognised as ours, or a reinstall would
 // capture the bridge as the "previous" status line and chain it into itself.
 test("a forward-slash bridge command is still recognised on reinstall", async () => {
-  if (process.platform !== "win32") return;
   const home = await mkdtemp(join(tmpdir(), "llm-quota-slashes-"));
   homes.push(home);
   const paths = officialBridgePaths("claude", home);
   await installOfficialBridge("claude", home);
   await installOfficialBridge("claude", home);
   const previous = existsSync(paths.previous) ? await readFile(paths.previous, "utf8") : "";
-  expect(previous).not.toContain("statusline-bridge.ps1");
+  expect(previous).not.toContain("statusline-bridge.");
   expect(await officialBridgeInstalled("claude", home)).toBe(true);
 });
 
 test("upgrading an older install keeps its restore target", async () => {
-  if (process.platform !== "win32") return;
   const home = await mkdtemp(join(tmpdir(), "llm-quota-upgrade-"));
   homes.push(home);
   const paths = officialBridgePaths("claude", home);
@@ -162,7 +212,6 @@ test("upgrading an older install keeps its restore target", async () => {
 });
 
 test("a pre-existing wrapper command is never captured as the previous status line", async () => {
-  if (process.platform !== "win32") return;
   const home = await mkdtemp(join(tmpdir(), "llm-quota-legacy-"));
   homes.push(home);
   const paths = officialBridgePaths("claude", home);
@@ -180,7 +229,7 @@ test("a pre-existing wrapper command is never captured as the previous status li
 });
 
 test("PowerShell bridge writes a minimal cache and keeps the previous status line visible", async () => {
-  if (process.platform !== "win32") return;
+  if (!windows) return;
   const home = await mkdtemp(join(tmpdir(), "llm-quota-powershell-"));
   homes.push(home);
   const paths = officialBridgePaths("claude", home);
@@ -209,11 +258,73 @@ test("PowerShell bridge writes a minimal cache and keeps the previous status lin
   expect(cache).not.toContain("transcript");
 });
 
+// The same privacy contract as the PowerShell bridge, on the interpreter every
+// other platform uses. Bun runs the generated module on Windows too, so only the
+// /bin/sh chaining below is genuinely POSIX-only.
+test("POSIX bridge writes a minimal cache and prints a UTF-8 summary line", async () => {
+  const home = await mkdtemp(join(tmpdir(), "llm-quota-posix-run-"));
+  homes.push(home);
+  const paths = officialBridgePaths("claude", home, "linux");
+  await Bun.write(paths.script, buildPosixBridge("claude", groupCaches("claude", home), paths.previous));
+
+  const processHandle = Bun.spawn({
+    cmd: [process.execPath, "run", paths.script],
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  // The leading BOM is the one a host is free to prefix; JSON.parse rejects it raw.
+  processHandle.stdin.write("﻿" + JSON.stringify({
+    email: "must-not-be-cached@example.test",
+    transcript_path: "/private/transcript.jsonl",
+    model: { display_name: "Opus" },
+    context_window: { used_percentage: 12 },
+    rate_limits: { five_hour: { used_percentage: 23, resets_at: 1785757199 } },
+  }));
+  processHandle.stdin.end();
+  expect(await processHandle.exited).toBe(0);
+
+  const line = await new Response(processHandle.stdout).text();
+  expect(line).toContain("Opus");
+  expect(line).toContain("5h 23% used");
+  expect(line).toContain("·");
+  expect(line).not.toContain("�");
+
+  const cache = await readFile(paths.cache, "utf8");
+  expect(cache).toContain('"used_percentage":23');
+  expect(cache).not.toContain("must-not-be-cached");
+  expect(cache).not.toContain("transcript");
+});
+
+test("POSIX bridge keeps the previous status line visible", async () => {
+  if (windows) return;
+  const home = await mkdtemp(join(tmpdir(), "llm-quota-posix-chain-"));
+  homes.push(home);
+  const paths = officialBridgePaths("claude", home, "linux");
+  await Bun.write(paths.previous, "#!/bin/sh\necho ORIGINAL-LINE\n");
+  await Bun.write(paths.script, buildPosixBridge("claude", groupCaches("claude", home), paths.previous));
+
+  const processHandle = Bun.spawn({
+    cmd: [process.execPath, "run", paths.script],
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  processHandle.stdin.write(JSON.stringify({
+    rate_limits: { five_hour: { used_percentage: 23 } },
+  }));
+  processHandle.stdin.end();
+  expect(await processHandle.exited).toBe(0);
+  expect(await new Response(processHandle.stdout).text()).toContain("ORIGINAL-LINE");
+  // Chaining must not cost the capture: the cache is written before the handover.
+  expect(await readFile(paths.cache, "utf8")).toContain('"used_percentage":23');
+});
+
 // A captured POSIX status line runs under cmd.exe, which does not expand `~` and
 // resolves `bash` to WSL, whose home holds none of these files. The command fails
 // to stderr, the bridge discards it, and the status line silently goes blank.
 test("a captured POSIX status line is chained through Git Bash, other commands verbatim", async () => {
-  if (process.platform !== "win32") return;
+  if (!windows) return;
   const home = await mkdtemp(join(tmpdir(), "llm-quota-prev-"));
   homes.push(home);
   const paths = officialBridgePaths("claude", home);
@@ -241,7 +352,7 @@ test("a captured POSIX status line is chained through Git Bash, other commands v
 // The wrapper is only useful if cmd.exe, which is what the bridge spawns, can
 // actually run a POSIX command through it.
 test("the generated wrapper runs a POSIX command when cmd.exe executes it", async () => {
-  if (process.platform !== "win32") return;
+  if (!windows) return;
   const home = await mkdtemp(join(tmpdir(), "llm-quota-prevrun-"));
   homes.push(home);
   const script = join(home, "probe.sh");
@@ -270,7 +381,7 @@ test("the generated wrapper runs a POSIX command when cmd.exe executes it", asyn
 // as a leading U+FEFF. ConvertFrom-Json rejects it, and the script used to exit
 // before writing the cache or printing anything at all.
 test("PowerShell bridge parses a payload that arrives with a UTF-8 BOM", async () => {
-  if (process.platform !== "win32") return;
+  if (!windows) return;
   const home = await mkdtemp(join(tmpdir(), "llm-quota-bom-"));
   homes.push(home);
   const paths = officialBridgePaths("claude", home);
@@ -294,7 +405,7 @@ test("PowerShell bridge parses a payload that arrives with a UTF-8 BOM", async (
 // Hosts decode this stdout as UTF-8. Under the default ANSI/OEM console
 // codepage the separator reaches the status line as U+FFFD.
 test("PowerShell bridge emits UTF-8 so the separator survives the host", async () => {
-  if (process.platform !== "win32") return;
+  if (!windows) return;
   const home = await mkdtemp(join(tmpdir(), "llm-quota-encoding-"));
   homes.push(home);
   const paths = officialBridgePaths("claude", home);
@@ -324,7 +435,6 @@ test("PowerShell bridge emits UTF-8 so the separator survives the host", async (
 // live data nobody opted into, and — with no install metadata of its own — offered no
 // way to turn it back off.
 test("enabling one provider does not start capturing its group siblings", async () => {
-  if (process.platform !== "win32") return;
   const home = await mkdtemp(join(tmpdir(), "llm-quota-bridge-"));
   homes.push(home);
   const paths = officialBridgePaths("claude", home);
@@ -344,7 +454,6 @@ test("enabling one provider does not start capturing its group siblings", async 
 // Removing one member leaves the shared script alive for the others. Without rewriting
 // it, the next status-line run recreated the cache file the teardown had just deleted.
 test("removing one provider stops the shared wrapper writing its cache", async () => {
-  if (process.platform !== "win32") return;
   const home = await mkdtemp(join(tmpdir(), "llm-quota-bridge-"));
   homes.push(home);
   const paths = officialBridgePaths("claude", home);
