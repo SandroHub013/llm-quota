@@ -139,6 +139,9 @@ const SOURCE_NAMES: Record<UsageSourceId, string> = {
   nikcli: "NikCLI",
 };
 
+/** Every ledger source, so the shared view filter cannot drift from the scanner. */
+export const USAGE_SOURCE_IDS = Object.keys(SOURCE_NAMES) as UsageSourceId[];
+
 // Public API list prices in USD per million tokens, checked 2026-08-02.
 // Sources: developers.openai.com/api/docs/models, platform.claude.com/docs/en/about-claude/pricing,
 // docs.z.ai/guides/overview/pricing, and platform.kimi.ai/docs/pricing/chat.
