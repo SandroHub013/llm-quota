@@ -50,6 +50,7 @@ describe("CLI summary", () => {
 
   test("uses exit 2 for provider errors and exit 1 for critical quota", () => {
     expect(exitCode(summarize([result({ id: "x", status: "error" })]))).toBe(2);
+    expect(exitCode(summarize([result({ id: "x", status: "partial" })]))).toBe(2);
     expect(exitCode(summarize([result({ id: "x", status: "ok", metrics: [{ label: "q", used: 80, limit: 100 }] })]))).toBe(1);
     expect(exitCode(summarize([result({ id: "x", status: "ok", metrics: [{ label: "q", used: 79, limit: 100 }] })]))).toBe(0);
   });

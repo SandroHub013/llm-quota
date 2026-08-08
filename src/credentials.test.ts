@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { readLlmQuotaConfig } from "./credentials.js";
+import { readLlmQuotaConfig, writeConfigAt } from "./credentials.js";
 
 const dirs: string[] = [];
 afterEach(async () => Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))));
@@ -15,6 +15,24 @@ test("new LLM Quota config path falls back to legacy WebQuota config", async () 
   await Bun.write(legacy, JSON.stringify({ keys: { zai: "legacy-key" } }));
 
   expect(await readLlmQuotaConfig(primary, legacy)).toEqual({ keys: { zai: "legacy-key" } });
+});
+
+test("config writes are serialized, valid, and repair restrictive permissions", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "llm-quota-"));
+  dirs.push(dir);
+  const path = join(dir, "config.json");
+
+  await Promise.all([
+    writeConfigAt(path, { keys: { first: "one" } }),
+    writeConfigAt(path, { keys: { second: "two" } }),
+  ]);
+
+  expect(JSON.parse(await Bun.file(path).text())).toEqual({ keys: { second: "two" } });
+  if (process.platform !== "win32") {
+    await chmod(path, 0o644);
+    await writeConfigAt(path, { keys: { repaired: "yes" } });
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
+  }
 });
 
 // Every provider read goes through `config.keys[id]`, so a file without that field is

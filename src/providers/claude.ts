@@ -87,7 +87,9 @@ export function parseBridgeUsage(snapshot?: OfficialBridgeSnapshot): QuotaMetric
 
 function epochIso(value: unknown): string | undefined {
   const seconds = number(value);
-  return seconds == null ? undefined : new Date(seconds * 1000).toISOString();
+  if (seconds == null) return undefined;
+  const date = new Date(seconds * 1000);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
 }
 
 function number(value: unknown): number | undefined {

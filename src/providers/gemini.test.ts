@@ -53,3 +53,15 @@ test("Antigravity buckets without numeric quota are ignored", () => {
     data: { quota: { future: {} } },
   })).toEqual([]);
 });
+
+test("out-of-range relative reset timestamps do not break the metric", () => {
+  const metrics = parseQuota({
+    version: 1,
+    provider: "antigravity",
+    capturedAt: "2026-08-03T10:00:00Z",
+    data: { quota: { future: { remaining_fraction: 0.5, reset_in_seconds: Number.MAX_VALUE } } },
+  });
+  expect(metrics).toHaveLength(1);
+  expect(metrics[0]).toMatchObject({ label: "Future", used: 50, limit: 100 });
+  expect(metrics[0]!.resetAt).toBeUndefined();
+});
