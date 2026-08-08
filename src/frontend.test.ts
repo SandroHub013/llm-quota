@@ -148,6 +148,18 @@ test("the usage dialog keeps currency, filters and sort out of the markup it reb
   expect(app).toContain('usageBody.addEventListener("change"');
 });
 
+// source/agent are server-side state: the widget has no filter UI, so the view
+// of record lives in the local config and the browser syncs to it on boot and
+// pushes every change, keeping button, dialog and widget on the same figure.
+test("the usage view is shared with the widget through the server", async () => {
+  const [app, api] = await Promise.all([read("public/app.js"), read("public/api.js")]);
+
+  expect(api).toContain('requestJson("/api/usage-view"');
+  expect(app).toContain("syncUsageViewFromServer();");
+  expect(app).toContain("pushUsageViewToServer();");
+  expect(app).toContain("storeUsageView({ source: usageView.source, agent: usageView.agent })");
+});
+
 test("dashboard data refreshes silently and the spend total counts to each new value", async () => {
   const [html, app, github] = await Promise.all([
     read("public/index.html"),
@@ -159,9 +171,11 @@ test("dashboard data refreshes silently and the spend total counts to each new v
   expect(app).toContain("const QUOTA_REFRESH_MS = 60_000");
   expect(app).toContain("const USAGE_REFRESH_MS = 5_000");
   expect(app).toContain('document.addEventListener("visibilitychange"');
-  // The headline still animates to every new total; which figure it animates to
-  // now follows the currency the dialog is set to.
-  expect(app).toContain('animateUsageAmount(usageView.currency === "usd" ? summary.estimatedCostUsd : summary.estimatedCostEur)');
+  // The headline still animates to every new total; button and dialog now read
+  // the same figure, so both follow the active filters, not just the currency.
+  expect(app).toContain("function usageHeadlineTotal(summary)");
+  expect(app).toContain("animateUsageAmount(usageHeadlineTotal(summary))");
+  expect(app).toContain("animateUsageAmount(usageHeadlineTotal(lastUsageSummary))");
   expect(app).toContain("nextSignature === providerSignatures.get(p.id)");
   expect(github).toContain("const CONTRIBUTION_REFRESH_MS = 10 * 60_000");
   expect(github).toContain('data-activity-view="github"');
