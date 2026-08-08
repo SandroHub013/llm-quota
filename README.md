@@ -76,10 +76,10 @@ bun install
 bun start          # → http://localhost:4747
 ```
 
-That is the whole setup. Codex populates through its official app-server. On Windows, the Claude
-and Gemini cards can install the PowerShell **Enable official bridge** once so their official
-clients publish quota to LLM Quota. The bridge installer is currently Windows-only; Codex app-server
-and the local ledger remain available on macOS and Linux.
+That is the whole setup. Codex populates through its official app-server. The Claude and Gemini
+cards each offer **Enable official bridge** once, so their official clients publish quota to LLM
+Quota — on Windows, macOS and Linux alike. One click installs it, one click removes it, and your
+existing status line is preserved either way.
 
 <details>
 <summary>One-liner install</summary>
@@ -99,10 +99,12 @@ git clone https://github.com/SandroHub013/llm-quota.git; cd llm-quota; bun insta
 <summary>Install the CLI globally</summary>
 
 ```bash
-bun add -g github:SandroHub013/llm-quota
+bun add -g llm-quota      # or: npm install -g llm-quota
 llm-quota status
 ```
-Both `llm-quota` and `webquota` are registered as commands.
+Both `llm-quota` and `webquota` are registered as commands. The package still runs on Bun — npm is
+only the delivery channel. To track the branch instead of a release, use
+`bun add -g github:SandroHub013/llm-quota`.
 </details>
 
 <details>
