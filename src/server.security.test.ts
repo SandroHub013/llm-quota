@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { USAGE_SOURCE_IDS } from "./usage.js";
 import { app } from "./server.js";
 
 const at = (url: string, init?: RequestInit) => app.request(url, init);
@@ -62,7 +63,7 @@ test("the usage view endpoint always answers with a normalized view", async () =
   const response = await at("http://localhost:4747/api/usage-view");
   expect(response.status).toBe(200);
   const view = (await response.json()) as { source: string; agent: string };
-  expect(["all", "codex", "claude", "opencode", "kimi"]).toContain(view.source);
+  expect(["all", ...USAGE_SOURCE_IDS]).toContain(view.source);
   expect(["all", "main", "subagent"]).toContain(view.agent);
 });
 
@@ -73,6 +74,17 @@ test("a non-JSON usage-view body is rejected without touching the config", async
     body: "not json",
   });
   expect(response.status).toBe(400);
+});
+
+test("malformed key bodies are rejected instead of deleting a credential", async () => {
+  for (const body of ["not json", "{}", '{"key":null}']) {
+    const response = await at("http://localhost:4747/api/key/claude", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+    expect(response.status).toBe(400);
+  }
 });
 
 test("the dashboard's own origin is still allowed to write", async () => {

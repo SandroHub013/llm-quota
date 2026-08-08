@@ -82,11 +82,14 @@ export function parseQuota(snapshot?: OfficialBridgeSnapshot): QuotaMetric[] {
 }
 
 function resetIso(value: any): string | undefined {
-  if (typeof value?.reset_time === "string" && Number.isFinite(Date.parse(value.reset_time))) {
-    return new Date(value.reset_time).toISOString();
+  if (typeof value?.reset_time === "string") {
+    const date = new Date(value.reset_time);
+    if (Number.isFinite(date.getTime())) return date.toISOString();
   }
   const seconds = number(value?.reset_in_seconds);
-  return seconds == null ? undefined : new Date(Date.now() + seconds * 1000).toISOString();
+  if (seconds == null) return undefined;
+  const date = new Date(Date.now() + seconds * 1000);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
 }
 
 /**

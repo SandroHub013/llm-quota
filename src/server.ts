@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import { getProvider, providers } from "./providers/index.js";
 import type { QuotaResult } from "./providers/types.js";
-import { readConfig, writeConfig } from "./credentials.js";
+import { readConfig, updateConfig } from "./credentials.js";
 import { installOfficialBridge, removeOfficialBridge, type OfficialBridgeProvider } from "./official-bridge.js";
 import { collectUsage } from "./usage.js";
 import { normalizeUsageView, usageFiltersActive, usageHeadlineCosts } from "./usage-view.js";
@@ -24,7 +24,7 @@ const PUBLIC = resolve(dirname(fileURLToPath(import.meta.url)), "..", "public");
  *     it is a "simple request": the browser sends it cross-origin with no preflight
  *     and the side effect lands — a status-line script written and the official
  *     client's settings rewritten. The response is unreadable; the write is not
- *     undone by that. A non-JSON POST to /api/key/:id likewise deletes a stored key.
+ *     undone by that. Credential writes additionally reject malformed JSON bodies.
  *
  * Same-origin browser requests either omit Origin or send this server's own.
  */
@@ -131,8 +131,7 @@ app.put("/api/usage-view", async (context) => {
   const body = await context.req.json<Record<string, unknown>>().catch(() => undefined);
   if (body == null || typeof body !== "object") return context.json({ error: "invalid view" }, 400);
   const view = normalizeUsageView(body);
-  const config = await readConfig();
-  await writeConfig({ ...config, usageView: view });
+  await updateConfig((config) => ({ ...config, usageView: view }));
   return context.json(view, 200, { "Cache-Control": "no-store" });
 });
 
@@ -150,11 +149,20 @@ app.get("/api/quota/:id", async (context) => {
 app.post("/api/key/:id", async (context) => {
   const id = context.req.param("id");
   if (!getProvider(id)) return context.json({ error: "unknown provider" }, 404);
-  const { key } = await context.req.json<{ key?: string }>().catch(() => ({ key: undefined }));
-  const config = await readConfig();
-  if (key?.trim()) config.keys[id] = key.trim();
-  else delete config.keys[id];
-  await writeConfig(config);
+  const body = await context.req.json<unknown>().catch(() => undefined);
+  if (
+    body == null || typeof body !== "object" || Array.isArray(body) ||
+    !Object.hasOwn(body, "key") || typeof (body as { key?: unknown }).key !== "string"
+  ) {
+    return context.json({ error: "invalid key" }, 400);
+  }
+  const key = (body as { key: string }).key.trim();
+  await updateConfig((config) => {
+    const next = { ...config, keys: { ...config.keys } };
+    if (key) next.keys[id] = key;
+    else delete next.keys[id];
+    return next;
+  });
   quotaCache = undefined;
   return context.json(await fetchOne(id));
 });
