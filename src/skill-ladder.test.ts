@@ -3,7 +3,9 @@ import { expect, test } from "bun:test";
 const SKILL = ".agents/skills/llmquota/SKILL.md";
 const LADDER = ".agents/skills/llmquota/references/ladder.json";
 
-const read = (path: string) => Bun.file(path).text();
+// A Windows checkout converts these files to CRLF, so every assertion below
+// reads them with the line endings normalised rather than anchoring on "\n".
+const read = async (path: string) => (await Bun.file(path).text()).replace(/\r\n/g, "\n");
 
 test("the skill declares frontmatter a loader can key on", async () => {
   const text = await read(SKILL);
