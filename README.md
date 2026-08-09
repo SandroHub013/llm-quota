@@ -177,6 +177,8 @@ With the server running:
 ```bash
 bun run cli status            # compact text summary
 bun run cli status --json     # sanitized JSON, safe to paste into a prompt
+bun run cli snapshot --json   # every quota window per provider, and which one binds
+bun run cli usage --json      # measured local spend per model and effort
 bun run cli provider codex    # one provider only
 bun run cli doctor            # health check
 bun run cli stats             # public download counters for the project
@@ -190,6 +192,28 @@ Exit codes make it scriptable — and let an agent decide for itself whether to 
 | `1` | Warning — at least one quota ≤ 20% |
 | `2` | Auth error or provider unreachable |
 | `3` | Server offline or bad arguments |
+
+`status` reports each provider's tightest window, which is the right answer to
+"may I start". `snapshot` reports them all, because the tightest one is the wrong
+answer to everything else: Antigravity splits its plan into separate pools, so a
+drained third-party bucket makes the provider-wide minimum hide a Gemini bucket
+that is full — and full is what a vision job needs to see.
+
+### Admission control
+
+A quota reading is a state check, not permission. Several agents launched in the
+same minute all read the same cached percentage, all clear the 20% floor, and
+together they empty the provider. So an agent takes a slot before it spends and
+returns it after:
+
+```bash
+bun run cli reserve claude    # exit 0 granted, 1 denied
+bun run cli release <id>
+```
+
+Slots follow the binding window — three above 50%, one between 20% and 50%, none
+at or below the floor — and expire after 30 minutes so a crashed job cannot hold
+one forever.
 
 Point it at another host or port with `LLM_QUOTA_URL=http://localhost:8080`.
 
