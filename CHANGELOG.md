@@ -4,6 +4,35 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **Non-GET `/api/*` endpoints now require an inter-process token.** The Origin guard stops
+  cross-origin browser writes, but a non-browser local process simply omits `Origin` and could
+  call `POST /api/key/:id` or `POST /api/official-bridge/:id` — the latter rewrites another
+  client's settings file. The server now shares a random token through a 0600 file next to the
+  credentials (persisted across restarts, so the CLI and the widget never re-pair), injects it
+  into the served page as a meta tag, and compares it with `timingSafeEqual`. GETs stay open:
+  they expose quota data the local user already owns, and the widget polls them without a
+  pairing step.
+- Internal error details (absolute paths, provider-response fragments) no longer reach API
+  clients; they stay in the server log and the client gets a generic message.
+- The served dashboard now carries a `Content-Security-Policy` (`default-src 'self'`, inline
+  styles only) and `X-Content-Type-Options: nosniff`.
+
+### Changed
+
+- `src/usage.ts` (1016 lines) is split into cohesive modules under `src/usage/` — one parser per
+  source, pricing, caching, collection — with the public API unchanged behind a re-export
+  barrel. The seven per-source try/catch blocks in `collectUsage` are now a descriptor array.
+- `writeJsonAtomic` lives in a single shared module; the bridge's direct-write fallback for
+  locked destinations is an explicit, documented option.
+- Every silently swallowed exception in the Windows widget is now logged to a rotating
+  `widget_debug.log` (WARNING by default, routine fetch failures at DEBUG). UI degradation is
+  unchanged.
+- `package.json` gains a `test` script.
+
 ## [0.3.0] — 2026-08-08
 
 ### Added

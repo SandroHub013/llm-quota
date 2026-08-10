@@ -16,6 +16,8 @@ Features:
 import ctypes
 import ctypes.wintypes as wintypes
 import json
+import logging
+from logging.handlers import RotatingFileHandler
 import os
 import queue
 import re
@@ -32,6 +34,18 @@ from math import isfinite, sqrt
 from urllib.parse import parse_qs, urlsplit
 
 DEFAULT_BASE = "http://localhost:4747"
+
+# The widget runs unattended for days and must keep degrading silently in the
+# UI, so every swallowed exception lands here instead of disappearing.
+LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "widget_debug.log")
+
+_log = logging.getLogger("llmquota.widget")
+if not _log.handlers:
+    _log.setLevel(logging.WARNING)
+    _handler = RotatingFileHandler(LOG_FILE, maxBytes=512 * 1024, backupCount=2, encoding="utf-8")
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    _log.addHandler(_handler)
+    _log.propagate = False
 
 
 def normalize_base_url(value):
@@ -165,7 +179,7 @@ def acquire_single_instance(wake_callback=None):
                         if b"WAKE" in data:
                             wake_callback()
             except OSError:
-                pass
+                _log.warning("wake listener stopped", exc_info=True)
 
         t = threading.Thread(target=_listen, daemon=True)
         t.start()
@@ -383,7 +397,7 @@ def send_win_notification(title, message):
             subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=0x08000000)
         except Exception:
-            pass
+            _log.warning("failed to send Windows notification", exc_info=True)
     threading.Thread(target=_send, daemon=True).start()
 
 
@@ -540,6 +554,8 @@ def fetch_usage_cost():
             return None
         return value, bool(data.get("usageFiltered"))
     except Exception:
+        # Routine while the local server is down; the UI already shows offline.
+        _log.debug("usage cost fetch failed", exc_info=True)
         return None
 
 
@@ -548,6 +564,8 @@ def fetch_all():
     try:
         providers = get_json("/api/quota", timeout=40)["providers"]
     except Exception:
+        # Routine while the local server is down; the UI already shows offline.
+        _log.debug("quota fetch failed", exc_info=True)
         return None
     try:
         out = []
@@ -612,6 +630,7 @@ def fetch_all():
             })
         return out
     except Exception:
+        _log.exception("failed to parse /api/quota payload")
         return None
 
 
@@ -734,7 +753,7 @@ class Widget(tk.Tk):
                 callback()
             except Exception:
                 # A callback can race with a window close; the next poll must live.
-                pass
+                _log.exception("UI callback failed")
         if not self._closing:
             self._ui_queue_job = self.after(50, self._drain_ui_queue)
 
@@ -811,7 +830,7 @@ class Widget(tk.Tk):
             if self.last_data:
                 self._render(self.last_data)
         except Exception:
-            pass
+            _log.exception("failed to set provider icon")
 
     def _fade(self, a):
         a = min(SURFACE_OPACITY, a + 0.08)
@@ -978,6 +997,7 @@ class Widget(tk.Tk):
         try:
             data = fetch_all()
         except Exception:
+            _log.exception("unexpected error in quota worker")
             data = None
         self._queue_ui(lambda: self._finish_load(data))
 
@@ -1020,6 +1040,7 @@ class Widget(tk.Tk):
         try:
             result = fetch_usage_cost()
         except Exception:
+            _log.exception("unexpected error in usage worker")
             result = None
         self._queue_ui(lambda: self._finish_usage(result))
 

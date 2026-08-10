@@ -1,4 +1,5 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
+import { timingSafeEqual } from "node:crypto";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
@@ -6,12 +7,37 @@ import { getProvider, providers } from "./providers/index.js";
 import type { QuotaResult } from "./providers/types.js";
 import { readConfig, updateConfig } from "./credentials.js";
 import { installOfficialBridge, removeOfficialBridge, type OfficialBridgeProvider } from "./official-bridge.js";
+import { loadServerToken } from "./server-token.js";
 import { collectUsage } from "./usage.js";
 import { normalizeUsageView, usageFiltersActive, usageHeadlineCosts } from "./usage-view.js";
 import { collectGitHubContributions } from "./github-contributions.prototype.js";
 
 const app = new Hono();
 const PUBLIC = resolve(dirname(fileURLToPath(import.meta.url)), "..", "public");
+
+let testToken: string | undefined;
+let tokenPromise: Promise<string> | undefined;
+
+/** Tests pin the token so authorized requests need no real credential directory. */
+export function setServerTokenForTests(token: string): void {
+  testToken = token;
+}
+
+function serverToken(): Promise<string> {
+  if (testToken) return Promise.resolve(testToken);
+  tokenPromise ??= loadServerToken();
+  return tokenPromise;
+}
+
+/**
+ * A local API client is still any process on this machine, so internal error
+ * details (absolute paths, settings fragments) stay in the server log and the
+ * client only gets a generic message.
+ */
+export function internalError(context: Context, error: unknown): Response {
+  console.error("[llm-quota] internal error:", error);
+  return context.json({ error: "internal error" }, 500);
+}
 
 /**
  * The server binds to loopback, which stops other machines but not other pages on
@@ -37,6 +63,8 @@ function hostAllowed(host: string): boolean {
 }
 
 app.use("*", async (context, next) => {
+  context.header("X-Content-Type-Options", "nosniff");
+
   // Bun builds request.url from the Host header, so the two agree over real HTTP; the
   // URL is the one that is always populated (HTTP/2 carries :authority instead).
   const host = context.req.header("host") || new URL(context.req.url).host;
@@ -53,6 +81,22 @@ app.use("*", async (context, next) => {
     })();
     if (!allowed) return context.json({ error: "cross-origin request refused" }, 403);
   }
+
+  // Non-GET /api calls mutate local state (provider keys, official-client settings),
+  // and a non-browser process just omits Origin, which the check above treats as
+  // same-origin. The token — shared through a 0600 file only this user's processes
+  // can read — is what authenticates them. GETs stay open: they expose quota data
+  // the local user already owns, and the widget polls them without a pairing step.
+  if (
+    context.req.method !== "GET" && context.req.method !== "HEAD" &&
+    context.req.path.startsWith("/api/")
+  ) {
+    const presented = Buffer.from(context.req.header("x-llm-quota-token") ?? "");
+    const expected = Buffer.from(await serverToken());
+    if (presented.length !== expected.length || !timingSafeEqual(presented, expected)) {
+      return context.json({ error: "unauthorized" }, 401);
+    }
+  }
   await next();
 });
 
@@ -62,13 +106,16 @@ async function fetchOne(id: string): Promise<QuotaResult> {
   try {
     return await provider.fetch({ userKey: config.keys[id] });
   } catch (error: any) {
+    // The card only needs to show failure; the underlying error can carry absolute
+    // paths or provider-response fragments, so the detail stays in the server log.
+    console.error(`[llm-quota] quota fetch failed for ${provider.id}:`, error);
     return {
       id: provider.id,
       name: provider.name,
       status: "error",
       consoleUrl: provider.consoleUrl,
       metrics: [],
-      message: `Internal error: ${String(error?.message ?? error)}`,
+      message: "Internal error",
       updatedAt: new Date().toISOString(),
     };
   }
@@ -181,7 +228,7 @@ app.post("/api/official-bridge/:id", async (context) => {
     quotaCache = undefined;
     return context.json(await fetchOne(id), 200, { "Cache-Control": "no-store" });
   } catch (error: any) {
-    return context.json({ error: String(error?.message ?? error) }, 500);
+    return internalError(context, error);
   }
 });
 
@@ -197,7 +244,7 @@ app.delete("/api/official-bridge/:id", async (context) => {
     quotaCache = undefined;
     return context.json(await fetchOne(id), 200, { "Cache-Control": "no-store" });
   } catch (error: any) {
-    return context.json({ error: String(error?.message ?? error) }, 500);
+    return internalError(context, error);
   }
 });
 
@@ -210,9 +257,16 @@ const MIME: Record<string, string> = {
   ".webp": "image/webp",
 };
 
+// The served page carries the inter-process token in a meta tag so its own writes
+// back to this server authenticate; the CSP keeps an injected payload from reading
+// it out to anywhere but this origin. The dashboard uses inline styles only, so
+// style-src keeps 'unsafe-inline' while scripts stay strictly self-hosted.
 app.get("/", async (context) => {
-  const html = await readFile(join(PUBLIC, "index.html"), "utf8");
-  return context.html(html);
+  const html = (await readFile(join(PUBLIC, "index.html"), "utf8"))
+    .replace("__LLM_QUOTA_TOKEN__", await serverToken());
+  return context.html(html, 200, {
+    "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:",
+  });
 });
 
 app.get("/:a{.+}", async (context) => {

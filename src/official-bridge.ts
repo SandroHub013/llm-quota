@@ -1,7 +1,8 @@
 import { constants, existsSync } from "node:fs";
-import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { writeJsonAtomic } from "./atomic-write.js";
 import { readJson } from "./credentials.js";
 
 export type OfficialBridgeProvider = "claude" | "gemini" | "zai";
@@ -146,7 +147,10 @@ export async function installOfficialBridge(
       originalStatusLine: current,
       capturedAt: new Date().toISOString(),
     };
-    await writeJsonAtomic(paths.origin, origin);
+    // Bridge targets sit in the official client's own directory, where a locked
+    // destination can make the atomic rename fail; a direct write beats losing
+    // the update there (see src/atomic-write.ts).
+    await writeJsonAtomic(paths.origin, origin, { fallbackToDirectWrite: true });
   }
 
   const metadata: BridgeMetadata = {
@@ -155,7 +159,7 @@ export async function installOfficialBridge(
     configPath: paths.config,
     installedAt: new Date().toISOString(),
   };
-  await writeJsonAtomic(paths.metadata, metadata);
+  await writeJsonAtomic(paths.metadata, metadata, { fallbackToDirectWrite: true });
 
   await writeFile(
     paths.script,
@@ -168,7 +172,7 @@ export async function installOfficialBridge(
     "utf8",
   );
   settings.statusLine = { ...(current ?? {}), type: "command", command };
-  await writeJsonAtomic(paths.config, settings);
+  await writeJsonAtomic(paths.config, settings, { fallbackToDirectWrite: true });
   return { installed: true, configPath: paths.config };
 }
 
@@ -208,7 +212,7 @@ export async function removeOfficialBridge(
     : undefined;
   if (restored !== undefined) settings.statusLine = restored;
   else delete settings.statusLine;
-  await writeJsonAtomic(paths.config, settings);
+  await writeJsonAtomic(paths.config, settings, { fallbackToDirectWrite: true });
   await Promise.all([
     rm(paths.script, { force: true }),
     rm(paths.previous, { force: true }),
@@ -239,7 +243,7 @@ async function migrateLegacyOrigin(
       hadStatusLine: legacy.hadStatusLine,
       originalStatusLine: legacy.originalStatusLine,
       capturedAt: legacy.installedAt ?? new Date().toISOString(),
-    } satisfies BridgeOrigin);
+    } satisfies BridgeOrigin, { fallbackToDirectWrite: true });
     return;
   }
 }
@@ -583,16 +587,6 @@ async function readSettings(path: string): Promise<Record<string, any>> {
   } catch {
     throw new Error(`invalid_settings_json: ${path}`);
   }
-}
-
-async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
-  const temporary = `${path}.${crypto.randomUUID()}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(temporary, path).catch(async () => {
-    await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-    await rm(temporary, { force: true });
-  });
 }
 
 function stripBom(text: string): string {

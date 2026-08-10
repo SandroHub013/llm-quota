@@ -1,9 +1,9 @@
-import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { readFile } from "node:fs/promises";
 
 import { existsSync } from "node:fs";
+import { writeJsonAtomic } from "./atomic-write.js";
 
 /** Safely read + parse a JSON file. Returns undefined on any failure. */
 export async function readJson<T = any>(path: string): Promise<T | undefined> {
@@ -13,27 +13,6 @@ export async function readJson<T = any>(path: string): Promise<T | undefined> {
     return JSON.parse(content) as T;
   } catch {
     return undefined;
-  }
-}
-
-/**
- * Write a config atomically and repair its permissions on every update. A temp file
- * in the same directory makes a crash leave either the old JSON or the new JSON,
- * never a truncated credential file.
- */
-async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
-  const directory = dirname(path);
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  await chmod(directory, 0o700).catch(() => {});
-  const temporary = `${path}.${randomUUID()}.tmp`;
-  try {
-    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-    await chmod(temporary, 0o600).catch(() => {});
-    await rename(temporary, path);
-    // chmod is required because `mode` is ignored when a destination already exists.
-    await chmod(path, 0o600).catch(() => {});
-  } finally {
-    await rm(temporary, { force: true }).catch(() => {});
   }
 }
 

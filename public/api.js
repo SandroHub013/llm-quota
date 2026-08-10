@@ -1,4 +1,14 @@
+// Non-GET /api calls require the inter-process token the server injects into the
+// page it serves; the 0600 token file keeps other local processes from writing.
+const SERVER_TOKEN = typeof document !== "undefined"
+  ? document.querySelector('meta[name="llm-quota-token"]')?.content ?? ""
+  : "";
+
 export async function requestJson(path, options, request = fetch) {
+  const method = (options?.method ?? "GET").toUpperCase();
+  if (SERVER_TOKEN && method !== "GET" && method !== "HEAD") {
+    options = { ...options, headers: { ...options?.headers, "X-LLM-Quota-Token": SERVER_TOKEN } };
+  }
   const response = await request(path, options);
   if (!response.ok) throw new Error(`http_${response.status}`);
   try {
