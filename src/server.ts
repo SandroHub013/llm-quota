@@ -48,6 +48,8 @@ app.use("*", async (context, next) => {
       try {
         return hostAllowed(new URL(origin).host);
       } catch {
+        // Deliberate: an Origin this parser rejects is not one of ours, and the
+        // safe reading of an unparseable origin on a write is "refuse".
         return false;
       }
     })();
@@ -257,6 +259,9 @@ app.get("/:a{.+}", async (context) => {
 
   const file = resolve(PUBLIC, relative);
   if (file !== PUBLIC && !file.startsWith(PUBLIC + sep)) return context.notFound();
+  // Deliberate: this route only serves files shipped inside public/. Any read
+  // failure here — absent, unreadable, a directory — is a 404 to the browser, and
+  // reporting which one would describe the server's own layout to the page.
   const body = await readFile(file).catch(() => null);
   if (!body) return context.notFound();
 
