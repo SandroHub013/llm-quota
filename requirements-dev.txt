@@ -6,5 +6,5 @@
 #   uv run --with playwright --with pillow --with pillow-avif-plugin \
 #     python scripts/capture_previews.py
 playwright>=1.56.0
-pillow>=11.4.0
+pillow>=12.3.0
 pillow-avif-plugin>=1.5.4
