@@ -1,4 +1,6 @@
+import contextlib
 import inspect
+import io
 import os
 import queue
 import unittest
@@ -395,6 +397,88 @@ class PollingTest(unittest.TestCase):
         fake._update_live_status.assert_called_once_with()
         self.assertIs(fake.last_data, data)
         self.assertTrue(fake._quota_online)
+
+
+class SwallowedErrorReportingTest(unittest.TestCase):
+    """The widget survives every one of these, but must not survive them silently.
+
+    Each test asserts both halves of the contract: the fallback the UI depends on,
+    and the explanation on stderr. Remove the `log_handled` call the test covers and
+    the second assertion fails.
+    """
+
+    def _stderr(self, call):
+        captured = io.StringIO()
+        with contextlib.redirect_stderr(captured):
+            result = call()
+        return result, captured.getvalue()
+
+    @patch("widget.get_json", side_effect=OSError("[Errno 111] Connection refused"))
+    def test_an_unreachable_server_is_reported_not_just_absorbed(self, _get_json):
+        result, logged = self._stderr(widget.fetch_all)
+
+        self.assertIsNone(result)
+        self.assertIn("could not read the quota", logged)
+        self.assertIn("Connection refused", logged)
+
+    @patch("widget.get_json", side_effect=OSError("timed out"))
+    def test_an_unreachable_server_is_reported_for_the_spend_poll_too(self, _get_json):
+        result, logged = self._stderr(widget.fetch_usage_cost)
+
+        self.assertIsNone(result)
+        self.assertIn("could not read the local spend total", logged)
+        self.assertIn("timed out", logged)
+
+    @patch("widget.get_json", return_value={"providers": [{"id": "broken"}]})
+    def test_a_malformed_payload_says_it_was_the_shape_not_the_network(self, _get_json):
+        result, logged = self._stderr(widget.fetch_all)
+
+        self.assertIsNone(result)
+        self.assertIn("expected shape", logged)
+
+    @patch("widget.get_json", return_value={"providers": {"not": "a list"}})
+    def test_a_provider_list_that_is_not_a_list_is_reported(self, _get_json):
+        result, logged = self._stderr(widget.fetch_all)
+
+        self.assertIsNone(result)
+        self.assertIn("llm-quota widget:", logged)
+
+    def test_log_handled_names_the_context_and_the_exception_type(self):
+        _, logged = self._stderr(lambda: widget.log_handled("doing a thing", ValueError("bad input")))
+
+        self.assertIn("doing a thing", logged)
+        self.assertIn("ValueError", logged)
+        self.assertIn("bad input", logged)
+
+
+class SpendBoundaryTest(unittest.TestCase):
+    """Boundary values for the headline spend, which the widget renders as currency."""
+
+    @patch("widget.get_json", return_value={"estimatedCostEur": 0})
+    def test_zero_spend_is_data_and_must_survive_the_guard(self, _get_json):
+        # A day with no calls really does cost nothing; collapsing that to None would
+        # show "€ …" forever on a machine that simply has not been used yet.
+        self.assertEqual(widget.fetch_usage_cost(), (0.0, False))
+
+    @patch("widget.get_json", return_value={"estimatedCostEur": -1})
+    def test_a_negative_spend_is_rejected(self, _get_json):
+        self.assertIsNone(widget.fetch_usage_cost())
+
+    @patch("widget.get_json", return_value={"estimatedCostEur": float("inf")})
+    def test_a_non_finite_spend_is_rejected(self, _get_json):
+        self.assertIsNone(widget.fetch_usage_cost())
+
+    @patch("widget.get_json", return_value={"estimatedCostEur": None})
+    def test_a_null_spend_is_rejected(self, _get_json):
+        self.assertIsNone(widget.fetch_usage_cost())
+
+    @patch("widget.get_json", return_value={})
+    def test_a_response_with_no_cost_field_at_all_is_rejected(self, _get_json):
+        self.assertIsNone(widget.fetch_usage_cost())
+
+    @patch("widget.get_json", return_value={"headlineCostEur": None, "estimatedCostEur": 5.5})
+    def test_a_null_headline_falls_back_to_the_grand_total(self, _get_json):
+        self.assertEqual(widget.fetch_usage_cost(), (5.5, False))
 
 
 if __name__ == "__main__":

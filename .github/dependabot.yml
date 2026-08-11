@@ -1,0 +1,53 @@
+version: 2
+
+updates:
+  # npm — one runtime dependency (hono) and the TypeScript toolchain.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:00'
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      # Minor and patch bumps land as one reviewable PR per week; a major stays on
+      # its own, because that is the one that needs a human to read the changelog.
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # pip — requirements-dev.txt: the preview-capture tooling only.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:00'
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # The workflows pin actions by major tag; this keeps those pins current too.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:00'
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        update-types:
+          - minor
+          - patch

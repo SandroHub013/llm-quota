@@ -100,6 +100,15 @@ export async function readOfficialBridgeSnapshot(
   return snapshot;
 }
 
+/**
+ * Whether this provider's status-line wrapper is currently installed.
+ *
+ * A settings file that cannot be parsed is not an answer of "no". It used to be:
+ * the failure was swallowed into `undefined`, the card decided the bridge was off,
+ * and the teardown button disappeared — leaving a user whose settings.json had a
+ * typo with an installed wrapper and no way to remove it from the dashboard. The
+ * error propagates, so the card states which file to repair instead.
+ */
 export async function officialBridgeInstalled(
   provider: OfficialBridgeProvider,
   home = homedir(),
@@ -107,8 +116,8 @@ export async function officialBridgeInstalled(
   const paths = officialBridgePaths(provider, home);
   const metadata = await readJson<BridgeMetadata>(paths.metadata);
   if (metadata?.version !== 1 || metadata.provider !== provider) return false;
-  const settings = await readSettings(paths.config).catch(() => undefined);
-  return isOwnBridgeCommand(commandOf(settings?.statusLine), paths.root);
+  const settings = await readSettings(paths.config);
+  return isOwnBridgeCommand(commandOf(settings.statusLine), paths.root);
 }
 
 /** Install an opt-in status-line wrapper while preserving the user's current command. */
@@ -462,7 +471,7 @@ $previousCommand = ${psLiteral(previousCommandPath)}
 if (Test-Path -LiteralPath $previousCommand) {
   try {
     $shell = if ($env:ComSpec) { $env:ComSpec } else { 'cmd.exe' }
-    $previousOutput = $payload | & $shell /d /s /c "\"$previousCommand\"" 2>$null
+    $previousOutput = $payload | & $shell /d /s /c ""$previousCommand"" 2>$null
     if ($null -ne $previousOutput) { $previousOutput | ForEach-Object { Write-Output $_ } }
   } catch {}
   exit 0
@@ -576,13 +585,20 @@ function commandOf(statusLine: unknown): string {
 async function readSettings(path: string): Promise<Record<string, any>> {
   if (!existsSync(path)) return {};
   const text = stripBom(await readFile(path, "utf8"));
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(text);
-    if (!isRecord(parsed)) throw new Error("settings_not_object");
-    return parsed;
-  } catch {
-    throw new Error(`invalid_settings_json: ${path}`);
+    parsed = JSON.parse(text);
+  } catch (error) {
+    // The parser's complaint names the offending line and column, which is the only
+    // part of this that helps a user repair the file by hand.
+    throw new Error(`invalid_settings_json: ${path}`, { cause: error });
   }
+  if (!isRecord(parsed)) {
+    throw new Error(`invalid_settings_json: ${path}`, {
+      cause: new Error(`expected a JSON object, found ${Array.isArray(parsed) ? "an array" : typeof parsed}`),
+    });
+  }
+  return parsed;
 }
 
 async function writeJsonAtomic(path: string, value: unknown): Promise<void> {

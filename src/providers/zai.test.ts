@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseZaiBridgeUsage, zai } from "./zai.js";
+import { parseZaiBridgeUsage } from "./zai.js";
 
 test("official Z.ai status-line quota maps remaining fractions and resets", () => {
   const metrics = parseZaiBridgeUsage({

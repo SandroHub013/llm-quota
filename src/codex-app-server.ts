@@ -59,6 +59,10 @@ export function readCodexRateLimits(timeoutMs = 8_000): Promise<CodexAppServerRe
       try {
         message = JSON.parse(line);
       } catch {
+        // Deliberate: the protocol is JSON-RPC over stdout, but Codex is free to
+        // print banners, upgrade notices and progress there too. A line that is
+        // not JSON is not addressed to us. The request still fails loudly through
+        // the timeout if the reply never arrives.
         return;
       }
 
