@@ -1,10 +1,10 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import { getProvider, providers } from "./providers/index.js";
 import type { QuotaResult } from "./providers/types.js";
-import { readConfig, updateConfig } from "./credentials.js";
+import { JsonFileUnreadableError, readConfig, updateConfig } from "./credentials.js";
 import { installOfficialBridge, removeOfficialBridge, type OfficialBridgeProvider } from "./official-bridge.js";
 import { collectUsage } from "./usage.js";
 import { normalizeUsageView, usageFiltersActive, usageHeadlineCosts } from "./usage-view.js";
@@ -55,6 +55,28 @@ app.use("*", async (context, next) => {
   }
   await next();
 });
+
+/**
+ * A config file that exists but cannot be parsed stops every write: overwriting it
+ * would silently drop the API keys it still holds. 409 rather than 500 — nothing is
+ * broken here, the request simply conflicts with what is on disk, and only the user
+ * can decide whether to repair the file or delete it.
+ *
+ * Returns undefined for anything else, so an unrelated failure keeps propagating
+ * instead of being relabelled as a config problem.
+ */
+export function configConflictBody(error: unknown): { error: string; detail: string } | undefined {
+  if (!(error instanceof JsonFileUnreadableError)) return undefined;
+  return {
+    error: "config unreadable",
+    detail: `${error.path} exists but is not valid JSON. Repair or delete it; the stored keys were left untouched.`,
+  };
+}
+
+function configConflict(context: Context, error: unknown): Response | undefined {
+  const body = configConflictBody(error);
+  return body ? context.json(body, 409) : undefined;
+}
 
 async function fetchOne(id: string): Promise<QuotaResult> {
   const provider = getProvider(id)!;
@@ -131,7 +153,13 @@ app.put("/api/usage-view", async (context) => {
   const body = await context.req.json<Record<string, unknown>>().catch(() => undefined);
   if (body == null || typeof body !== "object") return context.json({ error: "invalid view" }, 400);
   const view = normalizeUsageView(body);
-  await updateConfig((config) => ({ ...config, usageView: view }));
+  try {
+    await updateConfig((config) => ({ ...config, usageView: view }));
+  } catch (error) {
+    const conflict = configConflict(context, error);
+    if (conflict) return conflict;
+    throw error;
+  }
   return context.json(view, 200, { "Cache-Control": "no-store" });
 });
 
@@ -157,12 +185,18 @@ app.post("/api/key/:id", async (context) => {
     return context.json({ error: "invalid key" }, 400);
   }
   const key = (body as { key: string }).key.trim();
-  await updateConfig((config) => {
-    const next = { ...config, keys: { ...config.keys } };
-    if (key) next.keys[id] = key;
-    else delete next.keys[id];
-    return next;
-  });
+  try {
+    await updateConfig((config) => {
+      const next = { ...config, keys: { ...config.keys } };
+      if (key) next.keys[id] = key;
+      else delete next.keys[id];
+      return next;
+    });
+  } catch (error) {
+    const conflict = configConflict(context, error);
+    if (conflict) return conflict;
+    throw error;
+  }
   quotaCache = undefined;
   return context.json(await fetchOne(id));
 });
