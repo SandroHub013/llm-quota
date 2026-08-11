@@ -105,7 +105,7 @@ test("a refused update leaves the write queue usable", async () => {
   const healthy = join(dir, "healthy.json");
   await writeFile(corrupt, CORRUPT);
 
-  await expect(updateConfig((config) => config, corrupt)).rejects.toBeInstanceOf(JsonFileUnreadableError);
+  expect(updateConfig((config) => config, corrupt)).rejects.toBeInstanceOf(JsonFileUnreadableError);
   const next = await updateConfig((config) => ({ ...config, keys: { gemini: "g" } }), healthy);
 
   expect(next.keys).toEqual({ gemini: "g" });

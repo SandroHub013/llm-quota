@@ -471,7 +471,7 @@ $previousCommand = ${psLiteral(previousCommandPath)}
 if (Test-Path -LiteralPath $previousCommand) {
   try {
     $shell = if ($env:ComSpec) { $env:ComSpec } else { 'cmd.exe' }
-    $previousOutput = $payload | & $shell /d /s /c "\"$previousCommand\"" 2>$null
+    $previousOutput = $payload | & $shell /d /s /c ""$previousCommand"" 2>$null
     if ($null -ne $previousOutput) { $previousOutput | ForEach-Object { Write-Output $_ } }
   } catch {}
   exit 0

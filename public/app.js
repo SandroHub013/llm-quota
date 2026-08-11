@@ -1,4 +1,4 @@
-import { installOfficialBridge, loadProvider, loadQuota, loadUsage, loadUsageView, removeOfficialBridge, saveProviderKey, storeUsageView } from "./api.js";
+import { installOfficialBridge, loadQuota, loadUsage, loadUsageView, removeOfficialBridge, saveProviderKey, storeUsageView } from "./api.js";
 import { dataSignature, escapeHtml } from "./ui.js";
 import { mountGitHubContributionPrototype } from "./github-contributions.prototype.js";
 
@@ -611,7 +611,6 @@ function metricHtml(m, index) {
 
 function cardHtml(p) {
   const st = Object.hasOwn(STATUS_LABEL, p.status) ? p.status : "error";
-  const b = brand(p.id);
   const id = escapeHtml(p.id);
   const metrics = (p.metrics || []).map(metricHtml).join("");
   const models = (MODELS[p.id] || [])
@@ -942,14 +941,6 @@ async function loadAll() {
     }
   })();
   return quotaLoad;
-}
-
-async function refreshOne(id) {
-  try {
-    if (render(await loadProvider(id))) drawHorizon();
-  } catch (error) {
-    showError(id, error);
-  }
 }
 
 async function saveKey(id) {
