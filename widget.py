@@ -34,6 +34,17 @@ from urllib.parse import parse_qs, urlsplit
 DEFAULT_BASE = "http://localhost:4747"
 
 
+
+def log_handled(context, error):
+    """Report a failure the widget deliberately survives.
+
+    The widget has no status bar for this, and a `pass` that eats an exception on a
+    5-second poll turns a broken server, a bad payload and a closed window into the
+    same blank panel. stderr is where a user who started widget.pyw from a console
+    or is reading its log can actually find the reason.
+    """
+    print(f"llm-quota widget: {context}: {type(error).__name__}: {error}", file=sys.stderr)
+
 def normalize_base_url(value):
     """Return a safe server base URL, falling back to the local default."""
     candidate = str(value or "").strip().rstrip("/")
@@ -164,8 +175,12 @@ def acquire_single_instance(wake_callback=None):
                             conn.close()
                         if b"WAKE" in data:
                             wake_callback()
-            except OSError:
-                pass
+            except OSError as error:
+                # The wake listener is optional: losing it only means a second launch
+                # cannot raise the running widget, which stays alive either way. Worth
+                # reporting, because from the outside it looks like the widget ignores
+                # being started twice.
+                log_handled("wake listener stopped; a second launch cannot raise this window", error)
 
         t = threading.Thread(target=_listen, daemon=True)
         t.start()
@@ -382,8 +397,10 @@ def send_win_notification(title, message):
             """
             subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=0x08000000)
-        except Exception:
-            pass
+        except OSError as error:
+            # A missing or restricted PowerShell costs the toast, never the widget:
+            # this runs on a daemon thread and the quota is on screen regardless.
+            log_handled("could not show a Windows notification", error)
     threading.Thread(target=_send, daemon=True).start()
 
 
@@ -539,7 +556,11 @@ def fetch_usage_cost():
         if not isfinite(value) or value < 0:
             return None
         return value, bool(data.get("usageFiltered"))
-    except Exception:
+    except (AttributeError, KeyError, OSError, TypeError, ValueError) as error:
+        # None means "no new figure", and the caller keeps the last good value on
+        # screen with a `stale` marker rather than blanking it. Narrowed from a bare
+        # Exception so a genuine bug in this function is not filed as "server down".
+        log_handled("could not read the local spend total", error)
         return None
 
 
@@ -547,7 +568,9 @@ def fetch_all():
     """Return [{id, name, status, remaining, reset_str, details_str}]"""
     try:
         providers = get_json("/api/quota", timeout=40)["providers"]
-    except Exception:
+    except (AttributeError, KeyError, OSError, TypeError, ValueError) as error:
+        # Same contract: the caller shows STALE and keeps the previous quota.
+        log_handled("could not read the quota from the server", error)
         return None
     try:
         out = []
@@ -611,7 +634,10 @@ def fetch_all():
                 "details_str": details_str,
             })
         return out
-    except Exception:
+    except (AttributeError, KeyError, TypeError, ValueError) as error:
+        # A payload shaped differently from what this widget expects is a real defect
+        # somewhere, so it must not read as a plain network hiccup.
+        log_handled("the quota payload did not have the expected shape", error)
         return None
 
 
@@ -732,9 +758,9 @@ class Widget(tk.Tk):
                 break
             try:
                 callback()
-            except Exception:
+            except Exception as error:
                 # A callback can race with a window close; the next poll must live.
-                pass
+                log_handled("a queued UI update failed", error)
         if not self._closing:
             self._ui_queue_job = self.after(50, self._drain_ui_queue)
 
@@ -810,8 +836,10 @@ class Widget(tk.Tk):
             self.icons[pid] = img
             if self.last_data:
                 self._render(self.last_data)
-        except Exception:
-            pass
+        except (tk.TclError, OSError, ValueError) as error:
+            # Deliberate: a logo that will not decode falls back to the deterministic
+            # initials already drawn for it, so the row stays complete either way.
+            log_handled(f"could not load the {pid} logo; keeping its initials", error)
 
     def _fade(self, a):
         a = min(SURFACE_OPACITY, a + 0.08)
@@ -977,7 +1005,10 @@ class Widget(tk.Tk):
     def _load(self):
         try:
             data = fetch_all()
-        except Exception:
+        except Exception as error:
+            # Last line of defence on a daemon thread: an exception escaping here would
+            # kill the refresh loop for the rest of the session, so nothing gets past it.
+            log_handled("the quota refresh thread failed", error)
             data = None
         self._queue_ui(lambda: self._finish_load(data))
 
@@ -1019,7 +1050,9 @@ class Widget(tk.Tk):
     def _load_usage(self):
         try:
             result = fetch_usage_cost()
-        except Exception:
+        except Exception as error:
+            # As above: the spend poll must survive anything fetch_usage_cost did not.
+            log_handled("the spend refresh thread failed", error)
             result = None
         self._queue_ui(lambda: self._finish_usage(result))
 

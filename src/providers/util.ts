@@ -13,6 +13,9 @@ export async function fetchJson(
     try {
       body = JSON.parse(text);
     } catch {
+      // Deliberate: provider errors routinely arrive as an HTML page or a plain
+      // string. `text` is returned alongside, so a caller that wants the reason
+      // still has it verbatim — nothing is actually lost here.
       body = undefined;
     }
     return { ok: res.ok, status: res.status, body, text };
