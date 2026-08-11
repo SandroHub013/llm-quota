@@ -59,7 +59,7 @@ test("provider logos are local files with no external references", async () => {
     read("docs/index.html"),
   ]);
 
-  for (const [id, file] of Object.entries(logos)) {
+  for (const file of Object.values(logos)) {
     expect(app).toContain(`"/logos/${file}"`);
     const asset = Bun.file(`public/logos/${file}`);
     expect(await asset.exists()).toBe(true);

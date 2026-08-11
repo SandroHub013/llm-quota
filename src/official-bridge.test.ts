@@ -242,13 +242,13 @@ test("PowerShell bridge writes a minimal cache and keeps the previous status lin
     stdout: "pipe",
     stderr: "pipe",
   });
-  processHandle.stdin.write(JSON.stringify({
+  await processHandle.stdin.write(JSON.stringify({
     email: "must-not-be-cached@example.test",
     transcript_path: "C:\\private\\transcript.jsonl",
     model: { display_name: "Opus" },
     rate_limits: { five_hour: { used_percentage: 23, resets_at: 1785757199 } },
   }));
-  processHandle.stdin.end();
+  await processHandle.stdin.end();
   expect(await processHandle.exited).toBe(0);
   expect(await new Response(processHandle.stdout).text()).toContain("ORIGINAL-LINE");
 
@@ -274,14 +274,14 @@ test("POSIX bridge writes a minimal cache and prints a UTF-8 summary line", asyn
     stderr: "pipe",
   });
   // The leading BOM is the one a host is free to prefix; JSON.parse rejects it raw.
-  processHandle.stdin.write("﻿" + JSON.stringify({
+  await processHandle.stdin.write("﻿" + JSON.stringify({
     email: "must-not-be-cached@example.test",
     transcript_path: "/private/transcript.jsonl",
     model: { display_name: "Opus" },
     context_window: { used_percentage: 12 },
     rate_limits: { five_hour: { used_percentage: 23, resets_at: 1785757199 } },
   }));
-  processHandle.stdin.end();
+  await processHandle.stdin.end();
   expect(await processHandle.exited).toBe(0);
 
   const line = await new Response(processHandle.stdout).text();
@@ -310,10 +310,10 @@ test("POSIX bridge keeps the previous status line visible", async () => {
     stdout: "pipe",
     stderr: "pipe",
   });
-  processHandle.stdin.write(JSON.stringify({
+  await processHandle.stdin.write(JSON.stringify({
     rate_limits: { five_hour: { used_percentage: 23 } },
   }));
-  processHandle.stdin.end();
+  await processHandle.stdin.end();
   expect(await processHandle.exited).toBe(0);
   expect(await new Response(processHandle.stdout).text()).toContain("ORIGINAL-LINE");
   // Chaining must not cost the capture: the cache is written before the handover.
@@ -371,8 +371,8 @@ test("the generated wrapper runs a POSIX command when cmd.exe executes it", asyn
     stdout: "pipe",
     stderr: "pipe",
   });
-  processHandle.stdin.write("{}");
-  processHandle.stdin.end();
+  await processHandle.stdin.write("{}");
+  await processHandle.stdin.end();
   expect(await processHandle.exited).toBe(0);
   expect(await new Response(processHandle.stdout).text()).toContain("CHAINED-LINE");
 });
@@ -393,11 +393,11 @@ test("PowerShell bridge parses a payload that arrives with a UTF-8 BOM", async (
     stdout: "pipe",
     stderr: "pipe",
   });
-  processHandle.stdin.write("﻿" + JSON.stringify({
+  await processHandle.stdin.write("﻿" + JSON.stringify({
     model: { display_name: "Opus" },
     rate_limits: { five_hour: { used_percentage: 41 } },
   }));
-  processHandle.stdin.end();
+  await processHandle.stdin.end();
   expect(await processHandle.exited).toBe(0);
   expect(await readFile(paths.cache, "utf8")).toContain('"used_percentage":41');
 });
@@ -417,12 +417,12 @@ test("PowerShell bridge emits UTF-8 so the separator survives the host", async (
     stdout: "pipe",
     stderr: "pipe",
   });
-  processHandle.stdin.write(JSON.stringify({
+  await processHandle.stdin.write(JSON.stringify({
     model: { display_name: "Gemini 3.6 Flash (High)" },
     context_window: { used_percentage: 12 },
     rate_limits: { five_hour: { used_percentage: 23 } },
   }));
-  processHandle.stdin.end();
+  await processHandle.stdin.end();
   expect(await processHandle.exited).toBe(0);
 
   const line = await new Response(processHandle.stdout).text();

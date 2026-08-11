@@ -24,6 +24,9 @@ jobs:
       - name: Test
         run: bun test
 
+      - name: Lint
+        run: bun run lint
+
   # Dependency advisories, kept out of the test job so a newly published advisory
   # reports on its own instead of turning the test run red.
   audit:
