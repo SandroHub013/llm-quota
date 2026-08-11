@@ -57,7 +57,7 @@
     "typecheck": "bun x tsc --noEmit"
   },
   "dependencies": {
-    "hono": "4.10.7"
+    "hono": "4.13.1"
   },
   "devDependencies": {
     "@types/bun": "1.3.7",
