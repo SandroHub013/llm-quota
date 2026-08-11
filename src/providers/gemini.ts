@@ -1,9 +1,12 @@
+import { homedir } from "node:os";
+
 import type { Provider, QuotaMetric, QuotaResult } from "./types.js";
 import {
   officialBridgeInstalled,
   readOfficialBridgeSnapshot,
   type OfficialBridgeSnapshot,
 } from "../official-bridge.js";
+import { reasonOf } from "../log.js";
 import { nowIso } from "./util.js";
 
 const CONSOLE = "https://antigravity.google/";
@@ -14,54 +17,73 @@ export const gemini: Provider = {
   name: "Gemini",
   consoleUrl: CONSOLE,
 
-  async fetch(): Promise<QuotaResult> {
-    const base: QuotaResult = {
-      id: "gemini",
-      name: "Gemini",
-      status: "partial",
-      consoleUrl: CONSOLE,
-      sourceKind: "official_client",
-      sourceLabel: "Antigravity status line",
-      metrics: [],
-      updatedAt: nowIso(),
-    };
+  fetch: () => fetchGeminiQuota(),
+};
 
-    const installed = await officialBridgeInstalled("gemini");
-    const snapshot = await readOfficialBridgeSnapshot("gemini");
-    const metrics = parseQuota(snapshot);
-    if (snapshot && metrics.length) {
-      const age = Date.now() - Date.parse(snapshot.capturedAt);
-      const stale = age > FRESH_MS;
-      const exhausted = metrics.some((metric) => (metric.used ?? 0) >= 100);
-      return {
-        ...base,
-        status: exhausted ? "rate_limited" : stale ? "partial" : "ok",
-        plan: typeof snapshot.data.planTier === "string" ? snapshot.data.planTier : undefined,
-        authSource: "official status-line bridge",
-        sourceUpdatedAt: snapshot.capturedAt,
-        metrics,
-        teardownUrl: installed ? "/api/official-bridge/gemini" : undefined,
-        teardownLabel: installed ? "Disable bridge" : undefined,
-        message: exhausted
-          ? "Antigravity reports an exhausted quota bucket. Waiting for its official reset."
-          : stale
-            ? "Last official update is stale. Use Antigravity CLI once to refresh the quota snapshot."
-            : undefined,
-      };
-    }
+/**
+ * Split out from the adapter so the bridge-failure branches are reachable from a
+ * test: `homedir()` is resolved once per process, so a fixture home can only be
+ * passed in as an argument.
+ */
+export async function fetchGeminiQuota(home = homedir()): Promise<QuotaResult> {
+  const base: QuotaResult = {
+    id: "gemini",
+    name: "Gemini",
+    status: "partial",
+    consoleUrl: CONSOLE,
+    sourceKind: "official_client",
+    sourceLabel: "Antigravity status line",
+    metrics: [],
+    updatedAt: nowIso(),
+  };
 
+  // The Provider contract forbids throwing, but the reason must not be dropped:
+  // an unreadable ~/.gemini/antigravity-cli/settings.json means this card cannot tell whether the bridge is on,
+  // and the user is the only one who can repair the file.
+  let installed: boolean;
+  try {
+    installed = await officialBridgeInstalled("gemini", home);
+  } catch (error) {
     return {
       ...base,
-      setupUrl: installed ? undefined : "/api/official-bridge/gemini",
-      setupLabel: installed ? undefined : "Enable official bridge",
+      status: "error",
+      message: `Could not read the Antigravity settings file (${reasonOf(error)}). Repair ~/.gemini/antigravity-cli/settings.json, then reload.`,
+    };
+  }
+  const snapshot = await readOfficialBridgeSnapshot("gemini", home);
+  const metrics = parseQuota(snapshot);
+  if (snapshot && metrics.length) {
+    const age = Date.now() - Date.parse(snapshot.capturedAt);
+    const stale = age > FRESH_MS;
+    const exhausted = metrics.some((metric) => (metric.used ?? 0) >= 100);
+    return {
+      ...base,
+      status: exhausted ? "rate_limited" : stale ? "partial" : "ok",
+      plan: typeof snapshot.data.planTier === "string" ? snapshot.data.planTier : undefined,
+      authSource: "official status-line bridge",
+      sourceUpdatedAt: snapshot.capturedAt,
+      metrics,
       teardownUrl: installed ? "/api/official-bridge/gemini" : undefined,
       teardownLabel: installed ? "Disable bridge" : undefined,
-      message: installed
-        ? "Bridge installed. Start Antigravity CLI once to publish its official model quotas."
-        : "Enable the Antigravity status-line bridge to receive model quota without OAuth or private APIs.",
+      message: exhausted
+        ? "Antigravity reports an exhausted quota bucket. Waiting for its official reset."
+        : stale
+          ? "Last official update is stale. Use Antigravity CLI once to refresh the quota snapshot."
+          : undefined,
     };
-  },
-};
+  }
+
+  return {
+    ...base,
+    setupUrl: installed ? undefined : "/api/official-bridge/gemini",
+    setupLabel: installed ? undefined : "Enable official bridge",
+    teardownUrl: installed ? "/api/official-bridge/gemini" : undefined,
+    teardownLabel: installed ? "Disable bridge" : undefined,
+    message: installed
+      ? "Bridge installed. Start Antigravity CLI once to publish its official model quotas."
+      : "Enable the Antigravity status-line bridge to receive model quota without OAuth or private APIs.",
+  };
+}
 
 export function parseQuota(snapshot?: OfficialBridgeSnapshot): QuotaMetric[] {
   const quota = snapshot?.data?.quota;
