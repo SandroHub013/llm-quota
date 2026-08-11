@@ -24,6 +24,33 @@ jobs:
       - name: Test
         run: bun test
 
+  # Dependency advisories, kept out of the test job so a newly published advisory
+  # reports on its own instead of turning the test run red.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      # bun.lock is not a format `npm audit` reads, so resolve the same manifest
+      # into a lockfile npm understands and audit that.
+      - name: npm audit (production dependencies)
+        run: |
+          npm install --package-lock-only --omit=dev
+          npm audit --omit=dev --audit-level=moderate
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: pip-audit (developer tooling)
+        run: |
+          python -m pip install --quiet pip-audit
+          pip-audit -r requirements-dev.txt
+
   # CONTRIBUTING asks contributors to run these; run Bun here too so the Windows-only
   # PowerShell/status-line bridge path is exercised instead of being skipped on Ubuntu.
   widget:
