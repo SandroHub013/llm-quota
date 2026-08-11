@@ -1,8 +1,10 @@
-import { createReadStream, existsSync } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
+import { createReadStream, existsSync, type Dirent } from "node:fs";
+import { readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { createInterface } from "node:readline";
+
+import { reasonOf, warn, warnOnce } from "./log.js";
 
 export type UsageSourceId = "codex" | "claude" | "opencode" | "kimi" | "pi" | "prime" | "nikcli";
 export type AgentKind = "main" | "subagent";
@@ -302,46 +304,97 @@ async function* lines(path: string): AsyncGenerator<string> {
   for await (const line of reader) yield line;
 }
 
+/**
+ * Collect every `*<name>` file under `root`.
+ *
+ * Two failure modes have to stay apart. A directory that disappears mid-walk is the
+ * normal case — the supported CLIs rotate and delete session directories while this
+ * dashboard polls — and skipping it is right. Anything else (ENOTDIR because the path
+ * is a file, EACCES, EMFILE) means real history exists that this process cannot see,
+ * and swallowing it reported the source as `missing, files: 0`: "you have no local
+ * history", when the truth was "I could not look".
+ *
+ * Symlinked directories are followed. `withFileTypes` reports a symlink as neither
+ * file nor directory, so a session tree reached through one used to be invisible and
+ * its tokens silently absent from the ledger. `seen` keeps a cycle from spinning.
+ */
 async function walk(root: string, name: string): Promise<string[]> {
   if (!existsSync(root)) return [];
   const found: string[] = [];
   const pending = [root];
+  const seen = new Set<string>();
   while (pending.length) {
     const dir = pending.pop()!;
-    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    const key = await realpath(dir).catch(() => dir);
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    let entries: Dirent[];
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch (error) {
+      if (vanished(error)) continue;
+      throw new Error(`unreadable_directory: ${dir}`, { cause: error });
+    }
+
     for (const entry of entries) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) pending.push(path);
       else if (entry.isFile() && entry.name.endsWith(name)) found.push(path);
+      else if (entry.isSymbolicLink()) {
+        const target = await stat(path).catch(() => undefined);
+        if (target?.isDirectory()) pending.push(path);
+        else if (target?.isFile() && entry.name.endsWith(name)) found.push(path);
+      }
     }
   }
   return found;
 }
 
+/** True for the errors a file the CLIs are actively rotating legitimately produces. */
+function vanished(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "ENOENT" || code === "ENOTEMPTY";
+}
+
 /**
  * Read one local history file, reusing the previous parse while size and mtime hold.
  *
- * Returns undefined instead of throwing. The supported CLIs rotate and delete their
- * own session files while this dashboard polls, so a path listed by `walk` can be
- * gone by the time it is read. Letting that escape would abandon the whole source
- * and discard every row already collected, dropping the spend total to zero.
+ * Returns undefined instead of throwing when the file is simply gone. The supported
+ * CLIs rotate and delete their own session files while this dashboard polls, so a
+ * path listed by `walk` can be gone by the time it is read. Letting that escape would
+ * abandon the whole source and discard every row already collected, dropping the
+ * spend total to zero.
+ *
+ * Any other failure — an unreadable file, a parser that threw on a shape this project
+ * got wrong — is reported. It is not a race, it is a file whose tokens are missing
+ * from the total, and the caller turns it into a visible per-source error.
  */
 async function cachedFile<T>(
   cache: Map<string, FileCacheEntry<T>>,
   path: string,
   read: () => Promise<T>,
 ): Promise<T | undefined> {
+  let info: Awaited<ReturnType<typeof stat>>;
   try {
-    const info = await stat(path);
-    const cached = cache.get(path);
-    if (cached && cached.size === info.size && cached.mtimeMs === info.mtimeMs) return cached.value;
-    const value = await read();
-    cache.set(path, { size: info.size, mtimeMs: info.mtimeMs, value });
-    return value;
-  } catch {
+    info = await stat(path);
+  } catch (error) {
     cache.delete(path);
-    return undefined;
+    if (vanished(error)) return undefined;
+    throw new Error(`unreadable_history_file: ${path}`, { cause: error });
   }
+  const cached = cache.get(path);
+  if (cached && cached.size === info.size && cached.mtimeMs === info.mtimeMs) return cached.value;
+  let value: T;
+  try {
+    value = await read();
+  } catch (error) {
+    cache.delete(path);
+    if (vanished(error)) return undefined;
+    throw new Error(`unreadable_history_file: ${path}`, { cause: error });
+  }
+  cache.set(path, { size: info.size, mtimeMs: info.mtimeMs, value });
+  return value;
 }
 
 /**
@@ -393,7 +446,11 @@ export function parseCodexRecords(records: string[], fallbackId = "session"): Co
     let record: any;
     try {
       record = JSON.parse(line);
-    } catch {
+    } catch (error) {
+      // Deliberate: a session log is appended to while it is being read, so its last
+      // line is routinely half-written. Dropping the whole file over one truncated
+      // record would zero out a real day of spend. Reported once per run, not per line.
+      warnOnce("parse:codex", "skipping a malformed record in a Codex session log", error);
       continue;
     }
     if (record.type === "session_meta") {
@@ -458,7 +515,11 @@ export function parseClaudeRecords(records: string[], subagentFile = false): Cla
     let record: any;
     try {
       record = JSON.parse(line);
-    } catch {
+    } catch (error) {
+      // Deliberate: a session log is appended to while it is being read, so its last
+      // line is routinely half-written. Dropping the whole file over one truncated
+      // record would zero out a real day of spend. Reported once per run, not per line.
+      warnOnce("parse:claude", "skipping a malformed record in a Claude Code transcript", error);
       continue;
     }
     const usage = record.message?.usage;
@@ -509,7 +570,11 @@ export function parseKimiRecords(records: string[], agent: AgentKind = "main"): 
     let record: any;
     try {
       record = JSON.parse(line);
-    } catch {
+    } catch (error) {
+      // Deliberate: a session log is appended to while it is being read, so its last
+      // line is routinely half-written. Dropping the whole file over one truncated
+      // record would zero out a real day of spend. Reported once per run, not per line.
+      warnOnce("parse:kimi", "skipping a malformed record in a Kimi Code wire log", error);
       continue;
     }
     if (record.type === "llm.request") {
@@ -561,7 +626,11 @@ export function parsePiRecords(
     let record: any;
     try {
       record = JSON.parse(line);
-    } catch {
+    } catch (error) {
+      // Deliberate: a session log is appended to while it is being read, so its last
+      // line is routinely half-written. Dropping the whole file over one truncated
+      // record would zero out a real day of spend. Reported once per run, not per line.
+      warnOnce("parse:pi", "skipping a malformed record in a pi/Prime session log", error);
       continue;
     }
     if (record.type === "session") {
@@ -633,7 +702,9 @@ async function scanNikcli(path: string): Promise<RawUsageRow[]> {
       let info: any;
       try {
         info = JSON.parse(String(message.info ?? "{}"));
-      } catch {
+      } catch (error) {
+        // Deliberate: one unparseable `info` blob costs one message, not the database.
+        warnOnce("parse:nikcli", "skipping a NikCLI message with an unreadable info blob", error);
         continue;
       }
       const tokens = info.tokens;
@@ -675,7 +746,12 @@ async function scanOpenCode(path: string): Promise<RawUsageRow[]> {
       let metadata: any = {};
       try {
         metadata = JSON.parse(String(session.model ?? "{}"));
-      } catch {}
+      } catch (error) {
+        // Deliberate: only the model name and variant live in this column. Losing them
+        // costs the row its label and its list price, while the token counts — which
+        // come from their own columns — stay correct and still reach the total.
+        warnOnce("parse:opencode", "an OpenCode session has unreadable model metadata", error);
+      }
       const row = rawRow(
         "opencode",
         String(metadata.id ?? "unknown"),
@@ -867,6 +943,31 @@ const defaultPaths = (): UsagePaths => {
   };
 };
 
+/**
+ * A source that failed keeps the other six alive — one unreadable CLI history must
+ * not blank the whole ledger — but it stops being a bare "error" chip. `message` is
+ * already rendered by the dashboard and the widget for the unsupported sources; the
+ * failing ones left it empty, so a user could see that Codex was broken and never
+ * why. The chain of causes is flattened because the useful part is usually the
+ * innermost errno, not the wrapper.
+ */
+function failedSource(id: UsageSourceId, error: unknown): UsageSourceStatus {
+  const chain: string[] = [];
+  for (let current: unknown = error; current != null && chain.length < 4; current = (current as Error).cause) {
+    const reason = reasonOf(current);
+    if (reason && chain.at(-1) !== reason) chain.push(reason);
+    if (!(current instanceof Error)) break;
+  }
+  const message = chain.join(" ← ");
+  warn(`usage source ${id} failed`, error);
+  return {
+    id,
+    name: SOURCE_NAMES[id],
+    status: "error",
+    message: message || "Unknown error while reading the local history.",
+  };
+}
+
 export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<UsageSummary> {
   const raw: RawUsageRow[] = [];
   const sources: UsageSourceStatus[] = [];
@@ -893,8 +994,8 @@ export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<
       status: files.length ? "ok" : "missing",
       files: files.length,
     });
-  } catch {
-    sources.push({ id: "codex", name: SOURCE_NAMES.codex, status: "error" });
+  } catch (error) {
+    sources.push(failedSource("codex", error));
   }
 
   try {
@@ -918,8 +1019,8 @@ export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<
       status: files.length ? "ok" : "missing",
       files: files.length,
     });
-  } catch {
-    sources.push({ id: "claude", name: SOURCE_NAMES.claude, status: "error" });
+  } catch (error) {
+    sources.push(failedSource("claude", error));
   }
 
   try {
@@ -934,8 +1035,8 @@ export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<
       status: files.length ? "ok" : "missing",
       files: files.length,
     });
-  } catch {
-    sources.push({ id: "kimi", name: SOURCE_NAMES.kimi, status: "error" });
+  } catch (error) {
+    sources.push(failedSource("kimi", error));
   }
 
   try {
@@ -947,8 +1048,8 @@ export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<
       status: existsSync(paths.opencodeDb) ? "ok" : "missing",
       files: existsSync(paths.opencodeDb) ? 1 : 0,
     });
-  } catch {
-    sources.push({ id: "opencode", name: SOURCE_NAMES.opencode, status: "error" });
+  } catch (error) {
+    sources.push(failedSource("opencode", error));
   }
 
   try {
@@ -963,8 +1064,8 @@ export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<
       status: files.length ? "ok" : "missing",
       files: files.length,
     });
-  } catch {
-    sources.push({ id: "pi", name: SOURCE_NAMES.pi, status: "error" });
+  } catch (error) {
+    sources.push(failedSource("pi", error));
   }
 
   try {
@@ -982,8 +1083,8 @@ export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<
       status: files.length ? "ok" : "missing",
       files: files.length,
     });
-  } catch {
-    sources.push({ id: "prime", name: SOURCE_NAMES.prime, status: "error" });
+  } catch (error) {
+    sources.push(failedSource("prime", error));
   }
 
   try {
@@ -994,8 +1095,8 @@ export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<
       status: existsSync(paths.nikcliDb) ? "ok" : "missing",
       files: existsSync(paths.nikcliDb) ? 1 : 0,
     });
-  } catch {
-    sources.push({ id: "nikcli", name: SOURCE_NAMES.nikcli, status: "error" });
+  } catch (error) {
+    sources.push(failedSource("nikcli", error));
   }
 
   sources.push({

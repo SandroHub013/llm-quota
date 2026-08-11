@@ -1,4 +1,4 @@
-import { installOfficialBridge, loadProvider, loadQuota, loadUsage, loadUsageView, removeOfficialBridge, saveProviderKey, storeUsageView } from "./api.js";
+import { installOfficialBridge, loadQuota, loadUsage, loadUsageView, removeOfficialBridge, saveProviderKey, storeUsageView } from "./api.js";
 import { dataSignature, escapeHtml } from "./ui.js";
 import { mountGitHubContributionPrototype } from "./github-contributions.prototype.js";
 
@@ -37,12 +37,22 @@ const usageView = {
 };
 try {
   Object.assign(usageView, JSON.parse(localStorage.getItem(USAGE_VIEW_KEY) || "{}"));
-} catch {}
+} catch (error) {
+  // Deliberate: localStorage throws outright when the browser blocks site data, and
+  // the stored value is only a display preference. Booting with the defaults is the
+  // right outcome — but say so, or a filter that silently refuses to stick looks
+  // like a bug in the dashboard.
+  console.warn("llm-quota: ignoring the stored usage view", error);
+}
 
 function saveUsageView() {
   try {
     localStorage.setItem(USAGE_VIEW_KEY, JSON.stringify(usageView));
-  } catch {}
+  } catch (error) {
+    // Same deliberate fallback as the read above: the source/agent filters live on
+    // the server anyway, so only the local display prefs are lost for this session.
+    console.warn("llm-quota: could not persist the usage view", error);
+  }
 }
 
 // The server holds the view of record. On boot it wins over the local copy, so
@@ -54,14 +64,16 @@ async function syncUsageViewFromServer() {
     usageView.source = view.source;
     usageView.agent = view.agent;
     applyUsageView();
-  } catch {
+  } catch (error) {
     // Server offline: keep the local prefs until it answers.
+    console.warn("llm-quota: usage view not synced from the server", error);
   }
 }
 
 function pushUsageViewToServer() {
-  storeUsageView({ source: usageView.source, agent: usageView.agent }).catch(() => {
+  storeUsageView({ source: usageView.source, agent: usageView.agent }).catch((error) => {
     // Offline server keeps the local choice; the next successful boot resyncs.
+    console.warn("llm-quota: usage view not pushed to the server", error);
   });
 }
 
@@ -599,7 +611,6 @@ function metricHtml(m, index) {
 
 function cardHtml(p) {
   const st = Object.hasOwn(STATUS_LABEL, p.status) ? p.status : "error";
-  const b = brand(p.id);
   const id = escapeHtml(p.id);
   const metrics = (p.metrics || []).map(metricHtml).join("");
   const models = (MODELS[p.id] || [])
@@ -930,14 +941,6 @@ async function loadAll() {
     }
   })();
   return quotaLoad;
-}
-
-async function refreshOne(id) {
-  try {
-    if (render(await loadProvider(id))) drawHorizon();
-  } catch (error) {
-    showError(id, error);
-  }
 }
 
 async function saveKey(id) {
