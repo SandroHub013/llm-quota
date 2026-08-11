@@ -2,6 +2,8 @@
 node_modules/
 .bun/
 bun.lockb
+# bun.lock is the lockfile of record; npm's is a byproduct of the audit job.
+package-lock.json
 
 # Local credentials & configs
 .env

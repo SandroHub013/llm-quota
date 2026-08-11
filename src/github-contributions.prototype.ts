@@ -2,6 +2,7 @@
  * PROTOTYPE — three GitHub contribution-card variants on the existing dashboard.
  * Rewrite the selected variant as production code after the design is validated.
  */
+import { warn } from "./log.js";
 
 export interface GitHubContributionDay {
   date: string;
@@ -177,7 +178,11 @@ async function queryGitHub(): Promise<GitHubContributionsResult> {
       source: "GitHub CLI · GraphQL",
       generatedAt: new Date().toISOString(),
     };
-  } catch {
+  } catch (error) {
+    // A fallback rather than a failure: the panel is a prototype and an absent `gh`
+    // is by far the common case. The reason is still logged, because a GraphQL or
+    // auth error reaching this branch would otherwise be indistinguishable from it.
+    warn("github contributions unavailable", error);
     return {
       status: "unavailable",
       message: "GitHub activity needs the official GitHub CLI. Install gh and run `gh auth login`.",
