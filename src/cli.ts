@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import type { QuotaResult } from "./providers/types.js";
 import { exitCode, formatStatus, summarize } from "./cli-core.js";
+import { reasonOf } from "./log.js";
 
 export interface RunResult {
   output: string;
@@ -29,35 +30,47 @@ llm-quota stats
 env: LLM_QUOTA_URL (default http://localhost:4747)
 exit: 0 healthy, 1 quota <=20%, 2 provider error, 3 server/usage error`;
 
+/**
+ * Both counters are best-effort: `stats` is a courtesy command and neither registry
+ * being down is a reason to fail it. What it must not do is answer "0", which is a
+ * real and very different number — a fresh release legitimately has zero downloads,
+ * and printing it for a DNS failure states as fact something never observed.
+ */
+function unavailable(error: unknown): string {
+  return `unavailable (${reasonOf(error)})`;
+}
+
 export async function fetchProjectStats(request: Request = fetch): Promise<string> {
-  let npmDownloads: number | string = "0";
-  let githubDownloads: number | string = "0";
+  let npmDownloads: string;
+  let githubDownloads: string;
 
   try {
     const npmRes = await requestWithTimeout(request, "https://api.npmjs.org/downloads/point/last-month/llm-quota");
-    if (npmRes.ok) {
-      const data = (await npmRes.json()) as { downloads?: number };
-      if (typeof data.downloads === "number") npmDownloads = data.downloads.toString();
-    }
-  } catch {}
+    if (!npmRes.ok) throw new Error(`http_${npmRes.status}`);
+    const data = (await npmRes.json()) as { downloads?: number };
+    if (typeof data.downloads !== "number") throw new Error("no download count in the response");
+    npmDownloads = data.downloads.toString();
+  } catch (error) {
+    npmDownloads = unavailable(error);
+  }
 
   try {
     const ghRes = await requestWithTimeout(request, "https://api.github.com/repos/SandroHub013/llm-quota/releases");
-    if (ghRes.ok) {
-      const releases = (await ghRes.json()) as Array<{ assets?: Array<{ download_count?: number }> }>;
-      if (Array.isArray(releases)) {
-        let total = 0;
-        for (const rel of releases) {
-          if (Array.isArray(rel.assets)) {
-            for (const asset of rel.assets) {
-              total += asset.download_count ?? 0;
-            }
-          }
+    if (!ghRes.ok) throw new Error(`http_${ghRes.status}`);
+    const releases = (await ghRes.json()) as Array<{ assets?: Array<{ download_count?: number }> }>;
+    if (!Array.isArray(releases)) throw new Error("expected an array of releases");
+    let total = 0;
+    for (const rel of releases) {
+      if (Array.isArray(rel.assets)) {
+        for (const asset of rel.assets) {
+          total += asset.download_count ?? 0;
         }
-        githubDownloads = total.toString();
       }
     }
-  } catch {}
+    githubDownloads = total.toString();
+  } catch (error) {
+    githubDownloads = unavailable(error);
+  }
 
   return `NPM Downloads (last 30d): ${npmDownloads}\nGitHub Release Downloads: ${githubDownloads}`;
 }
