@@ -1,0 +1,10 @@
+# Python dependencies for the developer tooling only. Neither the widget nor the
+# server needs them: widget.py is pure standard library, and this file exists so
+# `pip-audit -r requirements-dev.txt` and Dependabot have a manifest to read.
+#
+# scripts/capture_previews.py regenerates the documentation and social previews:
+#   uv run --with playwright --with pillow --with pillow-avif-plugin \
+#     python scripts/capture_previews.py
+playwright>=1.56.0
+pillow>=11.4.0
+pillow-avif-plugin>=1.5.4
