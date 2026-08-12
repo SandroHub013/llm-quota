@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **A desktop app for Windows, macOS and Linux.** Installing used to mean installing Bun, cloning
+  the repository and keeping a terminal open — a bar that excludes everyone who pays for four AI
+  subscriptions without living in a shell. The bundle carries the server compiled by
+  `bun build --compile`, so there is nothing else to install. It has its own window, a tray icon,
+  close-to-tray, and start-at-login. The shell is [Tauri](https://tauri.app) and holds no product
+  logic: it starts the same loopback server a source install runs, waits for it to answer, and
+  points the window at it. It takes port 4747 when free and any free port otherwise, so it never
+  collides with a `bun start` already running.
+- **A standalone server executable** on every release, for anyone who wants the dashboard without
+  the window: one file, no Bun, no clone.
+- **A release workflow.** Pushing a `v*` tag builds the installers on all four targets and attaches
+  them to a draft release. The three releases before this one were assembled by hand.
+- CI now compiles the desktop shell and runs Clippy with warnings as errors, so a change to the
+  server that breaks the shell fails a pull request instead of a release.
+
+### Changed
+
+- The server no longer reads `public/` from disk. Inside a compiled binary that directory does not
+  exist — `import.meta.url` resolves into Bun's virtual filesystem — so the dashboard would have
+  served 404s in the desktop build and nowhere else. Assets are now embedded through a generated
+  manifest, and the static route resolves a key rather than a path, which retires the traversal
+  guard it needed: a name that was never shipped simply is not in the map.
+
 ## [0.3.0] — 2026-08-08
 
 ### Added
