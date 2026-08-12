@@ -1,0 +1,32 @@
+[package]
+name = "llm-quota-desktop"
+version = "0.3.0"
+description = "Local-first live quota dashboard for Claude Code, Codex and Gemini"
+authors = ["Alessandro Boni"]
+license = "MIT"
+repository = "https://github.com/SandroHub013/llm-quota"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "llm_quota_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-shell = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+
+# The bundle is what users download over a metered connection, and the Bun sidecar
+# already contributes ~100 MB of it. Optimise the shell for size rather than speed:
+# it spawns a process, polls a port and shows a window.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

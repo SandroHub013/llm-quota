@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>LLM Quota</title>
+    <!--
+      What the window shows between "user double-clicked the icon" and "the local
+      server answers". The alternative is a white rectangle, or the webview's own
+      ERR_CONNECTION_REFUSED page, for as long as the Bun sidecar takes to boot.
+
+      Deliberately dependency-free and inline: this file is bundled into the desktop
+      binary and must render before any server exists to serve it. The project's
+      zero-third-party-request rule applies here too — nothing is fetched.
+    -->
+    <style>
+      :root { --bg: #05060b; --ink: #e7ecf5; --muted: #8b93a7; --accent: #5b8cff; }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font: 400 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .glow {
+        position: fixed;
+        width: 60vmin; height: 60vmin;
+        background: radial-gradient(circle, rgba(91, 140, 255, 0.22) 0%, transparent 70%);
+        pointer-events: none;
+      }
+      .stage { display: grid; justify-items: center; gap: 18px; position: relative; }
+      .mark { width: 64px; height: 64px; animation: breathe 2.4s ease-in-out infinite; }
+      h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+      p { margin: 0; font-size: 13px; color: var(--muted); min-height: 1.5em; }
+      .bar { width: 176px; height: 2px; border-radius: 2px; background: rgba(231, 236, 245, 0.1); overflow: hidden; }
+      .bar span { display: block; width: 40%; height: 100%; border-radius: 2px; background: var(--accent); animation: slide 1.4s ease-in-out infinite; }
+      @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+      @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+      @media (prefers-reduced-motion: reduce) {
+        .mark, .bar span { animation: none; }
+        .bar span { width: 100%; opacity: 0.5; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="glow"></div>
+    <div class="stage">
+      <svg class="mark" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="g" x1="10" y1="10" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#22D3EE" />
+            <stop offset="0.52" stop-color="#38BDF8" />
+            <stop offset="1" stop-color="#A855F7" />
+          </linearGradient>
+        </defs>
+        <circle cx="31" cy="30" r="20" stroke="url(#g)" stroke-width="5" />
+        <path d="M44 43 L54 53" stroke="url(#g)" stroke-width="5" stroke-linecap="round" />
+      </svg>
+      <h1>LLM Quota</h1>
+      <p id="status">Starting the local server…</p>
+      <div class="bar"><span></span></div>
+    </div>
+    <script>
+      // The Rust side replaces this document once the server answers. If it is taking
+      // unusually long, say so rather than animating forever: on a cold first launch
+      // the shell may be waiting on the OS to scan a 100 MB unsigned executable.
+      const status = document.getElementById("status");
+      setTimeout(() => { status.textContent = "Still starting — first launch takes longer…"; }, 6000);
+      setTimeout(() => { status.textContent = "The local server is not responding. Check the tray icon."; }, 25000);
+    </script>
+  </body>
+</html>
