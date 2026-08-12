@@ -45,7 +45,7 @@ jobs:
           npm install --package-lock-only --omit=dev
           npm audit --omit=dev --audit-level=moderate
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -73,7 +73,7 @@ jobs:
       - name: TypeScript tests
         run: bun test
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
