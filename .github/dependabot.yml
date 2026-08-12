@@ -1,8 +1,13 @@
 version: 2
 
 updates:
-  # npm — one runtime dependency (hono) and the TypeScript toolchain.
-  - package-ecosystem: npm
+  # bun, not npm — one runtime dependency (hono) and the TypeScript toolchain.
+  #
+  # The npm ecosystem reads package.json but leaves bun.lock untouched, so every PR
+  # it opened here died on `bun install --frozen-lockfile` before running a single
+  # test. The bun ecosystem maintains the text-based bun.lock this project commits.
+  # It covers version updates only; security updates still come from the audit job.
+  - package-ecosystem: bun
     directory: /
     schedule:
       interval: weekly
