@@ -14,7 +14,10 @@ const LOCAL = { headers: { host: "localhost:4747" } };
 test("the embedded manifest matches public/", async () => {
   const assets = await collectAssets();
   expect(Object.keys(PUBLIC_ASSETS).sort()).toEqual(assets);
-  expect(await Bun.file("src/public-assets.generated.ts").text()).toBe(render(assets));
+  // CRLF here is the Windows checkout, not a stale manifest: the generator always
+  // writes LF, and git rewrites it on the way to disk.
+  const generated = (await Bun.file("src/public-assets.generated.ts").text()).replaceAll("\r\n", "\n");
+  expect(generated).toBe(render(assets));
 });
 
 test("every embedded asset is readable and non-empty", async () => {

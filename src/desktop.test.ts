@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import { bunTargetFor, parseHostTriple } from "../scripts/build-sidecar.js";
 
-const read = (path: string) => Bun.file(path).text();
+// Line endings are a checkout artifact, not content: git hands Windows runners CRLF
+// for the same commit Linux gets as LF, and every assertion below compares file text.
+const read = async (path: string) => (await Bun.file(path).text()).replaceAll("\r\n", "\n");
 
 /**
  * Three files carry the version, and only one of them is the one anyone remembers to
