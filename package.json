@@ -54,6 +54,7 @@
     "dev": "bun run --hot src/server.ts",
     "start": "bun run src/server.ts",
     "cli": "bun run src/cli.ts",
+    "test": "bun test",
     "typecheck": "bun x tsc --noEmit",
     "lint": "bun x eslint ."
   },
