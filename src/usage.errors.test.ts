@@ -42,6 +42,26 @@ async function scratch(): Promise<{ root: string; claude: string; paths: UsagePa
 const sourceOf = (sources: UsageSourceStatus[], id: string): UsageSourceStatus =>
   sources.find((source) => source.id === id)!;
 
+// Creating a symlink on Windows needs SeCreateSymbolicLinkPrivilege: CI runners and
+// machines with Developer Mode have it, an ordinary user account does not and gets
+// EPERM. Probe once so the symlink tests skip on those machines with a named reason
+// instead of failing for something the code under test never touched.
+const canSymlink = await (async () => {
+  const probe = await mkdtemp(join(tmpdir(), "llm-quota-symlink-probe-"));
+  try {
+    await symlink(probe, join(probe, "link"), "dir");
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await rm(probe, { recursive: true, force: true });
+  }
+})();
+
+if (!canSymlink) {
+  console.warn("llm-quota tests: skipping the symlink cases, this account cannot create symlinks");
+}
+
 async function cleanup(): Promise<void> {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 }
@@ -104,7 +124,7 @@ test("a failing source leaves the other sources reporting normally", async () =>
 // Found while auditing walk: `withFileTypes` reports a symlink as neither file nor
 // directory, so an entire session tree reached through one was skipped in silence and
 // its tokens never reached the total.
-test("a session tree behind a symlinked directory is counted", async () => {
+test.skipIf(!canSymlink)("a session tree behind a symlinked directory is counted", async () => {
   const { root, claude, paths } = await scratch();
   try {
     const elsewhere = join(root, "on-another-disk");
@@ -124,7 +144,7 @@ test("a session tree behind a symlinked directory is counted", async () => {
   }
 });
 
-test("a symlinked session file is counted too", async () => {
+test.skipIf(!canSymlink)("a symlinked session file is counted too", async () => {
   const { root, claude, paths } = await scratch();
   try {
     const elsewhere = join(root, "store");
@@ -140,7 +160,7 @@ test("a symlinked session file is counted too", async () => {
 });
 
 // Following symlinks must not let a self-referential tree spin forever.
-test("a symlink cycle terminates instead of hanging the scan", async () => {
+test.skipIf(!canSymlink)("a symlink cycle terminates instead of hanging the scan", async () => {
   const { claude, paths } = await scratch();
   try {
     const nested = join(claude, "nested");
