@@ -54,6 +54,11 @@
     "dev": "bun run --hot src/server.ts",
     "start": "bun run src/server.ts",
     "cli": "bun run src/cli.ts",
+    "generate:assets": "bun run scripts/generate-public-manifest.ts",
+    "compile": "bun build --compile --minify --sourcemap src/server.ts --outfile dist/llm-quota-server",
+    "sidecar": "bun run scripts/build-sidecar.ts",
+    "desktop": "bun run sidecar && bun x @tauri-apps/cli dev",
+    "desktop:build": "bun run sidecar && bun x @tauri-apps/cli build",
     "test": "bun test",
     "typecheck": "bun x tsc --noEmit",
     "lint": "bun x eslint ."
