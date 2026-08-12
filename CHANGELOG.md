@@ -18,6 +18,11 @@ All notable changes to this project are documented here. The format follows
   collides with a `bun start` already running.
 - **A standalone server executable** on every release, for anyone who wants the dashboard without
   the window: one file, no Bun, no clone.
+- The desktop window opens at the viewport the dashboard is laid out for, sized in logical pixels
+  and clamped to the screen. The height is deliberately under the 850 that turns the token ledger
+  into a full-width band: a browser loses roughly that much to its tab strip and address bar, so
+  matching it keeps the ledger the fourth card users already know rather than moving it below the
+  providers on a window that has no chrome.
 - **A release workflow.** Pushing a `v*` tag builds the installers on all four targets and attaches
   them to a draft release. The three releases before this one were assembled by hand.
 - CI now compiles the desktop shell and runs Clippy with warnings as errors, so a change to the

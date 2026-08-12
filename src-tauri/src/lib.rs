@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
+use tauri::{AppHandle, LogicalSize, Manager, RunEvent, WebviewWindow, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
@@ -33,6 +33,65 @@ const PREFERRED_PORT: u16 = 4747;
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
 
 const POLL_INTERVAL: Duration = Duration::from_millis(120);
+
+/// The viewport the dashboard is laid out for.
+///
+/// Width: below 1240 CSS pixels the card flow drops from four columns to two, so the
+/// window has to clear that or the desktop app shows a different layout from a
+/// maximised browser.
+///
+/// Height: deliberately under the 850 the `main .gh-prototype { column-span: all }`
+/// rule keys on. Above it the token ledger becomes a full-width band beneath the
+/// provider columns; below it the ledger stays a fourth card in the flow, which is
+/// what a browser shows — a tab strip and an address bar cost roughly the 60 pixels
+/// that put a maximised browser on the short side of that threshold, and a window
+/// with no chrome does not. Matching the browser matters more here than filling the
+/// screen: the two layouts are both intended, but only one of them is the one users
+/// have already learned.
+const DESIGN_WIDTH: f64 = 1280.0;
+const DESIGN_HEIGHT: f64 = 830.0;
+
+/// Sizes the window so the webview gets [`DESIGN_WIDTH`] CSS pixels, never more than
+/// the screen can hold.
+///
+/// The size in tauri.conf.json is applied before the window knows which monitor it
+/// landed on, so on a display with OS scaling it produced a webview of
+/// `1280 / scale` CSS pixels — 1024 at the 125% Windows ships as default on many
+/// laptops. The dashboard then rendered as if in a small window: wrapped titles, a
+/// clipped horizon, and the usage and live badges pushed out of the header. Setting a
+/// LogicalSize here is the fix, because logical pixels are the CSS pixels the page
+/// actually gets, whatever the scale factor is.
+fn fit_to_design(window: &WebviewWindow) {
+    let scale = window.scale_factor().unwrap_or(1.0);
+
+    // Leave the work area a margin: a window sized exactly to it sits under the
+    // taskbar on Windows and behind the menu bar on macOS.
+    let (max_width, max_height) = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .map(|monitor| {
+            let size = monitor.size().to_logical::<f64>(monitor.scale_factor());
+            (size.width - 48.0, size.height - 96.0)
+        })
+        .unwrap_or((DESIGN_WIDTH, DESIGN_HEIGHT));
+
+    let width = DESIGN_WIDTH.min(max_width);
+    let height = DESIGN_HEIGHT.min(max_height);
+
+    if let Err(error) = window.set_size(LogicalSize::new(width, height)) {
+        eprintln!("llm-quota-desktop: could not size the window: {error}");
+        return;
+    }
+    let _ = window.center();
+
+    if width < DESIGN_WIDTH {
+        eprintln!(
+            "llm-quota-desktop: the screen is {width:.0} logical pixels wide at {scale}× scaling, \
+             narrower than the {DESIGN_WIDTH:.0} the dashboard is laid out for"
+        );
+    }
+}
 
 /// The running server, so app exit can stop it. Without this the sidecar outlives the
 /// window on Windows and the next launch finds its port taken by its own ghost.
@@ -189,6 +248,8 @@ pub fn run() {
             // answer "am I back yet?" is a quota monitor nobody keeps running; Quit in
             // the tray is the deliberate way out.
             if let Some(window) = app.get_webview_window("main") {
+                fit_to_design(&window);
+
                 let hidden = window.clone();
                 window.on_window_event(move |event| {
                     if let WindowEvent::CloseRequested { api, .. } = event {
