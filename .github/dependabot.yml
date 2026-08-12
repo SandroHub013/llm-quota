@@ -18,6 +18,19 @@ updates:
       prefix: chore
       include: scope
     groups:
+      # Packages that peer-depend on each other have to move in one commit, majors
+      # included. Split apart, neither PR can pass: @eslint/js@10 peers on eslint@^10,
+      # so the @eslint/js-only PR died in `npm install` with ERESOLVE against the
+      # eslint 9 still pinned beside it.
+      eslint:
+        patterns:
+          - eslint
+          - '@eslint/*'
+          - typescript-eslint
+        update-types:
+          - major
+          - minor
+          - patch
       # Minor and patch bumps land as one reviewable PR per week; a major stays on
       # its own, because that is the one that needs a human to read the changelog.
       minor-and-patch:
