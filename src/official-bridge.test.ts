@@ -19,6 +19,14 @@ afterEach(async () => Promise.all(homes.splice(0).map((home) => rm(home, { recur
 
 const windows = process.platform === "win32";
 
+/**
+ * Timeout for the tests that spawn a real interpreter. Bun's 5s default is not a
+ * budget for the code under test here: starting powershell.exe or cmd.exe on a cold
+ * CI runner costs seconds on its own, which made these tests pass or fail on runner
+ * speed rather than on behaviour.
+ */
+const SPAWN_TIMEOUT_MS = 60_000;
+
 test("Claude bridge preserves and chains an existing status line", async () => {
   const home = await mkdtemp(join(tmpdir(), "llm-quota-bridge-"));
   homes.push(home);
@@ -248,7 +256,11 @@ test("PowerShell bridge writes a minimal cache and keeps the previous status lin
     model: { display_name: "Opus" },
     rate_limits: { five_hour: { used_percentage: 23, resets_at: 1785757199 } },
   }));
-  await processHandle.stdin.end();
+  // Deliberately not awaited. end() resolves once the pipe has been drained, which on
+  // Windows means waiting out PowerShell's startup before this test moves on instead of
+  // overlapping with it — enough to push these two past the default timeout. `exited`
+  // below is a strictly stronger guarantee: a process that exited has read its stdin.
+  void processHandle.stdin.end();
   expect(await processHandle.exited).toBe(0);
   expect(await new Response(processHandle.stdout).text()).toContain("ORIGINAL-LINE");
 
@@ -256,7 +268,7 @@ test("PowerShell bridge writes a minimal cache and keeps the previous status lin
   expect(cache).toContain('"used_percentage":23');
   expect(cache).not.toContain("must-not-be-cached");
   expect(cache).not.toContain("transcript");
-});
+}, SPAWN_TIMEOUT_MS);
 
 // The same privacy contract as the PowerShell bridge, on the interpreter every
 // other platform uses. Bun runs the generated module on Windows too, so only the
@@ -281,7 +293,11 @@ test("POSIX bridge writes a minimal cache and prints a UTF-8 summary line", asyn
     context_window: { used_percentage: 12 },
     rate_limits: { five_hour: { used_percentage: 23, resets_at: 1785757199 } },
   }));
-  await processHandle.stdin.end();
+  // Deliberately not awaited. end() resolves once the pipe has been drained, which on
+  // Windows means waiting out PowerShell's startup before this test moves on instead of
+  // overlapping with it — enough to push these two past the default timeout. `exited`
+  // below is a strictly stronger guarantee: a process that exited has read its stdin.
+  void processHandle.stdin.end();
   expect(await processHandle.exited).toBe(0);
 
   const line = await new Response(processHandle.stdout).text();
@@ -294,7 +310,7 @@ test("POSIX bridge writes a minimal cache and prints a UTF-8 summary line", asyn
   expect(cache).toContain('"used_percentage":23');
   expect(cache).not.toContain("must-not-be-cached");
   expect(cache).not.toContain("transcript");
-});
+}, SPAWN_TIMEOUT_MS);
 
 test("POSIX bridge keeps the previous status line visible", async () => {
   if (windows) return;
@@ -313,12 +329,16 @@ test("POSIX bridge keeps the previous status line visible", async () => {
   await processHandle.stdin.write(JSON.stringify({
     rate_limits: { five_hour: { used_percentage: 23 } },
   }));
-  await processHandle.stdin.end();
+  // Deliberately not awaited. end() resolves once the pipe has been drained, which on
+  // Windows means waiting out PowerShell's startup before this test moves on instead of
+  // overlapping with it — enough to push these two past the default timeout. `exited`
+  // below is a strictly stronger guarantee: a process that exited has read its stdin.
+  void processHandle.stdin.end();
   expect(await processHandle.exited).toBe(0);
   expect(await new Response(processHandle.stdout).text()).toContain("ORIGINAL-LINE");
   // Chaining must not cost the capture: the cache is written before the handover.
   expect(await readFile(paths.cache, "utf8")).toContain('"used_percentage":23');
-});
+}, SPAWN_TIMEOUT_MS);
 
 // A captured POSIX status line runs under cmd.exe, which does not expand `~` and
 // resolves `bash` to WSL, whose home holds none of these files. The command fails
@@ -347,7 +367,7 @@ test("a captured POSIX status line is chained through Git Bash, other commands v
   }));
   await installOfficialBridge("claude", plain);
   expect(await readFile(plainPaths.previous, "utf8")).toBe('@echo off\r\nnode "status line.js"\r\n');
-});
+}, SPAWN_TIMEOUT_MS);
 
 // The wrapper is only useful if cmd.exe, which is what the bridge spawns, can
 // actually run a POSIX command through it.
@@ -372,10 +392,14 @@ test("the generated wrapper runs a POSIX command when cmd.exe executes it", asyn
     stderr: "pipe",
   });
   await processHandle.stdin.write("{}");
-  await processHandle.stdin.end();
+  // Deliberately not awaited. end() resolves once the pipe has been drained, which on
+  // Windows means waiting out PowerShell's startup before this test moves on instead of
+  // overlapping with it — enough to push these two past the default timeout. `exited`
+  // below is a strictly stronger guarantee: a process that exited has read its stdin.
+  void processHandle.stdin.end();
   expect(await processHandle.exited).toBe(0);
   expect(await new Response(processHandle.stdout).text()).toContain("CHAINED-LINE");
-});
+}, SPAWN_TIMEOUT_MS);
 
 // Forcing the console InputEncoding makes the reader surface the UTF-8 preamble
 // as a leading U+FEFF. ConvertFrom-Json rejects it, and the script used to exit
@@ -397,10 +421,14 @@ test("PowerShell bridge parses a payload that arrives with a UTF-8 BOM", async (
     model: { display_name: "Opus" },
     rate_limits: { five_hour: { used_percentage: 41 } },
   }));
-  await processHandle.stdin.end();
+  // Deliberately not awaited. end() resolves once the pipe has been drained, which on
+  // Windows means waiting out PowerShell's startup before this test moves on instead of
+  // overlapping with it — enough to push these two past the default timeout. `exited`
+  // below is a strictly stronger guarantee: a process that exited has read its stdin.
+  void processHandle.stdin.end();
   expect(await processHandle.exited).toBe(0);
   expect(await readFile(paths.cache, "utf8")).toContain('"used_percentage":41');
-});
+}, SPAWN_TIMEOUT_MS);
 
 // Hosts decode this stdout as UTF-8. Under the default ANSI/OEM console
 // codepage the separator reaches the status line as U+FFFD.
@@ -422,13 +450,17 @@ test("PowerShell bridge emits UTF-8 so the separator survives the host", async (
     context_window: { used_percentage: 12 },
     rate_limits: { five_hour: { used_percentage: 23 } },
   }));
-  await processHandle.stdin.end();
+  // Deliberately not awaited. end() resolves once the pipe has been drained, which on
+  // Windows means waiting out PowerShell's startup before this test moves on instead of
+  // overlapping with it — enough to push these two past the default timeout. `exited`
+  // below is a strictly stronger guarantee: a process that exited has read its stdin.
+  void processHandle.stdin.end();
   expect(await processHandle.exited).toBe(0);
 
   const line = await new Response(processHandle.stdout).text();
   expect(line).toContain("·");
   expect(line).not.toContain("�");
-});
+}, SPAWN_TIMEOUT_MS);
 
 // The wrapper is shared by everything on one settings file, so it used to capture every
 // sibling's quota the moment any one of them was enabled. The sibling's card then showed
