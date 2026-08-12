@@ -236,7 +236,9 @@ bun run desktop         # sviluppo: compila il sidecar e apre l'app
 bun run desktop:build   # installer in src-tauri/target/release/bundle/
 ```
 
-`bun run compile` produce da solo l'eseguibile del server.
+`bun run sidecar` produce da solo l'eseguibile del server, in `src-tauri/binaries/`. È lo stesso file
+che la release pubblica e che il bundle incorpora: non esiste un secondo percorso di build, così il
+binario pubblicato non può essere quello a cui mancano icona e metadati di versione.
 </details>
 
 ---

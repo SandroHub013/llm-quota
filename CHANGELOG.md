@@ -25,6 +25,11 @@ All notable changes to this project are documented here. The format follows
   providers on a window that has no chrome.
 - **A release workflow.** Pushing a `v*` tag builds the installers on all four targets and attaches
   them to a draft release. The three releases before this one were assembled by hand.
+- The project mark is stamped on everything Windows shows a user: the application executable, the
+  server executable — which otherwise ships wearing Bun's mascot and no publisher — and the
+  installer, whose icon, header strip and welcome sidebar were NSIS's own defaults. The server
+  binary also carries the publisher, description, version and copyright that fill the properties
+  dialog and the SmartScreen prompt.
 - CI now compiles the desktop shell and runs Clippy with warnings as errors, so a change to the
   server that breaks the shell fails a pull request instead of a release.
 

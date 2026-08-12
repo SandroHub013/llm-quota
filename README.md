@@ -283,7 +283,10 @@ bun run desktop         # dev: compiles the sidecar, opens the app with hot relo
 bun run desktop:build   # installers in src-tauri/target/release/bundle/
 ```
 
-`bun run compile` produces the bare server executable on its own.
+`bun run sidecar` produces the bare server executable on its own, in
+`src-tauri/binaries/`. It is the same file the release publishes and the bundle embeds — there is
+deliberately no second build path, so the published binary can never be the one that missed the
+icon and version metadata.
 </details>
 
 ---

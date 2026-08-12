@@ -28,6 +28,7 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "Alessandro Boni",
     "targets": ["nsis", "app", "dmg", "deb", "appimage"],
     "category": "DeveloperTool",
     "shortDescription": "Live quota dashboard for your AI subscriptions",
@@ -49,7 +50,10 @@
     },
     "windows": {
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "installer/header.bmp",
+        "sidebarImage": "installer/sidebar.bmp"
       }
     }
   }

@@ -58,14 +58,43 @@ async function hostTriple(): Promise<string> {
   return parseHostTriple(rustc.stdout.toString());
 }
 
+/**
+ * The resource fields Windows reads out of an executable: the icon Explorer draws,
+ * and the publisher and description that fill the properties dialog and the
+ * SmartScreen prompt. Without them a compiled Bun binary ships wearing Bun's own
+ * mascot and no company name — and this binary is published on its own, not only
+ * embedded in the bundle, so it is the file some users see first.
+ *
+ * Windows wants four version components; the package carries three.
+ */
+export function windowsBranding(version: string, description: string): string[] {
+  return [
+    `--windows-icon=${resolve(ROOT, "src-tauri", "icons", "icon.ico")}`,
+    "--windows-title=LLM Quota",
+    "--windows-publisher=Alessandro Boni",
+    `--windows-version=${version}.0`,
+    `--windows-description=${description}`,
+    "--windows-copyright=Copyright © 2026 Alessandro Boni. MIT licensed.",
+  ];
+}
+
 if (import.meta.main) {
   const triple = process.argv[2] ?? (await hostTriple());
-  const suffix = triple.includes("windows") ? ".exe" : "";
+  const windows = triple.includes("windows");
+  const suffix = windows ? ".exe" : "";
   const outfile = resolve(OUTPUT_DIR, `llm-quota-server-${triple}${suffix}`);
+
+  const manifest = await Bun.file(resolve(ROOT, "package.json")).json();
+  const branding = windows ? windowsBranding(manifest.version, manifest.description) : [];
 
   await mkdir(OUTPUT_DIR, { recursive: true });
   const build = Bun.spawnSync(
-    ["bun", "build", "--compile", "--minify", `--target=${bunTargetFor(triple)}`, "src/server.ts", "--outfile", outfile],
+    [
+      "bun", "build", "--compile", "--minify",
+      `--target=${bunTargetFor(triple)}`,
+      ...branding,
+      "src/server.ts", "--outfile", outfile,
+    ],
     { cwd: ROOT, stdio: ["inherit", "inherit", "inherit"] },
   );
   if (!build.success) process.exit(build.exitCode ?? 1);

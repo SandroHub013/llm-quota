@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { bunTargetFor, parseHostTriple } from "../scripts/build-sidecar.js";
+import { bunTargetFor, parseHostTriple, windowsBranding } from "../scripts/build-sidecar.js";
 
 // Line endings are a checkout artifact, not content: git hands Windows runners CRLF
 // for the same commit Linux gets as LF, and every assertion below compares file text.
@@ -51,6 +51,46 @@ test("the bundle and the build script agree on the sidecar name", async () => {
   const config = JSON.parse(await read("src-tauri/tauri.conf.json"));
   expect(config.bundle.externalBin).toEqual(["binaries/llm-quota-server"]);
   expect(await read("scripts/build-sidecar.ts")).toContain("`llm-quota-server-${triple}${suffix}`");
+});
+
+/**
+ * A compiled Bun binary carries Bun's own mascot and no publisher unless told
+ * otherwise, and this one is published as a release asset rather than only embedded
+ * in the bundle. An unsigned executable with no company name is also the worst case
+ * for the SmartScreen prompt users already have to click through.
+ */
+test("the Windows server executable is branded", async () => {
+  const manifest = JSON.parse(await read("package.json"));
+  const flags = windowsBranding(manifest.version, manifest.description);
+
+  expect(flags).toContain("--windows-title=LLM Quota");
+  expect(flags).toContain("--windows-publisher=Alessandro Boni");
+  expect(flags).toContain(`--windows-description=${manifest.description}`);
+  // Windows wants four components; the package carries three.
+  expect(flags).toContain(`--windows-version=${manifest.version}.0`);
+
+  const icon = flags.find((flag) => flag.startsWith("--windows-icon="))?.slice("--windows-icon=".length);
+  expect(icon).toBeDefined();
+  expect(await Bun.file(icon!).exists(), `${icon} is missing`).toBe(true);
+});
+
+/**
+ * NSIS ignores a bitmap that is not exactly the size it expects and silently falls
+ * back to its own artwork, so the installer would arrive wearing the NullSoft globe
+ * with nothing in the build log to say so.
+ */
+test("the installer artwork exists at the sizes NSIS requires", async () => {
+  const nsis = JSON.parse(await read("src-tauri/tauri.conf.json")).bundle.windows.nsis;
+  expect(nsis.installerIcon).toBe("icons/icon.ico");
+
+  // BMP header: width and height are little-endian 32-bit integers at 0x12 and 0x16.
+  const dimensions = async (path: string) => {
+    const header = new DataView(await Bun.file(path).arrayBuffer());
+    return [header.getInt32(18, true), header.getInt32(22, true)];
+  };
+
+  expect(await dimensions(`src-tauri/${nsis.headerImage}`)).toEqual([150, 57]);
+  expect(await dimensions(`src-tauri/${nsis.sidebarImage}`)).toEqual([164, 314]);
 });
 
 /**

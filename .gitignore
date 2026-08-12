@@ -16,8 +16,6 @@ cloudflared.exe
 # Build & runtime cache
 __pycache__/
 *.pyc
-# `bun run compile` — a ~100 MB executable rebuilt from source in one second.
-dist/
 # The Rust build tree, and the compiled Bun server the desktop bundle embeds. Both are
 # outputs of `bun run desktop:build`; the release workflow rebuilds them per platform.
 src-tauri/target/
