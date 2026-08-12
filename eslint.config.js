@@ -8,6 +8,13 @@ import tseslint from "typescript-eslint";
  * nobody waits for. `no-floating-promises` needs type information, which is why
  * `projectService` is on.
  *
+ * That type information is also what pins TypeScript. typescript-eslint refuses to
+ * load under TS 7.0 ("typescript-eslint does not support TS 7.0"), so bumping the
+ * compiler ahead of it trades every type-aware rule here for a linter that will not
+ * start. Support is tracked at typescript-eslint/typescript-eslint#10940; until it
+ * lands, a TypeScript major has to be verified against `bun run lint`, not just
+ * against `tsc --noEmit`, which passes fine on its own.
+ *
  * The rules here are errors on purpose. If one of them starts complaining, fix the
  * cause; suppressing it with a disable comment puts back exactly the silence this
  * config exists to remove.
