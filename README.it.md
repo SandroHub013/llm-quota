@@ -73,7 +73,7 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
 
 **[Scarica l'app desktop](https://github.com/SandroHub013/llm-quota/releases/latest)** — Windows,
 macOS e Linux. Non serve altro: il server è compilato dentro. Si apre in una finestra propria, resta
-nella tray e può avviarsi al login.
+nella tray, può avviarsi al login e segnala le nuove release.
 
 Oppure eseguilo dai sorgenti. Serve [Bun](https://bun.sh) 1.0+ (il server usa `Bun.serve`; Node non
 è supportato), e Python 3 solo per il widget Windows:
@@ -200,6 +200,11 @@ installare, nessun repository da clonare: il server compilato è dentro il bundl
 - Finestra propria, così la dashboard non è una scheda del browser che si perde.
 - Icona nella tray. Chiudere la finestra la nasconde, il server resta attivo, e **Quit** ferma tutto.
 - **Avvio al login**, dal menu della tray.
+- Si accorge delle release. Nella tray c'è **Check for updates…**, e un avvio che trova una
+  versione più recente lo dice una volta. Su Windows e macOS installa l'aggiornamento e si
+  riavvia; su Linux apre la release, perché il deb l'ha installato un gestore di pacchetti che
+  possiede quei file. Ogni aggiornamento viene verificato contro una chiave di firma compilata
+  nell'app: una release che questo progetto non ha firmato viene rifiutata.
 - Prende la porta `4747` se libera, altrimenti una qualsiasi libera: non litiga con un `bun start`
   già aperto. Il widget segue l'origine che la dashboard gli comunica.
 
