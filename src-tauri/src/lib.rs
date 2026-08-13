@@ -21,8 +21,12 @@ use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, LogicalSize, Manager, RunEvent, WebviewWindow, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+#[cfg(target_os = "linux")]
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_updater::UpdaterExt;
 
 /// The port the README, the CLI and the Windows widget all document.
 const PREFERRED_PORT: u16 = 4747;
@@ -189,13 +193,141 @@ fn start_server(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Whether a check with nothing to report is allowed to stay silent.
+///
+/// A check the user asked for has to answer either way — a menu item that does nothing
+/// visible reads as broken. The one at startup keeps quiet unless there is an update,
+/// because a dialog on every launch saying "no news" is a dialog people learn to close
+/// without reading, including the launch that did have news.
+#[derive(Clone, Copy, PartialEq)]
+enum Announce {
+    OnlyWhenNewer,
+    Always,
+}
+
+/// Where a release the updater cannot install itself can be fetched by hand.
+const RELEASES_URL: &str = "https://github.com/SandroHub013/llm-quota/releases/latest";
+
+/// Linux installs from a deb, and the updater replaces AppImages. Rather than offer an
+/// update it cannot carry out, it points at the release and lets the package manager
+/// stay the thing that owns the files it installed.
+#[cfg(target_os = "linux")]
+fn offer_update(app: &AppHandle, update: tauri_plugin_updater::Update) {
+    let handle = app.clone();
+    app.dialog()
+        .message(format!(
+            "LLM Quota {} is available. This copy was installed from a package, so the \
+             update is a download rather than something this window can apply.",
+            update.version
+        ))
+        .title("Update available")
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Open the release".to_owned(),
+            "Not now".to_owned(),
+        ))
+        .show(move |open| {
+            if open {
+                if let Err(error) = handle.opener().open_url(RELEASES_URL, None::<&str>) {
+                    eprintln!("llm-quota-desktop: could not open the release page: {error}");
+                }
+            }
+        });
+}
+
+/// Windows and macOS: the updater can replace the installed app, so the dialog offers
+/// to do it. Downloading happens after the answer, never before — an update nobody
+/// agreed to should not be spending someone's connection in the background.
+#[cfg(not(target_os = "linux"))]
+fn offer_update(app: &AppHandle, update: tauri_plugin_updater::Update) {
+    let handle = app.clone();
+    app.dialog()
+        .message(format!(
+            "LLM Quota {} is available. Installing it restarts the app; the server it \
+             runs stops with it and comes back on the other side.",
+            update.version
+        ))
+        .title("Update available")
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Update now".to_owned(),
+            "Not now".to_owned(),
+        ))
+        .show(move |accepted| {
+            if !accepted {
+                return;
+            }
+            let handle = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = update.download_and_install(|_, _| {}, || {}).await {
+                    eprintln!("llm-quota-desktop: the update did not install: {error}");
+                    handle
+                        .dialog()
+                        .message(format!(
+                            "The update could not be installed: {error}\n\nIt can be \
+                             downloaded by hand from {RELEASES_URL}"
+                        ))
+                        .title("Update failed")
+                        .show(|_| {});
+                    return;
+                }
+                // The installer has replaced the app on disk; this process is still the
+                // old one, and the sidecar it owns still holds the port.
+                handle.restart();
+            });
+        });
+}
+
+/// Asks the release feed whether there is anything newer, and offers what it finds.
+///
+/// Failures here are reported to the console and nowhere else on the automatic check:
+/// a machine that is offline, or behind a proxy that eats the request, is not having a
+/// problem the user opened this app to hear about.
+fn check_for_updates(app: &AppHandle, announce: Announce) {
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let updater = match handle.updater() {
+            Ok(updater) => updater,
+            Err(error) => {
+                eprintln!("llm-quota-desktop: no updater: {error}");
+                return;
+            }
+        };
+
+        match updater.check().await {
+            Ok(Some(update)) => offer_update(&handle, update),
+            Ok(None) => {
+                if announce == Announce::Always {
+                    handle
+                        .dialog()
+                        .message(format!("LLM Quota {} is the latest release.", env!("CARGO_PKG_VERSION")))
+                        .title("No update available")
+                        .show(|_| {});
+                }
+            }
+            Err(error) => {
+                eprintln!("llm-quota-desktop: could not check for updates: {error}");
+                if announce == Announce::Always {
+                    handle
+                        .dialog()
+                        .message(format!("Could not check for updates: {error}"))
+                        .title("Update check failed")
+                        .show(|_| {});
+                }
+            }
+        }
+    });
+}
+
 fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let autostart_on = app.autolaunch().is_enabled().unwrap_or(false);
 
     let show = MenuItem::with_id(app, "show", "Show dashboard", true, None::<&str>)?;
     let autostart = CheckMenuItem::with_id(app, "autostart", "Start at login", true, autostart_on, None::<&str>)?;
+    let update = MenuItem::with_id(app, "update", "Check for updates…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit LLM Quota", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &autostart, &PredefinedMenuItem::separator(app)?, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[&show, &autostart, &update, &PredefinedMenuItem::separator(app)?, &quit],
+    )?;
 
     TrayIconBuilder::with_id("main")
         .icon(app.default_window_icon().expect("bundled window icon").clone())
@@ -214,6 +346,9 @@ fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                     eprintln!("llm-quota-desktop: could not change the start-at-login setting: {error}");
                 }
             }
+            // Asked for by hand, so silence would read as a broken menu item: this one
+            // says so when there is nothing to install.
+            "update" => check_for_updates(app, Announce::Always),
             // Quit is the only path that stops the server; closing the window does not.
             "quit" => app.exit(0),
             _ => {}
@@ -235,6 +370,9 @@ pub fn run() {
             show_dashboard(app);
         }))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .manage(Sidecar(Mutex::new(None)))
         .setup(|app| {
@@ -250,6 +388,11 @@ pub fn run() {
             if let Err(error) = start_server(handle) {
                 eprintln!("llm-quota-desktop: could not start the server: {error}");
             }
+
+            // A quota monitor is left running for weeks, so it cannot rely on being
+            // relaunched to notice a release. This asks once per launch and says
+            // nothing unless there is something to say.
+            check_for_updates(handle, Announce::OnlyWhenNewer);
 
             // Closing the window hides it. A quota monitor that has to be relaunched to
             // answer "am I back yet?" is a quota monitor nobody keeps running; Quit in
