@@ -144,6 +144,10 @@ jobs:
           # log nobody reads, and the first sign would have been installed copies that
           # quietly stop finding updates.
           uploadUpdaterJson: true
+          # Without this the release body is empty, and .github/release.yml — which
+          # sorts pull requests into sections by label — has nothing to sort. The
+          # categories are configuration; this is what asks for them to be used.
+          generateReleaseNotes: true
           args: --target ${{ matrix.target }}
 
       # Windows only. The MSI is the supported installer — every write is performed by
