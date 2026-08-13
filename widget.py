@@ -429,6 +429,180 @@ def protocol_command(python_executable, script_path, base_url=None):
     return f'"{pythonw}" "{script_path}"{server_option} "%1"'
 
 
+SCHEME_MIME = "x-scheme-handler/llmquota"
+MACOS_BUNDLE_ID = "app.llmquota.widget"
+LSREGISTER = (
+    "/System/Library/Frameworks/CoreServices.framework/Frameworks"
+    "/LaunchServices.framework/Support/lsregister"
+)
+
+
+def macos_bundle_path():
+    """Where the launcher bundle lives: per-user, so no administrator is involved."""
+    return os.path.join(os.path.expanduser("~"), "Applications", "LLM Quota Widget.app")
+
+
+def macos_launcher_source(script_path, base_url=None):
+    """AppleScript that starts the widget, and can receive the URL that started it.
+
+    `on open location` rather than reading arguments: macOS hands a URL to a bundle as
+    an Apple Event, not as argv, so a shell script wrapped in a .app is launched with
+    nothing and the ?server= parameter — the port the dashboard is actually on — is
+    lost on the way. AppleScript is the one language every Mac can already compile,
+    which is what keeps this free of a build step.
+    """
+    # Built as AppleScript terms joined by `&`, never as text interpolated into a
+    # literal: a path or a URL dropped inside the quotes would close the string early,
+    # and `quoted form of` is what keeps the shell from reading a space as an argument
+    # break. Both layers matter — one quotes for AppleScript, the other for sh.
+    parts = [
+        f"quoted form of {applescript_quote(sys.executable)}",
+        '" "',
+        f"quoted form of {applescript_quote(script_path)}",
+    ]
+    if base_url is not None:
+        parts += [
+            '" --server-url "',
+            f"quoted form of {applescript_quote(normalize_base_url(base_url))}",
+        ]
+    command = " & ".join(parts)
+
+    # Backgrounded and detached: `do shell script` waits for what it starts, and a
+    # widget that runs for weeks would otherwise hold the launcher open behind it.
+    tail = ' & " > /dev/null 2>&1 &"'
+    return "\n".join([
+        "on run",
+        f"    do shell script {command}{tail}",
+        "end run",
+        "",
+        "on open location this_URL",
+        f'    do shell script {command} & " " & quoted form of this_URL{tail}',
+        "end open location",
+        "",
+    ])
+
+
+def applescript_quote(value):
+    """Quote a string as an AppleScript literal, escaping what would end it early."""
+    escaped = str(value).replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def register_macos_bundle(script_path, base_url=None):
+    """Build and register the launcher bundle, and report what actually happened."""
+    bundle = macos_bundle_path()
+    manual = f'"{sys.executable}" "{script_path}"'
+
+    source = os.path.join(os.path.dirname(bundle) or ".", ".llm-quota-widget.applescript")
+    try:
+        os.makedirs(os.path.dirname(bundle), exist_ok=True)
+        with io.open(source, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(macos_launcher_source(script_path, base_url))
+        subprocess.run(["rm", "-rf", bundle], check=False)
+        subprocess.run(["osacompile", "-o", bundle, source], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    except (OSError, subprocess.CalledProcessError) as error:
+        log_handled("could not build the launcher bundle", error)
+        return f"Could not build {bundle}: {error}\n\nRun the widget directly:\n  {manual}"
+    finally:
+        try:
+            os.remove(source)
+        except OSError:
+            # The AppleScript source is scratch: osacompile has already read it, and a
+            # leftover dotfile is not a reason to fail a registration that worked, nor
+            # to report one that did not.
+            pass
+
+    # osacompile writes a complete bundle but declares no URL scheme, so the one thing
+    # this exists for has to be added afterwards.
+    plist = os.path.join(bundle, "Contents", "Info.plist")
+    for argv in (
+        ["defaults", "write", plist, "CFBundleIdentifier", MACOS_BUNDLE_ID],
+        ["plutil", "-replace", "CFBundleURLTypes", "-json",
+         '[{"CFBundleURLName": "LLM Quota Widget", "CFBundleURLSchemes": ["llmquota"]}]', plist],
+    ):
+        try:
+            subprocess.run(argv, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        except (OSError, subprocess.CalledProcessError) as error:
+            log_handled(f"could not run {argv[0]}", error)
+            return f"{bundle} was built but declares no URL scheme.\n\nRun the widget directly:\n  {manual}"
+
+    # LaunchServices reads bundles when it notices them; telling it now is the
+    # difference between the button working immediately and working after a re-login.
+    try:
+        subprocess.run([LSREGISTER, "-f", bundle], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as error:
+        log_handled("could not tell LaunchServices about the bundle", error)
+
+    return f"{bundle}\nllmquota:// now opens the widget. Or run it directly:\n  {manual}"
+
+
+def mimeapps_path():
+    """Where a desktop session records which application opens what."""
+    config_home = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(config_home, "mimeapps.list")
+
+
+def associate_scheme(desktop_file, path=None):
+    """Record the handler in mimeapps.list, preserving everything already there.
+
+    This is what `xdg-mime default` writes, done directly because that tool is not on
+    every desktop and its absence otherwise means the association silently never
+    happens. Read-modify-write rather than overwrite: this file holds every other
+    association the user has ever chosen.
+    """
+    import configparser
+
+    path = path or mimeapps_path()
+    parser = configparser.RawConfigParser()
+    # Keys here are MIME types, and lowercasing them would rewrite the user's file.
+    parser.optionxform = str
+    try:
+        parser.read(path, encoding="utf-8")
+    except (OSError, configparser.Error) as error:
+        # A malformed file is the user's, not ours to discard: leave it and say so.
+        log_handled(f"could not read {path}; the scheme association was not written", error)
+        return False
+
+    if not parser.has_section("Default Applications"):
+        parser.add_section("Default Applications")
+    parser.set("Default Applications", SCHEME_MIME, desktop_file)
+
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with io.open(path, "w", encoding="utf-8", newline="\n") as handle:
+            parser.write(handle, space_around_delimiters=False)
+    except OSError as error:
+        log_handled(f"could not write {path}", error)
+        return False
+    return True
+
+
+def query_scheme_handler():
+    """Ask the desktop which application it would actually use, or None."""
+    try:
+        found = subprocess.run(
+            ["xdg-mime", "query", "default", SCHEME_MIME],
+            capture_output=True, text=True, check=False,
+        ).stdout.strip()
+        if found:
+            return found
+    except OSError as error:
+        log_handled("could not ask xdg-mime which handler is registered", error)
+
+    # No xdg-mime: read back the file that was just written.
+    import configparser
+
+    parser = configparser.RawConfigParser()
+    parser.optionxform = str
+    try:
+        parser.read(mimeapps_path(), encoding="utf-8")
+        return parser.get("Default Applications", SCHEME_MIME, fallback=None)
+    except (OSError, configparser.Error):
+        return None
+
+
 def desktop_entry_path():
     """Where a Linux session looks for the handler of a URL scheme."""
     data_home = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
@@ -472,15 +646,12 @@ def register_protocol():
     command = f'"{sys.executable}" "{script_path}"{server_option} %u'
 
     if IS_MACOS:
-        # LSSetDefaultHandlerForURLScheme wants a bundle identifier, and a .py file has
-        # none. Saying so is more use than a silent no-op the user only discovers when
-        # the dashboard button does nothing.
-        return (
-            "macOS registers URL schemes for application bundles, not scripts, so the "
-            f"dashboard button cannot start the widget. Run it directly: "
-            f"{command.replace(' %u', '')}"
-        )
+        return register_macos_bundle(script_path, registration_base)
 
+    # No NoDisplay here. It hides an entry from the menus, and a desktop that hides it
+    # from the menus also leaves it out of the "Open With…" chooser — which is the
+    # dialog a browser puts up for llmquota://, so the one place the entry exists to
+    # be found is the one place it would not appear.
     entry = "\n".join([
         "[Desktop Entry]",
         "Type=Application",
@@ -488,7 +659,6 @@ def register_protocol():
         "Comment=Live AI quotas, always on top",
         f"Exec={command}",
         "Terminal=false",
-        "NoDisplay=true",
         "MimeType=x-scheme-handler/llmquota;",
         "",
     ])
@@ -497,18 +667,32 @@ def register_protocol():
     with io.open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(entry)
 
-    # Both are best-effort: the entry alone works on sessions that read it directly,
-    # and a desktop without these tools is not a reason to report failure.
     for argv in (
         ["update-desktop-database", os.path.dirname(path)],
-        ["xdg-mime", "default", os.path.basename(path), "x-scheme-handler/llmquota"],
+        ["xdg-mime", "default", os.path.basename(path), SCHEME_MIME],
     ):
         try:
             subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
         except OSError as error:
             log_handled(f"could not run {argv[0]}", error)
 
-    return f"{path}\n{command}"
+    # xdg-mime is not on every desktop, and when it is missing the association it was
+    # meant to write simply never happens. Writing it directly costs a few lines and
+    # removes the dependency; both end up in the same file.
+    associate_scheme(os.path.basename(path))
+
+    # And then check, rather than report a success that was never confirmed. Claiming
+    # to have registered a handler that the desktop cannot find is how someone ends up
+    # clicking a button that opens "No apps available".
+    default = query_scheme_handler()
+    if default == os.path.basename(path):
+        return f"{path}\n{command}"
+    return (
+        f"{path}\n{command}\n\n"
+        f"WARNING: this desktop still reports {default or 'no handler'} for "
+        f"{SCHEME_MIME}. The dashboard's Widget button will not start the widget "
+        f"until that resolves. Run it directly instead:\n  {command.replace(' %u', '')}"
+    )
 
 
 # Tk can load PNG directly. Other repository marks are SVG/WebP and intentionally

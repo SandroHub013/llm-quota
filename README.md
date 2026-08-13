@@ -335,9 +335,11 @@ Registers `llmquota://widget`, so the **Widget** button in the dashboard launche
 passes the dashboard's local origin automatically. Windows keeps that registration in the registry
 and Linux in `~/.local/share/applications`.
 
-**macOS registers URL schemes for application bundles, not for scripts**, so the dashboard button
-cannot start it there. `--register-protocol` prints the command to run instead, and the widget
-itself works the same once started.
+On **macOS** the same command builds a small launcher bundle in `~/Applications` and registers it
+with LaunchServices, because a URL scheme there belongs to an application rather than to a script.
+The launcher is AppleScript with an `on open location` handler: macOS delivers a URL to a bundle as
+an Apple Event rather than as arguments, so anything simpler would start the widget without the
+server the dashboard named.
 
 For a manual or remote setup, on any platform:
 
