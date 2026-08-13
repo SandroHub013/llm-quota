@@ -164,8 +164,16 @@ jobs:
       - name: Compile the server sidecar
         run: bun run sidecar -- ${{ matrix.target }}
 
+      # The overlay turns off updater artifacts, which the bundler refuses to produce
+      # without the signing key. Handing that key to a job that runs on every pull
+      # request — including one opened from a fork, where secrets are absent and the
+      # build would fail anyway — buys nothing: what this job checks is that the
+      # installer installs. The release workflow is where signing belongs.
       - name: Bundle
-        run: bun x @tauri-apps/cli build --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
+        run: >
+          bun x @tauri-apps/cli build --target ${{ matrix.target }}
+          --bundles ${{ matrix.bundle }}
+          --config src-tauri/tauri.ci.conf.json
 
       - name: Install and verify (Windows)
         if: runner.os == 'Windows'

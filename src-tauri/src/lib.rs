@@ -22,6 +22,8 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, LogicalSize, Manager, RunEvent, WebviewWindow, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+#[cfg(target_os = "linux")]
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_updater::UpdaterExt;
@@ -225,7 +227,7 @@ fn offer_update(app: &AppHandle, update: tauri_plugin_updater::Update) {
         ))
         .show(move |open| {
             if open {
-                if let Err(error) = handle.shell().open(RELEASES_URL, None) {
+                if let Err(error) = handle.opener().open_url(RELEASES_URL, None::<&str>) {
                     eprintln!("llm-quota-desktop: could not open the release page: {error}");
                 }
             }
@@ -369,6 +371,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .manage(Sidecar(Mutex::new(None)))
