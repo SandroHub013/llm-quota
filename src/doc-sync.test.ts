@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
 import { providers } from "./providers/index.js";
 
-const read = (path: string) => Bun.file(path).text();
+// Normalised, because git hands the Windows runner CRLF for the commit Linux gets as
+// LF. Every assertion in this file matches against file text, and any pattern that
+// spans two lines passes on Ubuntu and fails on Windows only.
+const read = async (path: string) => (await Bun.file(path).text()).replaceAll("\r\n", "\n");
 
 /**
  * Adding or removing a provider touches the registry, two READMEs, the landing page,
@@ -77,5 +80,36 @@ test("public and landing metadata do not promise retired provider counts", async
     const html = await read(path);
     expect(html).not.toMatch(/\bFive measurable AI quotas\b/i);
     expect(html).not.toMatch(/\bfive quota cards\b/i);
+  }
+});
+
+/**
+ * SignPath Foundation issues its free open-source certificate on the condition that
+ * the project publishes a code signing policy carrying the attribution, the team
+ * roles and a privacy statement, reachable from the homepage or the download page.
+ * A policy that exists but is unreachable — or that loses one of the three required
+ * parts to an edit — fails the review, and the review takes weeks to come round
+ * again. See CODE_SIGNING.md.
+ */
+test("the code signing policy carries what the certificate is conditional on", async () => {
+  const policy = await read("CODE_SIGNING.md");
+
+  expect(policy).toContain("Free code signing provided by [SignPath.io](https://signpath.io)");
+  expect(policy).toContain("[SignPath Foundation](https://signpath.org)");
+  // The privacy wording is theirs, quoted rather than paraphrased.
+  expect(policy).toContain(
+    "will not transfer any information to other networked systems unless specifically\nrequested by the user",
+  );
+  for (const role of ["Author", "Reviewer", "Approver"]) {
+    expect(policy, `the ${role} role is unlisted`).toContain(role);
+  }
+});
+
+test("the code signing policy is reachable from the site and the READMEs", async () => {
+  const site = await read("docs/index.html");
+  expect(site).toContain("/blob/main/CODE_SIGNING.md");
+
+  for (const path of ["README.md", "README.it.md"]) {
+    expect(await read(path), `${path} does not link the policy`).toContain("(CODE_SIGNING.md)");
   }
 });

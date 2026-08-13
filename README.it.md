@@ -57,6 +57,9 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
   carica nulla da CDN, font host o servizi di favicon. [Garantito da un test.](src/frontend.test.ts)
 - 🤖 **CLI pensata per agenti AI** — `llm-quota status --json` produce JSON sanitizzato ed exit
   code sensati: un agente può verificare il proprio budget prima di partire con un job lungo.
+- 🖥️ **App desktop** — un installer per Windows, macOS e Linux con il server compilato dentro.
+  Niente Bun, niente clone, niente terminale. Finestra propria, icona nella tray, chiusura in tray
+  e avvio al login.
 - 🪟 **Widget desktop Windows** — widget Tk flottante sempre in primo piano, lanciato dalla
   dashboard tramite il protocollo `llmquota://widget`. Aggiorna silenziosamente le quote ogni
   minuto, la spesa locale ogni cinque secondi e mantiene vivi i countdown tra una richiesta e l'altra.
@@ -68,8 +71,12 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
 
 ## Avvio rapido
 
-**Richiede [Bun](https://bun.sh) 1.0+.** (Il server usa `Bun.serve`; Node non è supportato.)
-Python 3 è opzionale, serve solo per il widget Windows.
+**[Scarica l'app desktop](https://github.com/SandroHub013/llm-quota/releases/latest)** — Windows,
+macOS e Linux. Non serve altro: il server è compilato dentro. Si apre in una finestra propria, resta
+nella tray e può avviarsi al login.
+
+Oppure eseguilo dai sorgenti. Serve [Bun](https://bun.sh) 1.0+ (il server usa `Bun.serve`; Node non
+è supportato), e Python 3 solo per il widget Windows:
 
 ```bash
 git clone https://github.com/SandroHub013/llm-quota.git
@@ -184,6 +191,80 @@ Per host o porta diversi: `LLM_QUOTA_URL=http://localhost:8080`.
 
 ---
 
+## App desktop
+
+[Ogni release](https://github.com/SandroHub013/llm-quota/releases/latest) pubblica un installer per
+Windows (`.msi`), macOS (`.dmg`, Apple silicon e Intel) e Linux (`.deb`, `.AppImage`). Nessun Bun da
+installare, nessun repository da clonare: il server compilato è dentro il bundle.
+
+- Finestra propria, così la dashboard non è una scheda del browser che si perde.
+- Icona nella tray. Chiudere la finestra la nasconde, il server resta attivo, e **Quit** ferma tutto.
+- **Avvio al login**, dal menu della tray.
+- Prende la porta `4747` se libera, altrimenti una qualsiasi libera: non litiga con un `bun start`
+  già aperto. Il widget segue l'origine che la dashboard gli comunica.
+
+La shell è [Tauri](https://tauri.app): usa la webview del sistema operativo invece di portarsi
+dietro un browser, per questo il download è ~30 MB invece di ~150 MB. Non contiene logica di
+prodotto — dashboard, API e adattatori sono lo stesso codice dell'installazione da sorgenti.
+
+> **Gli installer non sono firmati.** SmartScreen su Windows dirà "editore sconosciuto" — *Ulteriori
+> informazioni → Esegui comunque*. Gatekeeper su macOS rifiuterà il doppio clic — tasto destro
+> sull'app → *Apri*.
+>
+> Su Windows c'è un MSI per un motivo collegato. A un installer non firmato che scrive per conto
+> proprio le scritture possono venire scartate dal software di sicurezza che sta nello stack del
+> filesystem, senza un errore da nessuna parte: la build NSIS pubblicata all'inizio finiva con
+> "completata con successo" senza aver installato niente. L'MSI non scrive nulla di suo — file,
+> collegamenti e chiavi di registro li piazza `msiexec.exe`, che Microsoft firma, e un passo
+> fallito fa rollback invece di dichiarare successo. È un percorso di installazione più solido,
+> non un modo per aggirare l'antivirus: uno scanner che contesta il contenuto di un download lo
+> contesta comunque. A quello risponde solo una firma.
+>
+> È in corso la richiesta di un certificato di firma gratuito per progetti open source — vedi la
+> [code signing policy](CODE_SIGNING.md). Nel frattempo sorgenti e workflow di build sono pubblici,
+> quindi puoi ricompilare qualsiasi release e confrontarla.
+
+<details>
+<summary>Portable, senza installer e senza richiesta di amministratore (Windows)</summary>
+
+`llm-quota-portable-windows-x64.zip` in ogni release, per una macchina su cui non puoi elevare.
+Scompattalo dove vuoi ed esegui
+`llm-quota-desktop.exe`: il server sta accanto e viene avviato per te. Non viene scritto niente
+fuori dalla cartella che hai scelto, a parte la solita configurazione per utente in `~/.llm-quota/`.
+
+Su Linux esiste già l'equivalente: l'`.AppImage` è portable per costruzione.
+</details>
+
+<details>
+<summary>Solo il server, senza finestra</summary>
+
+La stessa release allega `llm-quota-server-<piattaforma>`: un eseguibile singolo, senza Bun e senza
+clone. Serve la dashboard su `http://localhost:4747`, nient'altro cambia.
+
+```bash
+chmod +x llm-quota-server-linux-x64
+PORT=4747 ./llm-quota-server-linux-x64
+```
+</details>
+
+<details>
+<summary>Compilarla da sé</summary>
+
+Serve il [toolchain Rust](https://rustup.rs) oltre a Bun, più le
+[dipendenze di sistema di Tauri](https://tauri.app/start/prerequisites/) su Linux.
+
+```bash
+bun run desktop         # sviluppo: compila il sidecar e apre l'app
+bun run desktop:build   # installer in src-tauri/target/release/bundle/
+```
+
+`bun run sidecar` produce da solo l'eseguibile del server, in `src-tauri/binaries/`. È lo stesso file
+che la release pubblica e che il bundle incorpora: non esiste un secondo percorso di build, così il
+binario pubblicato non può essere quello a cui mancano icona e metadati di versione.
+</details>
+
+---
+
 ## Widget desktop (Windows)
 
 ```bash
@@ -229,19 +310,31 @@ src/
 ├── credentials.ts     # Config delle sole chiavi inserite dall'utente
 ├── cli.ts             # CLI per sviluppatori e agenti
 ├── cli-core.ts        # Riepilogo quota, formattazione ed exit code
+├── public-mime.ts     # L'insieme chiuso di estensioni che il server serve
 └── providers/         # Un adapter per provider (fetch → QuotaResult)
 public/                # SPA frontend — HTML, CSS, JS vanilla, nessun build step
 ├── fonts/             # Font variabili self-hosted (woff2, subset latino)
 └── logos/             # Marchi ufficiali dei provider, congelati
+src-tauri/             # Shell desktop: finestra, tray, avvio al login, ciclo di vita del sidecar
+scripts/               # Manifest degli asset e build del sidecar
 widget.py              # Widget desktop Tkinter per Windows
 ```
 
 Stack: [Bun](https://bun.sh) + [Hono](https://hono.dev) + TypeScript. Una sola dipendenza runtime.
 Nessun bundler, nessun framework, nessun build step per il frontend.
 
+L'app desktop aggiunge [Tauri](https://tauri.app) attorno a tutto questo, senza modificarlo. `bun
+build --compile` trasforma il server in un eseguibile singolo e Tauri lo spedisce come sidecar: la
+finestra punta allo stesso server loopback dell'installazione da sorgenti, allowlist dell'header
+Host compresa. Il frontend è incorporato invece di essere letto da `public/` a runtime — dentro un
+binario compilato quella cartella non esiste, quindi `src/public-assets.generated.ts` mappa ogni
+file servito su uno incorporato. Rigeneralo con `bun run generate:assets` dopo aver toccato
+`public/`; se te ne dimentichi, un test fallisce.
+
 ```bash
 bun test                        # TypeScript: server, provider, CLI, guard frontend
 bun run typecheck
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets   # la shell desktop
 python -m unittest widget_test  # Python: il widget Windows
 ```
 

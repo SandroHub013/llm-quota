@@ -26,9 +26,17 @@ For Windows widget changes, also run:
 python -m unittest widget_test.py
 ```
 
-The Bun checks must pass for every PR and run in CI. Before review, widget changes must
-also pass the Python suite on Windows. A red CI run is a red PR; fix it before asking
-for review.
+For desktop shell changes, you need the [Rust toolchain](https://rustup.rs) and, on Linux,
+[Tauri's system dependencies](https://tauri.app/start/prerequisites/):
+
+```bash
+bun run desktop     # compiles the server sidecar, then opens the app
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+```
+
+The Bun checks must pass for every PR and run in CI. Clippy runs in CI too, and warnings
+are errors there. Before review, widget changes must also pass the Python suite on
+Windows. A red CI run is a red PR; fix it before asking for review.
 
 ## Where to contribute
 
@@ -123,6 +131,12 @@ Adding, renaming or removing a provider touches more than the adapter:
 - [ ] `widget.py` — provider domains and brand metadata
 - [ ] `.github/ISSUE_TEMPLATE/bug_report.yml` — the provider dropdown
 - [ ] `public/logos/` and `docs/logos/` — the official mark, self-hosted in the app and site
+- [ ] `bun run generate:assets` — any new or renamed file under `public/` has to enter the
+      embedded manifest, or it ships missing from the desktop build and nowhere else
+- [ ] `public/logo.svg` — changing the mark means regenerating what the desktop build
+      stamps on the window, the executables and the installer, none of which read the SVG:
+      `bun x @tauri-apps/cli icon public/logo.svg --output src-tauri/icons` (then delete the
+      `ios/` and `android/` output, which this project does not ship)
 - [ ] `public/og.jpg`, `docs/og.jpg`, and `docs/dashboard-preview.*` — only if they
       picture the provider list; regenerate rather than hand-editing. Use the synthetic,
       local-only generator so personal usage never enters an asset:
@@ -136,7 +150,7 @@ it even when the change "only" touches code.
 ## Commits and PRs
 
 - **Conventional Commits**, imperative, lowercase after the colon, as the existing
-  history does. Scopes currently in use: `widget`, `site`, `assets`. Use an unscoped
+  history does. Scopes currently in use: `widget`, `site`, `assets`, `desktop`. Use an unscoped
   commit when none fits.
 - **One concern per PR.** A provider fix and a landing-page tweak are two PRs.
 - **PR title = the commit message** it will be squash-merged as. The body carries: the

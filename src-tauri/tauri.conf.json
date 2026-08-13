@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LLM Quota",
+  "version": "0.3.0",
+  "identifier": "app.llmquota.desktop",
+  "build": {
+    "frontendDist": "splash"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "LLM Quota",
+        "width": 1280,
+        "height": 830,
+        "minWidth": 720,
+        "minHeight": 560,
+        "resizable": true,
+        "center": true,
+        "theme": "Dark",
+        "backgroundColor": "#05060b"
+      }
+    ],
+    "security": {
+      "csp": null,
+      "capabilities": ["default"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "publisher": "Alessandro Boni",
+    "targets": ["msi", "app", "dmg", "deb", "appimage"],
+    "category": "DeveloperTool",
+    "shortDescription": "Live quota dashboard for your AI subscriptions",
+    "longDescription": "One live dashboard for every AI subscription you pay for. Quotas, reset times and local token spend for Claude Code, Codex and Gemini, on one horizon. Runs entirely on your machine: no cloud, no database, no account.",
+    "copyright": "Copyright © 2026 Alessandro Boni. MIT licensed.",
+    "licenseFile": "../LICENSE",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": ["binaries/llm-quota-server"],
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+      }
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      }
+    }
+  }
+}
