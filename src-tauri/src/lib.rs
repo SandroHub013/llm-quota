@@ -363,7 +363,34 @@ fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Turns off WebKitGTK's DMA-BUF renderer, which does not draw this app correctly on
+/// a large number of Linux desktops.
+///
+/// The symptom is specific and recognisable: cards are not painted at all until the
+/// pointer moves over them, and what appears then is torn or half-drawn. Nothing is
+/// wrong with the page — the compositor simply never hands over what was rendered, so
+/// only the regions an input event invalidates ever reach the screen. It shows up most
+/// on GNOME under Wayland and on NVIDIA's driver, which together are a large share of
+/// the Linux desktops this will land on.
+///
+/// The cost is a slower path for compositing, on a window that shows a dashboard
+/// refreshing every few seconds rather than anything animating at speed. A window that
+/// draws correctly and slowly beats one that draws quickly and wrong.
+///
+/// Set before the webview exists, because it is read when WebKitGTK initialises.
+#[cfg(target_os = "linux")]
+fn work_around_webkit_rendering() {
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn work_around_webkit_rendering() {}
+
 pub fn run() {
+    work_around_webkit_rendering();
+
     tauri::Builder::default()
         // A second launch must not start a second server. Focus what is already running.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {

@@ -89,6 +89,20 @@ It lives in the tray: closing the window leaves it running, **Start at login** i
 on Windows and macOS it can install one and restart itself; the Linux build points at the
 download instead, because the package manager owns the files it installed.
 
+<details>
+<summary>The window is blank, or cards only appear when the pointer passes over them (Linux)</summary>
+
+Fixed as of 0.5.1. On earlier versions, start it with the renderer WebKitGTK uses on many
+desktops turned off:
+
+```bash
+WEBKIT_DISABLE_DMABUF_RENDERER=1 llm-quota-desktop
+```
+
+The app now sets that itself on Linux. If a build still draws wrong, `WEBKIT_DISABLE_COMPOSITING_MODE=1`
+is the heavier fallback — it turns off accelerated compositing entirely.
+</details>
+
 > **The download is unsigned.** Code signing certificates are a recurring cost this project does
 > not carry, so the first launch is challenged: on Windows, SmartScreen says *unknown publisher* —
 > **More info → Run anyway**; on macOS, Gatekeeper refuses a double click — right-click the app and
