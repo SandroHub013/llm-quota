@@ -571,5 +571,55 @@ class MacosSchemeRegistrationTest(unittest.TestCase):
                 self.assertEqual(delimiters % 2, 0, f"unbalanced quotes: {line}")
 
 
+class FontResolutionTest(unittest.TestCase):
+    """Tk does not raise on a font family it cannot find — it substitutes silently, and
+    the substitute has its own metrics. The provider rows are laid out in character
+    widths, so a proportional stand-in puts the numbers out of line with their labels
+    rather than merely looking different."""
+
+    @contextlib.contextmanager
+    def _machine_with(self, families):
+        import tkinter.font as tkfont
+
+        def named(name):
+            font = Mock()
+            font.actual.return_value = "TkWhateverThisIs"
+            return font
+
+        with patch.object(tkfont, "families", return_value=tuple(families)),              patch.object(tkfont, "nametofont", side_effect=named):
+            yield
+
+    def test_windows_keeps_the_families_the_layout_was_drawn_in(self):
+        with self._machine_with(["Segoe UI", "Cascadia Mono", "Arial"]):
+            self.assertEqual(widget.resolve_fonts(), ("Cascadia Mono", "Segoe UI"))
+
+    def test_a_linux_desktop_gets_fonts_it_actually_has(self):
+        with self._machine_with(["DejaVu Sans", "DejaVu Sans Mono", "Liberation Serif"]):
+            mono_family, ui_family = widget.resolve_fonts()
+
+        self.assertEqual(mono_family, "DejaVu Sans Mono")
+        self.assertEqual(ui_family, "DejaVu Sans")
+
+    def test_a_machine_with_none_of_them_falls_back_to_tk_own_font(self):
+        # Not to a name nobody has: Tk's own named fonts exist by definition, so the
+        # family behind them is the one guaranteed to render.
+        with self._machine_with(["Some Corporate Font"]):
+            self.assertEqual(widget.resolve_fonts(), ("TkWhateverThisIs", "TkWhateverThisIs"))
+
+    def test_the_helpers_carry_the_resolved_family_and_the_style(self):
+        with self._machine_with(["DejaVu Sans", "DejaVu Sans Mono"]):
+            widget.resolve_fonts()
+            self.assertEqual(widget.mono(9), ("DejaVu Sans Mono", 9))
+            self.assertEqual(widget.ui(8, "bold"), ("DejaVu Sans", 8, "bold"))
+
+    def test_no_font_family_is_hardcoded_anywhere_else(self):
+        source = io.open("widget.py", encoding="utf-8").read()
+        # Every remaining mention has to be a candidate in the lists above, not a
+        # family named at a call site where no other machine can satisfy it.
+        for line in source.splitlines():
+            if "font=" in line and ("Segoe" in line or "Cascadia" in line):
+                self.fail(f"hardcoded family: {line.strip()}")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -853,8 +853,63 @@ BG, PANEL, BORDER = "#060606", "#151515", "#1d2740"
 FG, MUT, IDLE = "#eef3fa", "#8d9cb3", "#6e7681"
 ACCENT, VIOLET, TRACK, ERR = "#5b8cff", "#9b5bff", "#1d2740", "#f85149"
 KEY = "#010101"  # color key made transparent by the window manager
-MONO = ("Cascadia Mono", 9)
-UI = ("Segoe UI", 9)
+# Font families, resolved against what the machine actually has by resolve_fonts()
+# below. The Windows names lead because that is where the layout was drawn; the values
+# here are only what stands until a Tk root exists to ask.
+MONO_FAMILY = "Cascadia Mono"
+UI_FAMILY = "Segoe UI"
+
+MONO_CANDIDATES = ("Cascadia Mono", "Cascadia Code", "DejaVu Sans Mono",
+                   "Liberation Mono", "Menlo", "Monaco", "Consolas")
+UI_CANDIDATES = ("Segoe UI", "Inter", "Cantarell", "Ubuntu", "DejaVu Sans",
+                 "Helvetica Neue", "Arial")
+
+
+def resolve_fonts():
+    """Pick families this machine has, rather than families Windows has.
+
+    Tk does not raise on a font family it cannot find: it silently substitutes, and
+    the substitute has its own metrics. The mono columns are laid out in character
+    widths — width=4, width=9, width=14 — so a proportional stand-in does not merely
+    look different, it puts the numbers out of line with the labels above them.
+
+    Needs a Tk root: tkinter.font.families() asks the interpreter what is installed,
+    and there is no interpreter before tk.Tk(). That is why this is a function called
+    from the window rather than a constant computed at import.
+    """
+    global MONO_FAMILY, UI_FAMILY
+    import tkinter.font as tkfont
+
+    try:
+        installed = {name.lower() for name in tkfont.families()}
+    except tk.TclError as error:
+        log_handled("could not read the installed font families", error)
+        return MONO_FAMILY, UI_FAMILY
+
+    def first_installed(candidates, named_fallback):
+        for candidate in candidates:
+            if candidate.lower() in installed:
+                return candidate
+        # Whatever Tk itself would use. Always present, by definition, and correct on
+        # a desktop carrying none of the names above.
+        try:
+            return tkfont.nametofont(named_fallback).actual("family")
+        except tk.TclError:
+            return candidates[-1]
+
+    MONO_FAMILY = first_installed(MONO_CANDIDATES, "TkFixedFont")
+    UI_FAMILY = first_installed(UI_CANDIDATES, "TkDefaultFont")
+    return MONO_FAMILY, UI_FAMILY
+
+
+def mono(size, *styles):
+    """A mono font spec in the family this machine actually has."""
+    return (MONO_FAMILY, size, *styles)
+
+
+def ui(size, *styles):
+    """A UI font spec in the family this machine actually has."""
+    return (UI_FAMILY, size, *styles)
 
 
 class Tooltip:
@@ -878,7 +933,7 @@ class Tooltip:
         tw.attributes("-topmost", True)
         label = tk.Label(tw, text=text, justify=tk.LEFT,
                          bg=PANEL, fg=FG, relief=tk.SOLID, borderwidth=1,
-                         highlightbackground=BORDER, font=("Segoe UI", 8), padx=8, pady=4)
+                         highlightbackground=BORDER, font=ui(8), padx=8, pady=4)
         label.pack()
 
     def hide_tip(self, event=None):
@@ -1008,6 +1063,9 @@ def quota_color(remaining):
 class Widget(tk.Tk):
     def __init__(self):
         super().__init__()
+        # Before any widget is built: every font spec below reads the families this
+        # resolves, and a label already drawn does not pick up a later change.
+        resolve_fonts()
         self.overrideredirect(True)
         self.attributes("-topmost", True)
         self.configure(bg=KEY)
@@ -1575,11 +1633,11 @@ class Widget(tk.Tk):
             chip.pack(side="left", padx=(8, 6), pady=4)
         else:
             chip = tk.Label(row, text=initial, bg=color, fg="#fff", width=2,
-                            font=("Segoe UI", 9, "bold"))
+                            font=ui(9, "bold"))
             chip._keep_bg = True  # resta brand anche in hover
             chip.pack(side="left", padx=(8, 6), pady=4)
 
-        tk.Label(row, text=d["name"], bg=BG, fg=FG, font=UI,
+        tk.Label(row, text=d["name"], bg=BG, fg=FG, font=ui(9),
                  anchor="w", width=13).pack(side="left")
 
         bar = tk.Canvas(row, width=56, height=6, bg=BG, highlightthickness=0)
@@ -1591,16 +1649,16 @@ class Widget(tk.Tk):
 
         if rem is not None:
             tk.Label(row, text=f"{rem}%", bg=BG, fg=quota_color(rem),
-                     font=MONO, width=4, anchor="e").pack(side="left")
+                     font=mono(9), width=4, anchor="e").pack(side="left")
             rst_txt = f"({reset_str})" if reset_str else ""
             reset_label = tk.Label(row, text=rst_txt, bg=BG, fg=MUT,
-                                   font=MONO, width=9, anchor="w")
+                                   font=mono(9), width=9, anchor="w")
             reset_label.pack(side="left", padx=(4, 0))
             self._row_reset_labels[d["id"]] = reset_label
         else:
             txt = STATUS_LABEL.get(d["status"], d["status"])
             tk.Label(row, text=txt, bg=BG, fg=MUT,
-                     font=MONO, width=14, anchor="e").pack(side="left")
+                     font=mono(9), width=14, anchor="e").pack(side="left")
 
         dot = tk.Canvas(row, width=10, height=10, bg=BG, highlightthickness=0)
         dot.create_oval(1, 1, 9, 9, fill=STATUS_DOT.get(d["status"], IDLE), width=0)
@@ -1624,14 +1682,14 @@ class Widget(tk.Tk):
         self._horizon_markers = []
         events = horizon_events(data)
         tk.Label(self.horizon_frame, text="RESET HORIZON", bg=BG, fg=MUT,
-                 font=("Cascadia Mono", 8), anchor="w").pack(fill="x", padx=8, pady=(6, 0))
+                 font=mono(8), anchor="w").pack(fill="x", padx=8, pady=(6, 0))
         if events:
             first = events[0]
             next_text = f"next · {first['name']} {first['label']} in {format_reset(first['sec'])}"
         else:
             next_text = "No resets in the next 7 days"
         self._horizon_next_label = tk.Label(self.horizon_frame, text=next_text, bg=BG, fg=FG,
-                                            font=("Segoe UI", 8), anchor="w")
+                                            font=ui(8), anchor="w")
         self._horizon_next_label.pack(fill="x", padx=8)
 
         width, height, left, right, baseline = 300, 62, 8, 292, 43
@@ -1644,7 +1702,7 @@ class Widget(tk.Tk):
                            (72 * 3600, "3d"), (HORIZON_SEC, "7d")):
             x = left + horizon_position(sec, right - left)
             canvas.create_line(x, 8, x, baseline, fill=BORDER)
-            canvas.create_text(x, 54, text=label, fill=MUT, font=("Cascadia Mono", 7),
+            canvas.create_text(x, 54, text=label, fill=MUT, font=mono(7),
                                anchor="w" if sec == 0 else "center")
 
         for index, event in enumerate(events):
@@ -1657,7 +1715,7 @@ class Widget(tk.Tk):
             dot = canvas.create_oval(x - 7, y - 7, x + 7, y + 7, fill=color, outline=BG,
                                      width=2, tags=tag)
             text_item = canvas.create_text(x, y, text=initial, fill="#fff",
-                                           font=("Segoe UI", 6, "bold"), tags=tag)
+                                           font=ui(6, "bold"), tags=tag)
             key = (event["id"], event["label"])
             self._horizon_markers.append({"key": key, "items": (line, dot, text_item)})
             Tooltip(canvas, lambda key=key: self._horizon_tooltip(key), tag=tag)
@@ -1687,14 +1745,14 @@ class Widget(tk.Tk):
                 lbl_icon.image = img
                 lbl_icon.pack(side="left", padx=(3, 1), pady=2)
             else:
-                tk.Label(item, text=initial, bg=color, fg="#fff", font=("Segoe UI", 8, "bold"), width=2).pack(side="left", padx=(3, 1), pady=2)
+                tk.Label(item, text=initial, bg=color, fg="#fff", font=ui(8, "bold"), width=2).pack(side="left", padx=(3, 1), pady=2)
 
             txt = f"{rem}%" if rem is not None else STATUS_LABEL.get(d["status"], d["status"])
-            lbl_txt = tk.Label(item, text=txt, bg=PANEL, fg=quota_color(rem) if rem is not None else MUT, font=MONO)
+            lbl_txt = tk.Label(item, text=txt, bg=PANEL, fg=quota_color(rem) if rem is not None else MUT, font=mono(9))
             lbl_txt.pack(side="left", padx=1)
 
             if reset_str:
-                reset_label = tk.Label(item, text=f"({reset_str})", bg=PANEL, fg=MUT, font=MONO)
+                reset_label = tk.Label(item, text=f"({reset_str})", bg=PANEL, fg=MUT, font=mono(9))
                 reset_label.pack(side="left", padx=(0, 2))
                 self._minibar_reset_labels[d["id"]] = reset_label
 
@@ -1707,12 +1765,12 @@ class Widget(tk.Tk):
                 item.pack(side="left", padx=2)
 
         controls = tk.Frame(self.minibar_frame, bg=PANEL)
-        spend = tk.Label(controls, text="€ …", bg=PANEL, fg="#b8f1c0", font=MONO)
+        spend = tk.Label(controls, text="€ …", bg=PANEL, fg="#b8f1c0", font=mono(9))
         spend.pack(side="left", padx=(4, 3), pady=2)
         Tooltip(spend, self._spend_tooltip)
         self._spend_labels.append(spend)
 
-        live = tk.Label(controls, text="● LIVE", bg=PANEL, fg=STATUS_DOT["ok"], font=("Cascadia Mono", 8))
+        live = tk.Label(controls, text="● LIVE", bg=PANEL, fg=STATUS_DOT["ok"], font=mono(8))
         live.pack(side="left", padx=(1, 3), pady=2)
         Tooltip(live, "Silent updates: spend every 5 seconds, quotas every minute")
         self._live_labels.append(live)
@@ -1720,13 +1778,13 @@ class Widget(tk.Tk):
         orientation_text = "[ ↔ ]" if vertical else "[ ↕ ]"
         orientation_tip = "Switch to horizontal mini bar" if vertical else "Switch to vertical mini bar"
         btn_orientation = tk.Label(controls, text=orientation_text, bg=PANEL, fg=VIOLET,
-                                   font=UI, cursor="hand2")
+                                   font=ui(9), cursor="hand2")
         btn_orientation.pack(side="left", padx=(4, 2), pady=2)
         btn_orientation.bind("<Button-1>", lambda e: self.toggle_bar_orientation())
         Tooltip(btn_orientation, orientation_tip)
 
         btn_switch = tk.Label(controls, text="[ Q Logo ]", bg=PANEL, fg=ACCENT,
-                              font=UI, cursor="hand2")
+                              font=ui(9), cursor="hand2")
         btn_switch.pack(side="left", padx=(2, 6), pady=2)
         btn_switch.bind("<Button-1>", lambda e: self.switch_view_mode())
         Tooltip(btn_switch, "Switch to Q logo")
@@ -1792,21 +1850,21 @@ class Widget(tk.Tk):
 
         # Live footer: navigation plus silent-update state and local spend.
         self.footer_frame = tk.Frame(self.panel, bg=BG)
-        dash_btn = tk.Label(self.footer_frame, text="Dashboard ↗", bg=BG, fg=ACCENT, font=UI, cursor="hand2")
+        dash_btn = tk.Label(self.footer_frame, text="Dashboard ↗", bg=BG, fg=ACCENT, font=ui(9), cursor="hand2")
         dash_btn.pack(side="left", padx=(8, 0), pady=(4, 6))
         dash_btn.bind("<Button-1>", lambda e: webbrowser.open(BASE))
 
-        switch_btn = tk.Label(self.footer_frame, text="⇄ Mini Bar", bg=BG, fg=VIOLET, font=UI, cursor="hand2")
+        switch_btn = tk.Label(self.footer_frame, text="⇄ Mini Bar", bg=BG, fg=VIOLET, font=ui(9), cursor="hand2")
         switch_btn.pack(side="left", padx=(10, 0), pady=(4, 6))
         switch_btn.bind("<Button-1>", lambda e: self.switch_view_mode())
 
         live = tk.Label(self.footer_frame, text="● LIVE", bg=BG, fg=STATUS_DOT["ok"],
-                        font=("Cascadia Mono", 8))
+                        font=mono(8))
         live.pack(side="right", padx=(4, 8), pady=(4, 6))
         Tooltip(live, "Silent updates: spend every 5 seconds, quotas every minute")
         self._live_labels.append(live)
 
-        spend = tk.Label(self.footer_frame, text="€ …", bg=BG, fg="#b8f1c0", font=MONO)
+        spend = tk.Label(self.footer_frame, text="€ …", bg=BG, fg="#b8f1c0", font=mono(9))
         spend.pack(side="right", padx=(4, 0), pady=(4, 6))
         Tooltip(spend, self._spend_tooltip)
         self._spend_labels.append(spend)
