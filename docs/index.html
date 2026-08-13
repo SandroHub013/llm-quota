@@ -253,6 +253,13 @@
       }
       .snippet .copy:hover { background: #1c2740; color: var(--text); }
       .hero-alt { font-size: 13px; color: var(--dim); margin: 13px 0 0; }
+      /* The download leads, and the clone command it used to lead with now follows it:
+         needing Bun and a terminal is the barrier this app exists to remove. */
+      .hero-dl { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin: 0 0 20px; }
+      .hero-dl .platforms {
+        font-family: var(--mono); font-size: 11.5px;
+        letter-spacing: 1.1px; text-transform: uppercase; color: var(--dim);
+      }
 
       /* ======================================================================
          The reset horizon — the one thing this product does that nothing else
@@ -586,6 +593,15 @@
             </figure>
 
             <div class="hero-cta">
+              <div class="hero-dl">
+                <a class="btn primary" href="https://github.com/SandroHub013/llm-quota/releases/latest">
+                  Download the app
+                </a>
+                <span class="platforms">Windows · macOS · Linux</span>
+              </div>
+              <p class="hero-alt" style="margin: 0 0 13px">
+                No Bun, no clone, no terminal: the server ships inside it. Or run it from source —
+              </p>
               <div class="snippet">
                 <code id="cmd">git clone https://github.com/SandroHub013/llm-quota &amp;&amp; cd llm-quota &amp;&amp; bun install &amp;&amp; bun start</code>
                 <button type="button" class="copy" data-copy="#cmd">Copy</button>
@@ -847,11 +863,12 @@ bun run cli provider codex</code></pre>
         <div class="shell">
           <h2>Stop checking multiple billing consoles</h2>
           <p class="section-lede" style="margin-inline: auto">
-            Live dashboard, agent-friendly CLI, and Windows widget. MIT licensed, one runtime
-            dependency, no build step.
+            A desktop app for Windows, macOS and Linux, a live dashboard, an agent-friendly CLI
+            and a Windows widget. MIT licensed, one runtime dependency, no build step.
           </p>
           <div class="btnrow">
             <a class="btn primary" href="https://github.com/SandroHub013/llm-quota">★ Star on GitHub</a>
+            <a class="btn" href="https://github.com/SandroHub013/llm-quota/releases/latest">Download the app</a>
             <a class="btn" href="https://github.com/SandroHub013/llm-quota#quickstart">Read the docs</a>
             <a class="btn" href="https://github.com/SandroHub013/llm-quota/issues">Good first issues</a>
           </div>
