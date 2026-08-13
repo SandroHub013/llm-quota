@@ -113,3 +113,35 @@ test("the code signing policy is reachable from the site and the READMEs", async
     expect(await read(path), `${path} does not link the policy`).toContain("(CODE_SIGNING.md)");
   }
 });
+
+/**
+ * The landing page links straight at release assets so its button downloads rather
+ * than opening a page with eleven files on it. A GitHub asset URL carries the version
+ * in both the tag and the filename, which means the page goes stale the moment one is
+ * cut — silently, as a 404 for every visitor, on the one control the page exists for.
+ *
+ * Hard-coding those URLs is only defensible with this test holding them to the version
+ * the rest of the repository already agrees on.
+ */
+test("the site's download links point at this version's assets", async () => {
+  const version = JSON.parse(await read("package.json")).version;
+  const site = await read("docs/index.html");
+  const base = `https://github.com/SandroHub013/llm-quota/releases/download/v${version}/`;
+
+  // The names the bundler produces, with the space GitHub turns into a dot.
+  for (const asset of [
+    `LLM.Quota_${version}_x64_en-US.msi`,
+    `LLM.Quota_${version}_aarch64.dmg`,
+    `LLM.Quota_${version}_x64.dmg`,
+    `LLM.Quota_${version}_amd64.deb`,
+  ]) {
+    expect(site, `the site does not link ${asset}`).toContain(base + asset);
+  }
+
+  // And nothing left pointing at an older release, which would download a version the
+  // page does not describe.
+  const stale = [...site.matchAll(/releases\/download\/v(\d+\.\d+\.\d+)\//g)]
+    .map((match) => match[1]!)
+    .filter((linked) => linked !== version);
+  expect(stale, "the site links assets from another release").toEqual([]);
+});
