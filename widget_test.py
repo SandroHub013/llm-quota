@@ -481,5 +481,95 @@ class SpendBoundaryTest(unittest.TestCase):
         self.assertEqual(widget.fetch_usage_cost(), (5.5, False))
 
 
+class LinuxSchemeRegistrationTest(unittest.TestCase):
+    """The dashboard's Widget button opens an llmquota:// URL, and on Linux a desktop
+    entry is the only thing that answers it. Getting this wrong is invisible from the
+    code — the button simply opens "No apps available"."""
+
+    def _register(self, home):
+        environ = {"XDG_DATA_HOME": os.path.join(home, "data"),
+                   "XDG_CONFIG_HOME": os.path.join(home, "config")}
+        with patch.dict(os.environ, environ, clear=False), \
+             patch("widget.IS_WINDOWS", False), patch("widget.IS_MACOS", False), \
+             patch("widget.subprocess.run", side_effect=OSError("no xdg tools here")):
+            message = widget.register_protocol()
+            # Both files are read while the throwaway home still applies; outside this
+            # block the paths resolve to the real one.
+            entry = io.open(widget.desktop_entry_path(), encoding="utf-8").read()
+            associations = io.open(widget.mimeapps_path(), encoding="utf-8").read()
+        return message, entry, associations
+
+    def test_the_entry_is_visible_to_the_open_with_chooser(self):
+        import tempfile
+        message, entry, _ = self._register(tempfile.mkdtemp())
+
+        # NoDisplay hides an entry from the menus *and* from the application chooser,
+        # which is the one dialog this entry exists to appear in.
+        self.assertNotIn("NoDisplay", entry)
+        self.assertIn("MimeType=x-scheme-handler/llmquota;", entry)
+        # %u, or the URL the dashboard passes never reaches the widget.
+        self.assertTrue(entry.rstrip().count("%u"), "the Exec line drops the URL")
+        self.assertIn("llm-quota-widget.desktop", message)
+
+    def test_it_associates_the_scheme_without_xdg_mime(self):
+        import tempfile
+        _, _, associations = self._register(tempfile.mkdtemp())
+
+        self.assertIn("x-scheme-handler/llmquota=llm-quota-widget.desktop", associations)
+
+    def test_it_keeps_every_other_association_the_user_chose(self):
+        import tempfile
+        home = tempfile.mkdtemp()
+        config = os.path.join(home, "config")
+        os.makedirs(config, exist_ok=True)
+        with patch.dict(os.environ, {"XDG_CONFIG_HOME": config}, clear=False):
+            io.open(widget.mimeapps_path(), "w", encoding="utf-8").write(
+                "[Default Applications]\ntext/html=firefox.desktop\n")
+            widget.associate_scheme("llm-quota-widget.desktop")
+            kept = io.open(widget.mimeapps_path(), encoding="utf-8").read()
+
+        self.assertIn("text/html=firefox.desktop", kept)
+        self.assertIn("x-scheme-handler/llmquota=llm-quota-widget.desktop", kept)
+
+
+class MacosSchemeRegistrationTest(unittest.TestCase):
+    """macOS hands a URL to a bundle as an Apple Event, not as arguments, so a shell
+    script wrapped in a .app is launched with nothing and the ?server= parameter — the
+    port the dashboard is actually on — never arrives. That is why the launcher is
+    AppleScript with an `on open location` handler."""
+
+    def test_the_url_reaches_the_widget(self):
+        source = widget.macos_launcher_source("/Users/x/widget.py")
+
+        self.assertIn("on open location this_URL", source)
+        self.assertIn("quoted form of this_URL", source)
+        # And a plain launch still works, for someone opening it from Finder.
+        self.assertIn("on run", source)
+
+    def test_a_path_with_spaces_survives_both_layers_of_quoting(self):
+        source = widget.macos_launcher_source("/Users/x/My Widgets/widget.py")
+
+        # AppleScript's own quoting, so the literal does not end at the space...
+        self.assertIn('"/Users/x/My Widgets/widget.py"', source)
+        # ...and the shell's, so `do shell script` does not read it as two arguments.
+        self.assertIn('quoted form of "/Users/x/My Widgets/widget.py"', source)
+
+    def test_the_server_url_is_a_term_and_not_interpolated_text(self):
+        source = widget.macos_launcher_source("/Users/x/widget.py", "http://localhost:8080")
+
+        # Written as `& " --server-url " & quoted form of "..."`. Interpolating it into
+        # the surrounding literal instead would close that string early and the bundle
+        # would fail to compile — which osacompile reports and nothing else would.
+        self.assertIn('& " --server-url " & quoted form of "http://localhost:8080"', source)
+        self.assertEqual(source.count('"'), source.count('"'))
+
+    def test_every_line_has_balanced_quotes(self):
+        for url in (None, "http://localhost:8080"):
+            for line in widget.macos_launcher_source("/Users/x/widget.py", url).splitlines():
+                # Escaped quotes are not delimiters; the rest must pair up.
+                delimiters = line.replace('\\"', "").count('"')
+                self.assertEqual(delimiters % 2, 0, f"unbalanced quotes: {line}")
+
+
 if __name__ == "__main__":
     unittest.main()
