@@ -229,13 +229,16 @@ jobs:
           set -euo pipefail
           dmg=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg | head -1)
 
-          # `yes` because the bundle carries a licenseFile, so the image asks for the
-          # agreement before it will mount. A user clicks Agree; a script that says
-          # nothing gets "hdiutil: attach canceled" after the licence text scrolls past.
+          # The bundle carries a licenseFile, so the image asks for the agreement
+          # before it will mount. A user clicks Agree; a script that says nothing gets
+          # "hdiutil: attach canceled" after the licence text scrolls past. A here
+          # string rather than `yes |`, because the pipe outlives the reader: hdiutil
+          # stops reading once it has its answer, `yes` takes SIGPIPE, and pipefail
+          # then fails a step whose disk is already mounted.
           #
           # An explicit mountpoint, because the volume name contains a space and
           # parsing it back out of hdiutil's output does not survive that.
-          yes | hdiutil attach "$dmg" -nobrowse -readonly -mountpoint /tmp/llm-quota-dmg
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint /tmp/llm-quota-dmg <<< "Y"
           cp -R "/tmp/llm-quota-dmg/LLM Quota.app" /Applications/
           hdiutil detach /tmp/llm-quota-dmg
 
