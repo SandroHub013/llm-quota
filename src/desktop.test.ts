@@ -115,7 +115,7 @@ test("the updater has artifacts, a public key and somewhere to look", async () =
 
   const workflow = await read(".github/workflows/release.yml");
   expect(workflow).toContain("TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}");
-  expect(workflow).toContain("includeUpdaterJson: true");
+  expect(workflow).toContain("uploadUpdaterJson: true");
 });
 
 /**
