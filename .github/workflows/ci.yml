@@ -305,10 +305,17 @@ jobs:
             exit 1
           fi
 
-  # CONTRIBUTING asks contributors to run these; run Bun here too so the Windows-only
-  # PowerShell/status-line bridge path is exercised instead of being skipped on Ubuntu.
+  # The widget is Tk, and Tk is where a cross-platform promise quietly stops being
+  # true: an import of winreg, a -transparentcolor attribute or a creationflags
+  # argument costs nothing on Windows and refuses to start everywhere else. Running
+  # its tests on all three is what keeps that honest. Bun runs here too, so the
+  # Windows-only PowerShell/status-line bridge path is exercised rather than skipped.
   widget:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -327,6 +334,12 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.12'
+
+      # Tk is a separate package on Debian and Ubuntu, and importing the widget is the
+      # first thing every one of its tests does.
+      - name: Tk for Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
 
       - name: Widget tests
         run: python -m unittest widget_test

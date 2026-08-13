@@ -57,10 +57,12 @@ glance which subscription is free, which is cooling down, and exactly when to co
   exit codes, so an agent can check its own budget before starting a long job.
 - 🖥️ **Desktop app** — an installer for Windows, macOS and Linux with the server compiled inside it.
   No Bun, no clone, no terminal. Its own window, a tray icon, close-to-tray, and start at login.
-- 🪟 **Windows desktop widget** — a floating always-on-top Tk widget, launched from the dashboard
-  via the `llmquota://widget` protocol. It silently refreshes quotas every minute, local spend
-  every five seconds, and keeps reset countdowns moving between requests. It shows the same provider
-  cards as the dashboard; OpenCode remains included only in local spend.
+- 🪟 **Desktop widget, on all three** — a floating always-on-top Tk widget, launched from the
+  dashboard via the `llmquota://widget` protocol on Windows and Linux, and by running it directly on
+  macOS. It silently refreshes quotas every minute, local spend every five seconds, and keeps reset
+  countdowns moving between requests. It shows the same provider cards as the dashboard; OpenCode
+  remains included only in local spend. Windows adds acrylic blur and a clipped outline the other
+  two have no equivalent for; the numbers are the same everywhere.
 - ♿ **Accessible** — full keyboard navigation, `prefers-reduced-motion` respected, all primary
   providers on screen without scrolling from 1280×800 up.
 
@@ -99,7 +101,7 @@ macOS and Linux. Nothing else to install: the server ships inside it. It opens i
 keeps a tray icon, and can start at login.
 
 Or run it from source. That needs [Bun](https://bun.sh) 1.0+ (the server uses `Bun.serve`; Node is
-not supported), and Python 3 only for the Windows widget:
+not supported), and Python 3 only for the desktop widget:
 
 ```bash
 git clone https://github.com/SandroHub013/llm-quota.git
@@ -180,7 +182,7 @@ No runtime account, username, quota, or spend total is tied to the project autho
   Prime Agent and NikCLI history. Hermes keeps no local token record, so its spend cannot be counted.
 - The optional contribution calendar queries the viewer authenticated by the official GitHub CLI.
   Run `gh auth login` to enable it; without `gh`, the local spend calendar continues to work.
-- A dashboard running on a custom local port passes its own origin to the Windows widget automatically.
+- A dashboard running on a custom local port passes its own origin to the widget automatically.
   The CLI and a manually launched widget also accept `LLM_QUOTA_URL`; the widget additionally accepts
   `--server-url`.
 
@@ -323,20 +325,29 @@ icon and version metadata.
 
 ---
 
-## Windows desktop widget
+## Desktop widget
 
 ```bash
 python widget.py --register-protocol
 ```
 
-Registers `llmquota://widget`. The **Widget** button in the dashboard then launches a floating
-Tk widget on the desktop and passes the dashboard's local origin automatically. For a manual or
-remote setup:
+Registers `llmquota://widget`, so the **Widget** button in the dashboard launches the widget and
+passes the dashboard's local origin automatically. Windows keeps that registration in the registry
+and Linux in `~/.local/share/applications`.
 
-```powershell
+**macOS registers URL schemes for application bundles, not for scripts**, so the dashboard button
+cannot start it there. `--register-protocol` prints the command to run instead, and the widget
+itself works the same once started.
+
+For a manual or remote setup, on any platform:
+
+```bash
 python widget.py --server-url http://localhost:8080
 python widget.py --register-protocol --server-url http://localhost:8080
 ```
+
+Tk is part of the Python standard library but is packaged separately on Debian and Ubuntu:
+`sudo apt install python3-tk`.
 
 ---
 
@@ -374,7 +385,7 @@ public/                # frontend SPA — HTML, CSS, vanilla JS, no build step
 └── logos/             # official provider marks, frozen
 src-tauri/             # desktop shell: window, tray, start-at-login, sidecar lifecycle
 scripts/               # asset manifest and sidecar build steps
-widget.py              # Windows Tkinter desktop widget
+widget.py              # Tkinter desktop widget (Windows, macOS, Linux)
 ```
 
 Stack: [Bun](https://bun.sh) + [Hono](https://hono.dev) + TypeScript. One runtime dependency.
@@ -392,7 +403,7 @@ forget.
 bun test                        # TypeScript: server, providers, CLI, frontend guards
 bun run typecheck
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets   # the desktop shell
-python -m unittest widget_test  # Python: the Windows widget
+python -m unittest widget_test  # Python: the desktop widget
 ```
 
 ---
