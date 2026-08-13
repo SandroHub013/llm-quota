@@ -64,9 +64,9 @@ jobs:
           python -m pip install --quiet pip-audit
           pip-audit -r requirements-dev.txt
 
-  # The desktop shell is Rust, so `bun test` cannot see it break. This does not bundle
-  # installers — that is the release workflow's job, and it takes minutes. It compiles
-  # the shell against the real sidecar, which is what a change to either side breaks.
+  # The desktop shell is Rust, so `bun test` cannot see it break. This compiles the
+  # shell against the real sidecar, which is what a change to either side breaks, and
+  # it is the fast half: the `install` job below is the one that bundles and installs.
   desktop:
     runs-on: ubuntu-22.04
     steps:
@@ -103,6 +103,159 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+  # The failure this job exists for: an installer that reports success and installs
+  # nothing. The NSIS build this project shipped first did exactly that — no program
+  # folder, no registry entry, no shortcut, exit code zero — and nothing in CI could
+  # have caught it, because nothing in CI had ever run an installer. Compiling the
+  # shell is not the same as installing it.
+  #
+  # So each platform builds its own bundle, installs it the way a user would, and then
+  # proves the payload is really on disk and really runs: the installed server is
+  # started from its installed path and has to answer on the port. The window is not
+  # opened — a webview on a headless runner tests the runner, not this project — but
+  # the shell and the sidecar are both asserted present, and a missing file is the
+  # symptom every installer failure so far has shown.
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, bundle: msi }
+          - { os: macos-latest, target: aarch64-apple-darwin, bundle: dmg }
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, bundle: deb }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.3.14'
+
+      - run: bun install --frozen-lockfile
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: './src-tauri -> target'
+          key: install-${{ matrix.target }}
+
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libxdo-dev \
+            libssl-dev \
+            patchelf \
+            file
+
+      # Must precede the bundler: Tauri resolves externalBin at bundle time and fails
+      # outright when the target-suffixed file is absent.
+      - name: Compile the server sidecar
+        run: bun run sidecar -- ${{ matrix.target }}
+
+      - name: Bundle
+        run: bun x @tauri-apps/cli build --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
+
+      - name: Install and verify (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem "src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi" | Select-Object -First 1
+          if (-not $msi) { throw "the bundler produced no .msi" }
+
+          $installer = Start-Process msiexec.exe -Wait -PassThru -ArgumentList `
+            "/i", "`"$($msi.FullName)`"", "/qn", "/L*v", "msi.log"
+          if ($installer.ExitCode -ne 0) {
+            Get-Content msi.log -Tail 40
+            throw "msiexec exited $($installer.ExitCode)"
+          }
+
+          # The point of the job. msiexec reporting success is not evidence of a file.
+          $dir = "C:\Program Files\LLM Quota"
+          foreach ($name in "llm-quota-desktop.exe", "llm-quota-server.exe") {
+            if (-not (Test-Path "$dir\$name")) { throw "$name is missing from $dir" }
+          }
+          $entry = Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" |
+            Where-Object DisplayName -eq "LLM Quota"
+          if (-not $entry) { throw "no Add/Remove Programs entry" }
+
+          $env:PORT = "4747"
+          $server = Start-Process "$dir\llm-quota-server.exe" -PassThru
+          try {
+            $answered = $false
+            foreach ($attempt in 1..30) {
+              try {
+                if ((Invoke-WebRequest "http://127.0.0.1:4747/" -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200) {
+                  $answered = $true
+                  break
+                }
+              } catch { Start-Sleep -Seconds 1 }
+            }
+            if (-not $answered) { throw "the installed server never answered on 4747" }
+          } finally {
+            Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+          }
+
+          Start-Process msiexec.exe -Wait -ArgumentList "/x", "`"$($msi.FullName)`"", "/qn"
+
+      - name: Install and verify (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          dmg=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg | head -1)
+
+          # An explicit mountpoint, because the volume name contains a space and
+          # parsing it back out of hdiutil's output does not survive that.
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint /tmp/llm-quota-dmg
+          cp -R "/tmp/llm-quota-dmg/LLM Quota.app" /Applications/
+          hdiutil detach /tmp/llm-quota-dmg
+
+          app="/Applications/LLM Quota.app/Contents/MacOS"
+          test -x "$app/llm-quota-desktop" || { echo "the shell is missing from the app bundle"; exit 1; }
+          test -x "$app/llm-quota-server" || { echo "the sidecar is missing from the app bundle"; exit 1; }
+
+          PORT=4747 "$app/llm-quota-server" &
+          server=$!
+          trap 'kill $server 2>/dev/null || true' EXIT
+          for _ in $(seq 30); do
+            curl -fsS http://127.0.0.1:4747/ > /dev/null && exit 0
+            sleep 1
+          done
+          echo "the installed server never answered on 4747"
+          exit 1
+
+      - name: Install and verify (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          deb=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb | head -1)
+          # An absolute path, or apt reads the argument as the name of a package to
+          # fetch from the archive rather than as a file to install.
+          sudo apt-get install -y "$PWD/$deb"
+
+          package=$(dpkg-deb -f "$deb" Package)
+          files=$(dpkg -L "$package")
+          echo "$files" | grep -q '/llm-quota-desktop$' || { echo "the shell is not in the package"; exit 1; }
+          server=$(echo "$files" | grep '/llm-quota-server$' | head -1)
+          test -x "$server" || { echo "the sidecar is not in the package"; exit 1; }
+
+          PORT=4747 "$server" &
+          pid=$!
+          trap 'kill $pid 2>/dev/null || true' EXIT
+          for _ in $(seq 30); do
+            curl -fsS http://127.0.0.1:4747/ > /dev/null && exit 0
+            sleep 1
+          done
+          echo "the installed server never answered on 4747"
+          exit 1
 
   # CONTRIBUTING asks contributors to run these; run Bun here too so the Windows-only
   # PowerShell/status-line bridge path is exercised instead of being skipped on Ubuntu.
