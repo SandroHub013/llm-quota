@@ -260,6 +260,14 @@
         font-family: var(--mono); font-size: 11.5px;
         letter-spacing: 1.1px; text-transform: uppercase; color: var(--dim);
       }
+      /* The other three builds, for the reader whose browser guessed wrong and for the
+         one downloading on a machine that is not the one they will install on. Padding
+         rather than bare inline links: these sit side by side, so the WCAG 2.5.8
+         "inline in a sentence" exemption does not cover their hit area. */
+      .dl-links { display: flex; flex-wrap: wrap; gap: 2px 6px; margin: 0; }
+      .dl-links a { padding: 8px 6px; color: var(--muted); text-decoration: none; border-radius: 8px; }
+      .dl-links a:hover { color: var(--text); background: #1c2740; }
+      .dl-links a + a::before { content: "·"; color: var(--dim); margin-right: 10px; }
 
       /* ======================================================================
          The reset horizon — the one thing this product does that nothing else
@@ -593,13 +601,31 @@
             </figure>
 
             <div class="hero-cta">
+              <!-- Every link here points straight at a release asset, so the button
+                   downloads rather than opening a page to hunt through. The version is
+                   written in because a GitHub asset URL carries it; a doc-sync test
+                   keeps these in step with package.json, which is the only reason it is
+                   safe to hard-code. Without JavaScript the primary button still opens
+                   the release page, and the four links below it still download. -->
               <div class="hero-dl">
-                <a class="btn primary" href="https://github.com/SandroHub013/llm-quota/releases/latest">
-                  Download the app
-                </a>
-                <span class="platforms">Windows · macOS · Linux</span>
+                <a
+                  class="btn primary"
+                  id="download"
+                  href="https://github.com/SandroHub013/llm-quota/releases/latest"
+                  data-windows="https://github.com/SandroHub013/llm-quota/releases/download/v0.5.0/LLM.Quota_0.5.0_x64_en-US.msi"
+                  data-macos-arm="https://github.com/SandroHub013/llm-quota/releases/download/v0.5.0/LLM.Quota_0.5.0_aarch64.dmg"
+                  data-macos-intel="https://github.com/SandroHub013/llm-quota/releases/download/v0.5.0/LLM.Quota_0.5.0_x64.dmg"
+                  data-linux="https://github.com/SandroHub013/llm-quota/releases/download/v0.5.0/LLM.Quota_0.5.0_amd64.deb"
+                >Download the app</a>
+                <span class="platforms" id="downloadPlatforms">Windows · macOS · Linux</span>
               </div>
-              <p class="hero-alt" style="margin: 0 0 13px">
+              <p class="hero-alt dl-links">
+                <a href="https://github.com/SandroHub013/llm-quota/releases/download/v0.5.0/LLM.Quota_0.5.0_x64_en-US.msi">Windows</a>
+                <a href="https://github.com/SandroHub013/llm-quota/releases/download/v0.5.0/LLM.Quota_0.5.0_aarch64.dmg">macOS Apple silicon</a>
+                <a href="https://github.com/SandroHub013/llm-quota/releases/download/v0.5.0/LLM.Quota_0.5.0_x64.dmg">macOS Intel</a>
+                <a href="https://github.com/SandroHub013/llm-quota/releases/download/v0.5.0/LLM.Quota_0.5.0_amd64.deb">Linux .deb</a>
+              </p>
+              <p class="hero-alt" style="margin: 13px 0">
                 No Bun, no clone, no terminal: the server ships inside it. Or run it from source —
               </p>
               <div class="snippet">
@@ -890,6 +916,38 @@ bun run cli provider codex</code></pre>
     </footer>
 
     <script>
+      // Point the download button at the build for the machine reading the page, so it
+      // downloads instead of opening a release page with eleven assets on it.
+      //
+      // The guess is only ever an improvement on a page the reader still has to choose
+      // from: the four builds stay listed underneath, and a wrong guess costs one
+      // extra click rather than a failed install. Apple silicon versus Intel cannot be
+      // read from the user agent at all — every Mac reports the same string — so the
+      // modern architecture is offered and the other stays a link.
+      (() => {
+        const button = document.getElementById("download");
+        const platforms = document.getElementById("downloadPlatforms");
+        if (!button) return;
+
+        const agent = navigator.userAgent;
+        const guess =
+          /Windows|Win64|Win32/i.test(agent) ? ["windows", "Download for Windows", "Windows · .msi"]
+          : /Macintosh|Mac OS X/i.test(agent) ? ["macosArm", "Download for macOS", "Apple silicon · .dmg"]
+          : /Linux|X11/i.test(agent) && !/Android/i.test(agent) ? ["linux", "Download for Linux", "Debian, Ubuntu · .deb"]
+          : null;
+        // A phone or a tablet: there is no build to offer, so the button keeps pointing
+        // at the release page rather than handing over an installer that cannot run.
+        if (!guess || /Android|iPhone|iPad|iPod/i.test(agent)) return;
+
+        const [key, label, note] = guess;
+        const href = button.dataset[key];
+        if (!href) return;
+
+        button.href = href;
+        button.textContent = label;
+        if (platforms) platforms.textContent = note;
+      })();
+
       // Copy button. No dependency, and the command stays readable either way.
       document.querySelectorAll("[data-copy]").forEach((btn) => {
         btn.addEventListener("click", async () => {
