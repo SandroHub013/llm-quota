@@ -214,6 +214,20 @@ La shell è [Tauri](https://tauri.app): usa la webview del sistema operativo inv
 dietro un browser, per questo il download è ~30 MB invece di ~150 MB. Non contiene logica di
 prodotto — dashboard, API e adattatori sono lo stesso codice dell'installazione da sorgenti.
 
+<details>
+<summary>La finestra resta vuota, o le card appaiono solo passandoci sopra il mouse (Linux)</summary>
+
+Risolto dalla 0.5.1. Sulle versioni precedenti, avvialo disattivando il renderer che WebKitGTK usa
+su molti desktop:
+
+```bash
+WEBKIT_DISABLE_DMABUF_RENDERER=1 llm-quota-desktop
+```
+
+Ora l'app lo imposta da sé su Linux. Se una build disegnasse ancora male, `WEBKIT_DISABLE_COMPOSITING_MODE=1`
+è il ripiego più pesante: disattiva del tutto il compositing accelerato.
+</details>
+
 > **Gli installer non sono firmati.** SmartScreen su Windows dirà "editore sconosciuto" — *Ulteriori
 > informazioni → Esegui comunque*. Gatekeeper su macOS rifiuterà il doppio clic — tasto destro
 > sull'app → *Apri*.

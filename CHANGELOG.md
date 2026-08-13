@@ -6,6 +6,27 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The Linux window drew nothing until the pointer moved over it**, and what appeared then was torn.
+  Nothing was wrong with the page: WebKitGTK's DMA-BUF renderer never hands over what it drew on a
+  large share of desktops — GNOME under Wayland and NVIDIA's driver especially — so only the regions
+  an input event invalidated ever reached the screen. The shell now turns that renderer off on Linux
+  before the webview starts, and leaves it alone if the environment already sets it. The cost is a
+  slower compositing path on a window that refreshes every few seconds; a window that draws
+  correctly and slowly beats one that draws quickly and wrong.
+- **The widget used fonts only Windows has.** Eleven call sites named `Cascadia Mono` and `Segoe UI`
+  directly, and Tk substitutes silently rather than raising — so on Linux and macOS it drew in
+  whatever the desktop picked. The provider rows are laid out in character widths, a measurement
+  that only means something in a monospaced face, so a proportional substitute put the numbers out
+  of line with their labels. Families are now chosen at startup from what is installed, Windows
+  names first so that machine is unchanged.
+- **The dashboard's Widget button did nothing on Linux and macOS.** The Linux desktop entry carried
+  `NoDisplay=true`, which hides it from the chooser the browser opens, and registration reported a
+  success it never verified. macOS registered nothing at all; it now builds a small AppleScript
+  launcher bundle, because a URL there arrives as an Apple Event rather than as arguments and
+  anything simpler loses the server the dashboard named.
+
 ## [0.5.0] — 2026-08-13
 
 ### Added
