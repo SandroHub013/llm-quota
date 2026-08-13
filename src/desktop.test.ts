@@ -100,8 +100,12 @@ test("the installer artwork exists at the sizes NSIS requires", async () => {
  */
 test("the splash screen loads nothing remote", async () => {
   const splash = await read("src-tauri/splash/index.html");
+  // The allowance is compared against the host alone, not against a prefix of the
+  // whole URL: `www.w3.org.example.com` and `www.w3.org.evil/` both start with the
+  // allowed string while belonging to somebody else, and a guard that can be walked
+  // past by appending characters is not a guard.
   const remote = [...splash.matchAll(/\bhttps?:\/\/([^\s"'`)]+)/g)]
-    .map((match) => match[1]!)
-    .filter((host) => !host.startsWith("www.w3.org"));
+    .map((match) => match[1]!.split("/")[0]!.toLowerCase())
+    .filter((host) => host !== "www.w3.org");
   expect(remote).toEqual([]);
 });
