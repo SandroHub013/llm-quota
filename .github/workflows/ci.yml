@@ -204,7 +204,24 @@ jobs:
             Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
           }
 
+          # The upgrade path, which is not the same code as the first install and has
+          # its own way of going wrong: Tauri regenerates the ProductCode on every
+          # build, so only a stable UpgradeCode makes a second install replace the
+          # first. If that ever breaks, the user is left with two entries and two
+          # copies rather than an upgraded one.
+          $upgrade = Start-Process msiexec.exe -Wait -PassThru -ArgumentList `
+            "/i", "`"$($msi.FullName)`"", "/qn", "/L*v", "upgrade.log"
+          if ($upgrade.ExitCode -ne 0) {
+            Get-Content upgrade.log -Tail 40
+            throw "installing over the first install exited $($upgrade.ExitCode)"
+          }
+          $entries = @(Get-ItemProperty "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*" |
+            Where-Object DisplayName -eq "LLM Quota")
+          if ($entries.Count -ne 1) { throw "$($entries.Count) Add/Remove Programs entries, expected 1" }
+
+          # And uninstalling has to take the files with it.
           Start-Process msiexec.exe -Wait -ArgumentList "/x", "`"$($msi.FullName)`"", "/qn"
+          if (Test-Path "$dir\llm-quota-desktop.exe") { throw "uninstalling left the shell behind" }
 
       - name: Install and verify (macOS)
         if: runner.os == 'macOS'
@@ -212,9 +229,13 @@ jobs:
           set -euo pipefail
           dmg=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg | head -1)
 
+          # `yes` because the bundle carries a licenseFile, so the image asks for the
+          # agreement before it will mount. A user clicks Agree; a script that says
+          # nothing gets "hdiutil: attach canceled" after the licence text scrolls past.
+          #
           # An explicit mountpoint, because the volume name contains a space and
           # parsing it back out of hdiutil's output does not survive that.
-          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint /tmp/llm-quota-dmg
+          yes | hdiutil attach "$dmg" -nobrowse -readonly -mountpoint /tmp/llm-quota-dmg
           cp -R "/tmp/llm-quota-dmg/LLM Quota.app" /Applications/
           hdiutil detach /tmp/llm-quota-dmg
 
@@ -250,12 +271,25 @@ jobs:
           PORT=4747 "$server" &
           pid=$!
           trap 'kill $pid 2>/dev/null || true' EXIT
+
+          answered=
           for _ in $(seq 30); do
-            curl -fsS http://127.0.0.1:4747/ > /dev/null && exit 0
+            if curl -fsS http://127.0.0.1:4747/ > /dev/null; then answered=yes; break; fi
             sleep 1
           done
-          echo "the installed server never answered on 4747"
-          exit 1
+          if [ -z "$answered" ]; then
+            echo "the installed server never answered on 4747"
+            exit 1
+          fi
+          kill "$pid" 2>/dev/null || true
+
+          # A package that installs cleanly and then leaves its files behind on removal
+          # is its own bug report.
+          sudo apt-get remove -y "$package"
+          if [ -e "$server" ]; then
+            echo "removing the package left $server behind"
+            exit 1
+          fi
 
   # CONTRIBUTING asks contributors to run these; run Bun here too so the Windows-only
   # PowerShell/status-line bridge path is exercised instead of being skipped on Ubuntu.
