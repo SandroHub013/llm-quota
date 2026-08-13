@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-08-13
+
 ### Added
 
 - **A desktop app for Windows, macOS and Linux.** Installing used to mean installing Bun, cloning
@@ -155,6 +157,7 @@ dashboard may read, and a card promising data that never arrives is worse than n
 
 Initial release: local-first live quota dashboard, CLI, and Windows widget.
 
+[0.4.0]: https://github.com/SandroHub013/llm-quota/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/SandroHub013/llm-quota/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/SandroHub013/llm-quota/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/SandroHub013/llm-quota/releases/tag/v0.1.0
