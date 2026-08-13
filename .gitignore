@@ -33,3 +33,14 @@ Desktop.ini
 # Temporary video test outputs
 video-test/
 
+
+# Signing keys, and anything shaped like one. The updater's private key lives outside
+# this repository on purpose — every installed copy trusts it, and losing control of it
+# means someone else can sign an update the app will accept. These patterns are the
+# backstop for the day a key is generated into the working tree by habit: `tauri signer
+# generate` writes here unless told otherwise.
+*.key
+*.pem
+*.p12
+*.pfx
+.llm-quota-keys/
