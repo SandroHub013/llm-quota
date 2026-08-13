@@ -285,9 +285,11 @@ Registra il protocollo `llmquota://widget`, così il pulsante **Widget** nella d
 widget e gli passa automaticamente l'origine locale. Windows tiene quella registrazione nel
 registro di sistema, Linux in `~/.local/share/applications`.
 
-**macOS registra gli schemi URL per i bundle applicativi, non per gli script**: lì il pulsante della
-dashboard non può avviarlo. `--register-protocol` stampa il comando da eseguire, e una volta avviato
-il widget funziona identico.
+Su **macOS** lo stesso comando costruisce un piccolo bundle di avvio in `~/Applications` e lo
+registra in LaunchServices, perché lì uno schema URL appartiene a un'applicazione e non a uno
+script. Il bundle è AppleScript con un handler `on open location`: macOS consegna l'URL come Apple
+Event e non come argomenti, quindi qualcosa di più semplice avvierebbe il widget senza il server
+che la dashboard ha indicato.
 
 Per un avvio manuale o remoto, su qualsiasi piattaforma:
 

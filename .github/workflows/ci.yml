@@ -368,3 +368,22 @@ jobs:
             echo "the scheme resolves to '${handler:-nothing}', not the widget"
             exit 1
           fi
+
+      # The same question on macOS, where the answer is a bundle rather than a desktop
+      # entry. osacompile is the step that would reject a launcher whose quoting is
+      # wrong, and the URL scheme has to be in the built Info.plist or the bundle opens
+      # from Finder and never from a link.
+      - name: The dashboard's Widget button has something to open (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          python widget.py --register-protocol
+
+          bundle="$HOME/Applications/LLM Quota Widget.app"
+          plutil -lint "$bundle/Contents/Info.plist"
+
+          scheme=$(plutil -extract CFBundleURLTypes.0.CFBundleURLSchemes.0 raw "$bundle/Contents/Info.plist")
+          if [ "$scheme" != "llmquota" ]; then
+            echo "the bundle declares '$scheme', not llmquota"
+            exit 1
+          fi
