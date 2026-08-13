@@ -7,7 +7,6 @@ GitHub account, or running LLM Quota server.
 
 from __future__ import annotations
 
-import json
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
