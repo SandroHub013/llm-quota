@@ -256,9 +256,25 @@ shipping a browser, which is why the download is ~30 MB rather than ~150 MB. It 
 logic — the dashboard, the API and every provider adapter are the same code the source install runs.
 
 > **The installers are unsigned.** Windows SmartScreen will say "unknown publisher" — *More info →
-> Run anyway*. macOS Gatekeeper will refuse a double click — right-click the app → *Open*. Signing
-> certificates are a recurring cost this project has not taken on; the source and the build workflow
-> are both public, so you can rebuild any release yourself and compare.
+> Run anyway*. macOS Gatekeeper will refuse a double click — right-click the app → *Open*.
+>
+> On Windows some antivirus products go further and stop an unsigned installer from creating its
+> program folder at all. The wizard then reports "completed successfully" having written nothing.
+> **If that happens, take the portable zip below** — it needs no installer, so the only process
+> writing to disk is your own archive tool.
+>
+> A free open-source signing certificate is being applied for. Until it lands: the source and the
+> build workflow are both public, so you can rebuild any release yourself and compare.
+
+<details>
+<summary>Portable, no installer (Windows)</summary>
+
+`llm-quota-portable-windows-x64.zip` on every release. Unzip it anywhere and run
+`llm-quota-desktop.exe` — the server sits beside it and is started for you. Nothing is written
+outside the folder you chose except the usual per-user config in `~/.llm-quota/`.
+
+Linux users already have this: the `.AppImage` is portable by construction.
+</details>
 
 <details>
 <summary>Just the server, no window</summary>

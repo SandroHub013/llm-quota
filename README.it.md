@@ -209,9 +209,26 @@ prodotto — dashboard, API e adattatori sono lo stesso codice dell'installazion
 
 > **Gli installer non sono firmati.** SmartScreen su Windows dirà "editore sconosciuto" — *Ulteriori
 > informazioni → Esegui comunque*. Gatekeeper su macOS rifiuterà il doppio clic — tasto destro
-> sull'app → *Apri*. I certificati di firma sono un costo ricorrente che il progetto non ha ancora
-> assunto; sorgenti e workflow di build sono pubblici, quindi puoi ricompilare qualsiasi release e
+> sull'app → *Apri*.
+>
+> Su Windows alcuni antivirus vanno oltre e impediscono a un installer non firmato di creare la
+> propria cartella di programma. Il wizard a quel punto dichiara "completata con successo" senza
+> aver scritto niente. **Se succede, prendi lo zip portable qui sotto**: non ha installer, quindi
+> l'unico processo che scrive su disco è il tuo programma di decompressione.
+>
+> È in corso la richiesta di un certificato di firma gratuito per progetti open source. Nel
+> frattempo sorgenti e workflow di build sono pubblici, quindi puoi ricompilare qualsiasi release e
 > confrontarla.
+
+<details>
+<summary>Portable, senza installer (Windows)</summary>
+
+`llm-quota-portable-windows-x64.zip` in ogni release. Scompattalo dove vuoi ed esegui
+`llm-quota-desktop.exe`: il server sta accanto e viene avviato per te. Non viene scritto niente
+fuori dalla cartella che hai scelto, a parte la solita configurazione per utente in `~/.llm-quota/`.
+
+Su Linux esiste già l'equivalente: l'`.AppImage` è portable per costruzione.
+</details>
 
 <details>
 <summary>Solo il server, senza finestra</summary>

@@ -112,6 +112,37 @@ jobs:
           prerelease: false
           args: --target ${{ matrix.target }}
 
+      # Windows only, and for a specific reason: the installer is unsigned, and some
+      # antivirus products stop an unsigned installer from creating a program folder
+      # at all — McAfee's ransomware protection refuses the directory, NSIS then fails
+      # to write into it, and the wizard still ends on "completed successfully". A zip
+      # sidesteps the whole class of problem, because the process doing the writing is
+      # the user's own archive tool rather than an unknown binary.
+      #
+      # Linux already ships the AppImage, which is portable by construction, and macOS
+      # keeps the dmg: Gatekeeper judges the app, not the container it arrived in, so a
+      # zip would buy nothing there.
+      - name: Attach a portable build
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag || github.ref_name }}"
+          # --target puts the build under a triple subdirectory; a host build does not.
+          out="src-tauri/target/${{ matrix.target }}/release"
+          [ -d "$out" ] || out="src-tauri/target/release"
+
+          # A folder inside the zip, so extracting does not scatter two executables
+          # across the user's Downloads.
+          mkdir -p "portable/LLM Quota"
+          cp "$out/llm-quota-desktop.exe" "$out/llm-quota-server.exe" "portable/LLM Quota/"
+
+          asset="llm-quota-portable-${{ matrix.label }}.zip"
+          (cd portable && 7z a -tzip -mx=9 "../$asset" "LLM Quota" > /dev/null)
+          gh release upload "$tag" "$asset" --clobber --repo "${{ github.repository }}"
+
       # The bare server, for anyone who wants the dashboard without the desktop shell:
       # one executable, no Bun, no clone, `PORT=4747 ./llm-quota-server`. It is the same
       # binary the bundle embeds, so it costs nothing extra to publish.

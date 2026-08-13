@@ -16,6 +16,13 @@ All notable changes to this project are documented here. The format follows
   logic: it starts the same loopback server a source install runs, waits for it to answer, and
   points the window at it. It takes port 4747 when free and any free port otherwise, so it never
   collides with a `bun start` already running.
+- **A portable Windows build**, `llm-quota-portable-windows-x64.zip`: unzip and run, no installer.
+  It exists because an unsigned installer is not merely inconvenient. McAfee's ransomware protection
+  refuses to let one create its program folder at all — the directory never appears, NSIS fails to
+  write into it, and the wizard still finishes on "completed successfully" having installed nothing.
+  Reproduced on two different install paths, and confirmed by writing the identical file to the
+  identical path from a signed process, which succeeds. A zip removes the unknown binary from the
+  writing side entirely.
 - **A standalone server executable** on every release, for anyone who wants the dashboard without
   the window: one file, no Bun, no clone.
 - The desktop window opens at the viewport the dashboard is laid out for, sized in logical pixels
