@@ -18,9 +18,13 @@ test("the frontend makes no third-party requests", async () => {
   // Console links arrive from the API at runtime. A literal remote URL in these files
   // can be used by a resource-bearing element, so reject it; the W3C SVG namespace is
   // metadata and causes no request.
+  // The allowance is compared against the host alone, never against a prefix of the
+  // whole URL: `www.w3.org.example.com` and `www.w3.org.evil/` both begin with the
+  // allowed string while belonging to someone else, and a guard that can be walked
+  // past by appending characters is not a guard.
   const remote = [...frontend.matchAll(/\bhttps?:\/\/([^\s"'`)]+)/g)]
-    .map((m) => m[1])
-    .filter((host) => !host.startsWith("www.w3.org"));
+    .map((m) => m[1]!.split("/")[0]!.toLowerCase())
+    .filter((host) => host !== "www.w3.org");
 
   expect(remote).toEqual([]);
   expect(frontend).not.toContain("fonts.googleapis.com");
@@ -83,9 +87,9 @@ test("provider logos are local files with no external references", async () => {
     for (const file of await readdir(dir)) {
       if (!file.endsWith(".svg")) continue;
       const svg = await read(`${dir}/${file}`);
-      const remote = [...svg.matchAll(/https?:\/\/[^\s"')]+/g)]
-        .map((m) => m[0])
-        .filter((u) => !u.startsWith("http://www.w3.org"));
+      const remote = [...svg.matchAll(/https?:\/\/([^\s"')]+)/g)]
+        .map((m) => m[1]!.split("/")[0]!.toLowerCase())
+        .filter((host) => host !== "www.w3.org");
       expect(remote).toEqual([]);
     }
   }
