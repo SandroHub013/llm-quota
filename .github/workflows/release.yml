@@ -46,6 +46,30 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      # Rebuilding a tag whose release is already published does not update it. GitHub
+      # allows a draft to carry the name of a published tag, so the bundler creates a
+      # *second* release under the same name, and whatever it does upload to the first
+      # replaces files people are already downloading — including latest.json, which
+      # every installed copy reads. Neither is undone by rerunning.
+      #
+      # This is reachable through workflow_dispatch, which exists to retry a release
+      # that failed halfway. Retrying a draft is the case it is for; a published tag is
+      # immutable, and the answer there is a new version.
+      - name: Refuse to rebuild a published release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag || github.ref_name }}"
+          draft=$(gh release view "$tag" --repo "${{ github.repository }}" --json isDraft --jq .isDraft 2>/dev/null || echo absent)
+
+          if [ "$draft" = "false" ]; then
+            echo "::error::$tag is already published. Rebuilding it would overwrite assets people are downloading and leave a second release under the same name. Cut a new version instead."
+            exit 1
+          fi
+          echo "$tag: ${draft/absent/no release yet} — safe to build"
+
   bundle:
     needs: verify
     strategy:
