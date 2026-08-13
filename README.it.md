@@ -194,7 +194,7 @@ Per host o porta diversi: `LLM_QUOTA_URL=http://localhost:8080`.
 ## App desktop
 
 [Ogni release](https://github.com/SandroHub013/llm-quota/releases/latest) pubblica un installer per
-Windows (`.exe`), macOS (`.dmg`, Apple silicon e Intel) e Linux (`.deb`, `.AppImage`). Nessun Bun da
+Windows (`.msi`), macOS (`.dmg`, Apple silicon e Intel) e Linux (`.deb`, `.AppImage`). Nessun Bun da
 installare, nessun repository da clonare: il server compilato è dentro il bundle.
 
 - Finestra propria, così la dashboard non è una scheda del browser che si perde.
@@ -211,19 +211,24 @@ prodotto — dashboard, API e adattatori sono lo stesso codice dell'installazion
 > informazioni → Esegui comunque*. Gatekeeper su macOS rifiuterà il doppio clic — tasto destro
 > sull'app → *Apri*.
 >
-> Su Windows alcuni antivirus vanno oltre e impediscono a un installer non firmato di creare la
-> propria cartella di programma. Il wizard a quel punto dichiara "completata con successo" senza
-> aver scritto niente. **Se succede, prendi lo zip portable qui sotto**: non ha installer, quindi
-> l'unico processo che scrive su disco è il tuo programma di decompressione.
+> Su Windows c'è un MSI per un motivo collegato. A un installer non firmato che scrive per conto
+> proprio le scritture possono venire scartate dal software di sicurezza che sta nello stack del
+> filesystem, senza un errore da nessuna parte: la build NSIS pubblicata all'inizio finiva con
+> "completata con successo" senza aver installato niente. L'MSI non scrive nulla di suo — file,
+> collegamenti e chiavi di registro li piazza `msiexec.exe`, che Microsoft firma, e un passo
+> fallito fa rollback invece di dichiarare successo. È un percorso di installazione più solido,
+> non un modo per aggirare l'antivirus: uno scanner che contesta il contenuto di un download lo
+> contesta comunque. A quello risponde solo una firma.
 >
 > È in corso la richiesta di un certificato di firma gratuito per progetti open source — vedi la
 > [code signing policy](CODE_SIGNING.md). Nel frattempo sorgenti e workflow di build sono pubblici,
 > quindi puoi ricompilare qualsiasi release e confrontarla.
 
 <details>
-<summary>Portable, senza installer (Windows)</summary>
+<summary>Portable, senza installer e senza richiesta di amministratore (Windows)</summary>
 
-`llm-quota-portable-windows-x64.zip` in ogni release. Scompattalo dove vuoi ed esegui
+`llm-quota-portable-windows-x64.zip` in ogni release, per una macchina su cui non puoi elevare.
+Scompattalo dove vuoi ed esegui
 `llm-quota-desktop.exe`: il server sta accanto e viene avviato per te. Non viene scritto niente
 fuori dalla cartella che hai scelto, a parte la solita configurazione per utente in `~/.llm-quota/`.
 

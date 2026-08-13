@@ -136,8 +136,7 @@ Adding, renaming or removing a provider touches more than the adapter:
 - [ ] `public/logo.svg` — changing the mark means regenerating what the desktop build
       stamps on the window, the executables and the installer, none of which read the SVG:
       `bun x @tauri-apps/cli icon public/logo.svg --output src-tauri/icons` (then delete the
-      `ios/` and `android/` output, which this project does not ship) and
-      `uv run --with pillow python scripts/build_installer_art.py`
+      `ios/` and `android/` output, which this project does not ship)
 - [ ] `public/og.jpg`, `docs/og.jpg`, and `docs/dashboard-preview.*` — only if they
       picture the provider list; regenerate rather than hand-editing. Use the synthetic,
       local-only generator so personal usage never enters an asset:

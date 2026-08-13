@@ -16,13 +16,20 @@ All notable changes to this project are documented here. The format follows
   logic: it starts the same loopback server a source install runs, waits for it to answer, and
   points the window at it. It takes port 4747 when free and any free port otherwise, so it never
   collides with a `bun start` already running.
-- **A portable Windows build**, `llm-quota-portable-windows-x64.zip`: unzip and run, no installer.
-  It exists because an unsigned installer is not merely inconvenient. McAfee's ransomware protection
-  refuses to let one create its program folder at all — the directory never appears, NSIS fails to
-  write into it, and the wizard still finishes on "completed successfully" having installed nothing.
-  Reproduced on two different install paths, and confirmed by writing the identical file to the
-  identical path from a signed process, which succeeds. A zip removes the unknown binary from the
-  writing side entirely.
+- **Windows installs from an MSI**, not an NSIS `setup.exe`. An unsigned installer that performs
+  its own writes can have them dropped by security software in the filesystem stack, and nothing
+  reports it: on the machine this was found on, the NSIS installer created no program folder, wrote
+  no registry entry and no shortcut, and still exited zero on "completed successfully". Reproduced
+  across four install paths. An MSI writes nothing itself — msiexec, which Microsoft signs, places
+  every file, shortcut and registry key, and rolls the transaction back rather than reporting a
+  success it did not achieve. The same machine installs it to `C:\Program Files\LLM Quota` with a
+  Start Menu entry, an Add/Remove Programs entry and a byte-exact sidecar. The cost is the
+  administrator prompt a per-machine install has to earn. This is a sturdier install path, not a
+  way around antivirus: only a signature answers a scanner that objects to the download itself.
+- `webviewInstallMode` is now `embedBootstrapper`. The default compiles an installer step that
+  runs hidden PowerShell to download and execute an EXE — 1.8 MB saved is not the point.
+- **A portable Windows build**, `llm-quota-portable-windows-x64.zip`: unzip and run, no installer
+  and no administrator prompt, for an account that cannot answer one.
 - **A standalone server executable** on every release, for anyone who wants the dashboard without
   the window: one file, no Bun, no clone.
 - The desktop window opens at the viewport the dashboard is laid out for, sized in logical pixels

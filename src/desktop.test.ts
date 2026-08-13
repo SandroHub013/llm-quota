@@ -75,22 +75,24 @@ test("the Windows server executable is branded", async () => {
 });
 
 /**
- * NSIS ignores a bitmap that is not exactly the size it expects and silently falls
- * back to its own artwork, so the installer would arrive wearing the NullSoft globe
- * with nothing in the build log to say so.
+ * Windows ships an MSI, and the choice is not cosmetic. The NSIS installer shipped
+ * first was an unsigned unknown binary performing its own writes, and on a machine
+ * with security software in the filesystem stack those writes were silently dropped:
+ * the program folder was never created, and the wizard still ended on "completed
+ * successfully" having installed nothing. An MSI performs no writes of its own — the
+ * files, the shortcuts and the registry entries are all placed by msiexec.exe, which
+ * Microsoft signs, and a failed step rolls the transaction back instead of reporting
+ * success. The same machine that installed nothing from NSIS installs the MSI.
+ *
+ * `embedBootstrapper` is part of the same argument: the downloadBootstrapper default
+ * compiles a deferred custom action that runs hidden PowerShell to fetch and execute
+ * an EXE, which is the most AV-hostile thing a package can carry.
  */
-test("the installer artwork exists at the sizes NSIS requires", async () => {
-  const nsis = JSON.parse(await read("src-tauri/tauri.conf.json")).bundle.windows.nsis;
-  expect(nsis.installerIcon).toBe("icons/icon.ico");
-
-  // BMP header: width and height are little-endian 32-bit integers at 0x12 and 0x16.
-  const dimensions = async (path: string) => {
-    const header = new DataView(await Bun.file(path).arrayBuffer());
-    return [header.getInt32(18, true), header.getInt32(22, true)];
-  };
-
-  expect(await dimensions(`src-tauri/${nsis.headerImage}`)).toEqual([150, 57]);
-  expect(await dimensions(`src-tauri/${nsis.sidebarImage}`)).toEqual([164, 314]);
+test("Windows ships an MSI rather than an NSIS installer", async () => {
+  const bundle = JSON.parse(await read("src-tauri/tauri.conf.json")).bundle;
+  expect(bundle.targets).toContain("msi");
+  expect(bundle.targets).not.toContain("nsis");
+  expect(bundle.windows.webviewInstallMode.type).toBe("embedBootstrapper");
 });
 
 /**

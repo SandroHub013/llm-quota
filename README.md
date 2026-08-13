@@ -72,11 +72,12 @@ glance which subscription is free, which is cooling down, and exactly when to co
 
 Download the installer for your platform from
 **[the latest release](https://github.com/SandroHub013/llm-quota/releases/latest)** and open it. No
-Bun, no clone, no terminal: the server ships inside the app.
+Bun, no clone, no terminal: the server ships inside the app. Windows asks for the administrator
+prompt every MSI asks for, and installs to `C:\Program Files\LLM Quota`.
 
 | Platform | File |
 |---|---|
-| Windows 10/11 | `LLM.Quota_<version>_x64-setup.exe` |
+| Windows 10/11 | `LLM.Quota_<version>_x64_en-US.msi` |
 | macOS (Apple silicon) | `LLM.Quota_<version>_aarch64.dmg` |
 | macOS (Intel) | `LLM.Quota_<version>_x64.dmg` |
 | Linux | `.AppImage` or `.deb` |
@@ -242,7 +243,7 @@ Point it at another host or port with `LLM_QUOTA_URL=http://localhost:8080`.
 ## Desktop app
 
 [Every release](https://github.com/SandroHub013/llm-quota/releases/latest) ships an installer for
-Windows (`.exe`), macOS (`.dmg`, Apple silicon and Intel) and Linux (`.deb`, `.AppImage`). There is
+Windows (`.msi`), macOS (`.dmg`, Apple silicon and Intel) and Linux (`.deb`, `.AppImage`). There is
 no Bun to install and no repository to clone — the compiled server is inside the bundle.
 
 - Its own window, so the dashboard is not a browser tab you lose.
@@ -258,19 +259,23 @@ logic — the dashboard, the API and every provider adapter are the same code th
 > **The installers are unsigned.** Windows SmartScreen will say "unknown publisher" — *More info →
 > Run anyway*. macOS Gatekeeper will refuse a double click — right-click the app → *Open*.
 >
-> On Windows some antivirus products go further and stop an unsigned installer from creating its
-> program folder at all. The wizard then reports "completed successfully" having written nothing.
-> **If that happens, take the portable zip below** — it needs no installer, so the only process
-> writing to disk is your own archive tool.
+> Windows gets an MSI for a related reason. An unsigned installer that performs its own writes
+> can have them dropped by security software sitting in the filesystem stack, with no error
+> anywhere: the NSIS build this project shipped first ended on "completed successfully" having
+> installed nothing. An MSI writes nothing itself — every file, shortcut and registry key is
+> placed by `msiexec.exe`, which Microsoft signs, and a failed step rolls back rather than
+> reporting success. That is a stronger install path, not a way around antivirus: a scanner that
+> objects to the contents of a download still objects. Only a signature answers that.
 >
 > A free open-source signing certificate is being applied for — see the
 > [code signing policy](CODE_SIGNING.md). Until it lands: the source and the build workflow are both
 > public, so you can rebuild any release yourself and compare.
 
 <details>
-<summary>Portable, no installer (Windows)</summary>
+<summary>Portable, no installer and no administrator prompt (Windows)</summary>
 
-`llm-quota-portable-windows-x64.zip` on every release. Unzip it anywhere and run
+`llm-quota-portable-windows-x64.zip` on every release, for a machine where you cannot elevate.
+Unzip it anywhere and run
 `llm-quota-desktop.exe` — the server sits beside it and is started for you. Nothing is written
 outside the folder you chose except the usual per-user config in `~/.llm-quota/`.
 
