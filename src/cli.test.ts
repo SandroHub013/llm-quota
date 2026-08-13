@@ -69,8 +69,13 @@ describe("CLI summary", () => {
     const { run } = await import("./cli.js");
     const mockRequest = async (url: any) => {
       const u = String(url);
-      if (u.includes("npmjs.org")) return Response.json({ downloads: 150 });
-      if (u.includes("github.com")) return Response.json([{ assets: [{ download_count: 42 }] }]);
+      // Matched on the host rather than on a substring of the URL: `npmjs.org` also
+      // appears inside `npmjs.org.example.com` and inside a path, so a mock keyed on
+      // `includes` answers for requests the real code never meant to make — and a
+      // test that cannot tell those apart cannot catch the day one is introduced.
+      const host = URL.canParse(u) ? new URL(u).host : "";
+      if (host === "api.npmjs.org") return Response.json({ downloads: 150 });
+      if (host === "api.github.com") return Response.json([{ assets: [{ download_count: 42 }] }]);
       return new Response("not found", { status: 444 });
     };
 
