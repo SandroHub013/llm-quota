@@ -216,9 +216,9 @@ prodotto — dashboard, API e adattatori sono lo stesso codice dell'installazion
 > aver scritto niente. **Se succede, prendi lo zip portable qui sotto**: non ha installer, quindi
 > l'unico processo che scrive su disco è il tuo programma di decompressione.
 >
-> È in corso la richiesta di un certificato di firma gratuito per progetti open source. Nel
-> frattempo sorgenti e workflow di build sono pubblici, quindi puoi ricompilare qualsiasi release e
-> confrontarla.
+> È in corso la richiesta di un certificato di firma gratuito per progetti open source — vedi la
+> [code signing policy](CODE_SIGNING.md). Nel frattempo sorgenti e workflow di build sono pubblici,
+> quindi puoi ricompilare qualsiasi release e confrontarla.
 
 <details>
 <summary>Portable, senza installer (Windows)</summary>

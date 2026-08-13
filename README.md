@@ -263,8 +263,9 @@ logic — the dashboard, the API and every provider adapter are the same code th
 > **If that happens, take the portable zip below** — it needs no installer, so the only process
 > writing to disk is your own archive tool.
 >
-> A free open-source signing certificate is being applied for. Until it lands: the source and the
-> build workflow are both public, so you can rebuild any release yourself and compare.
+> A free open-source signing certificate is being applied for — see the
+> [code signing policy](CODE_SIGNING.md). Until it lands: the source and the build workflow are both
+> public, so you can rebuild any release yourself and compare.
 
 <details>
 <summary>Portable, no installer (Windows)</summary>
