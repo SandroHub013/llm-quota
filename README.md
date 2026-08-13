@@ -433,6 +433,20 @@ not affiliated with, endorsed by, or sponsored by any of them.
 
 ---
 
+## Sponsor
+
+This is written and paid for by one person. Starring it costs nothing and is genuinely the most
+useful thing — it is how other people find it.
+
+If you want to put money behind it, there is one cost this project carries and has not solved: a
+code signing certificate. Until it lands, every download is challenged by SmartScreen and
+Gatekeeper, and on some machines an unsigned installer is stopped outright — which is the single
+biggest thing standing between this app and the people who would use it. A free-for-open-source
+certificate is [being applied for](CODE_SIGNING.md); sponsorship is the fallback if that does not
+come through.
+
+**[Sponsor on GitHub](https://github.com/sponsors/SandroHub013)** — GitHub takes no cut.
+
 <div align="center">
 
 If this saved you a trip to five different billing consoles, **[⭐ star the repo](https://github.com/SandroHub013/llm-quota)** — it is how other people find it.

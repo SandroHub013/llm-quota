@@ -145,3 +145,19 @@ test("the site's download links point at this version's assets", async () => {
     .filter((linked) => linked !== version);
   expect(stale, "the site links assets from another release").toEqual([]);
 });
+
+/**
+ * The Sponsor link is the one place a reader is asked for money, so a broken one is
+ * worse than none: it reads as a project that cannot keep its own links working. It
+ * appears in three files and there is nothing to catch a typo in any of them.
+ */
+test("the sponsor link is the same everywhere it appears", async () => {
+  const funding = await read(".github/FUNDING.yml");
+  const account = funding.match(/^github:\s*\[?([\w-]+)/m)?.[1];
+  expect(account, "FUNDING.yml names no GitHub account").toBeDefined();
+
+  const url = `https://github.com/sponsors/${account}`;
+  for (const path of ["README.md", "README.it.md", "docs/index.html"]) {
+    expect(await read(path), `${path} does not link ${url}`).toContain(url);
+  }
+});

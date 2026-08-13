@@ -375,3 +375,19 @@ La licenza MIT copre il codice di questo progetto, non i marchi altrui. I loghi 
 `public/logos/` appartengono ai rispettivi titolari (Anthropic, OpenAI, Z.ai, OpenCode, Google,
 Moonshot AI) e sono inclusi solo per identificare il servizio a cui ciascuna card si riferisce.
 Questo progetto non è affiliato né approvato da nessuno di essi.
+
+---
+
+## Sponsor
+
+Questo progetto lo scrive e lo paga una persona sola. Mettere una stella non costa niente ed è
+davvero la cosa più utile: è così che gli altri lo trovano.
+
+Se vuoi metterci dei soldi, c'è un costo che questo progetto ha e non ha ancora risolto: un
+certificato di code signing. Finché non arriva, ogni download viene contestato da SmartScreen e da
+Gatekeeper, e su certe macchine un installer non firmato viene proprio bloccato — che è la cosa
+singola che più separa questa app da chi la userebbe. Un certificato gratuito per progetti open
+source è [in fase di richiesta](CODE_SIGNING.md); la sponsorizzazione è l'alternativa se non
+dovesse arrivare.
+
+**[Sponsorizza su GitHub](https://github.com/sponsors/SandroHub013)** — GitHub non trattiene nulla.
