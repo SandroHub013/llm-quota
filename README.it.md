@@ -60,8 +60,10 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
 - 🖥️ **App desktop** — un installer per Windows, macOS e Linux con il server compilato dentro.
   Niente Bun, niente clone, niente terminale. Finestra propria, icona nella tray, chiusura in tray
   e avvio al login.
-- 🪟 **Widget desktop Windows** — widget Tk flottante sempre in primo piano, lanciato dalla
-  dashboard tramite il protocollo `llmquota://widget`. Aggiorna silenziosamente le quote ogni
+- 🪟 **Widget desktop, su tutti e tre** — widget Tk flottante sempre in primo piano, lanciato dalla
+  dashboard tramite il protocollo `llmquota://widget` su Windows e Linux, e avviandolo direttamente
+  su macOS. Su Windows aggiunge sfocatura acrilica e contorno ritagliato, che gli altri due non
+  offrono; i numeri sono gli stessi ovunque. Aggiorna silenziosamente le quote ogni
   minuto, la spesa locale ogni cinque secondi e mantiene vivi i countdown tra una richiesta e l'altra.
   Mostra le stesse card della dashboard; OpenCode resta incluso soltanto nella spesa locale.
 - ♿ **Accessibile** — navigazione da tastiera, `prefers-reduced-motion` rispettato, tutte le card
@@ -76,7 +78,7 @@ macOS e Linux. Non serve altro: il server è compilato dentro. Si apre in una fi
 nella tray, può avviarsi al login e segnala le nuove release.
 
 Oppure eseguilo dai sorgenti. Serve [Bun](https://bun.sh) 1.0+ (il server usa `Bun.serve`; Node non
-è supportato), e Python 3 solo per il widget Windows:
+è supportato), e Python 3 solo per il widget desktop:
 
 ```bash
 git clone https://github.com/SandroHub013/llm-quota.git
@@ -129,7 +131,7 @@ Nessun account, username, valore quota o totale di spesa runtime è legato all'a
   sua spesa non è conteggiabile.
 - Il calendario contribution opzionale interroga l'utente autenticato nella CLI ufficiale GitHub.
   Esegui `gh auth login` per abilitarlo; senza `gh`, il calendario della spesa locale continua a funzionare.
-- Una dashboard su una porta locale personalizzata passa automaticamente la propria origine al widget Windows.
+- Una dashboard su una porta locale personalizzata passa automaticamente la propria origine al widget.
   CLI e widget avviato manualmente accettano anche `LLM_QUOTA_URL`; il widget accetta inoltre `--server-url`.
 
 Screenshot e anteprime social usano dati campione sintetici: non contengono account del maintainer,
@@ -273,20 +275,29 @@ binario pubblicato non può essere quello a cui mancano icona e metadati di vers
 
 ---
 
-## Widget desktop (Windows)
+## Widget desktop
 
 ```bash
 python widget.py --register-protocol
 ```
 
-Registra il protocollo `llmquota://widget`. Il pulsante **Widget** nella dashboard lancia poi il
-widget Tk flottante e gli passa automaticamente l'origine locale della dashboard. Per un avvio
-manuale o remoto:
+Registra il protocollo `llmquota://widget`, così il pulsante **Widget** nella dashboard lancia il
+widget e gli passa automaticamente l'origine locale. Windows tiene quella registrazione nel
+registro di sistema, Linux in `~/.local/share/applications`.
 
-```powershell
+**macOS registra gli schemi URL per i bundle applicativi, non per gli script**: lì il pulsante della
+dashboard non può avviarlo. `--register-protocol` stampa il comando da eseguire, e una volta avviato
+il widget funziona identico.
+
+Per un avvio manuale o remoto, su qualsiasi piattaforma:
+
+```bash
 python widget.py --server-url http://localhost:8080
 python widget.py --register-protocol --server-url http://localhost:8080
 ```
+
+Tk fa parte della libreria standard di Python ma su Debian e Ubuntu è un pacchetto a parte:
+`sudo apt install python3-tk`.
 
 ---
 
@@ -325,7 +336,7 @@ public/                # SPA frontend — HTML, CSS, JS vanilla, nessun build st
 └── logos/             # Marchi ufficiali dei provider, congelati
 src-tauri/             # Shell desktop: finestra, tray, avvio al login, ciclo di vita del sidecar
 scripts/               # Manifest degli asset e build del sidecar
-widget.py              # Widget desktop Tkinter per Windows
+widget.py              # Widget desktop Tkinter (Windows, macOS, Linux)
 ```
 
 Stack: [Bun](https://bun.sh) + [Hono](https://hono.dev) + TypeScript. Una sola dipendenza runtime.
@@ -343,7 +354,7 @@ file servito su uno incorporato. Rigeneralo con `bun run generate:assets` dopo a
 bun test                        # TypeScript: server, provider, CLI, guard frontend
 bun run typecheck
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets   # la shell desktop
-python -m unittest widget_test  # Python: il widget Windows
+python -m unittest widget_test  # Python: il widget desktop
 ```
 
 ---
