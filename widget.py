@@ -429,6 +429,74 @@ def protocol_command(python_executable, script_path, base_url=None):
     return f'"{pythonw}" "{script_path}"{server_option} "%1"'
 
 
+SCHEME_MIME = "x-scheme-handler/llmquota"
+
+
+def mimeapps_path():
+    """Where a desktop session records which application opens what."""
+    config_home = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(config_home, "mimeapps.list")
+
+
+def associate_scheme(desktop_file, path=None):
+    """Record the handler in mimeapps.list, preserving everything already there.
+
+    This is what `xdg-mime default` writes, done directly because that tool is not on
+    every desktop and its absence otherwise means the association silently never
+    happens. Read-modify-write rather than overwrite: this file holds every other
+    association the user has ever chosen.
+    """
+    import configparser
+
+    path = path or mimeapps_path()
+    parser = configparser.RawConfigParser()
+    # Keys here are MIME types, and lowercasing them would rewrite the user's file.
+    parser.optionxform = str
+    try:
+        parser.read(path, encoding="utf-8")
+    except (OSError, configparser.Error) as error:
+        # A malformed file is the user's, not ours to discard: leave it and say so.
+        log_handled(f"could not read {path}; the scheme association was not written", error)
+        return False
+
+    if not parser.has_section("Default Applications"):
+        parser.add_section("Default Applications")
+    parser.set("Default Applications", SCHEME_MIME, desktop_file)
+
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with io.open(path, "w", encoding="utf-8", newline="\n") as handle:
+            parser.write(handle, space_around_delimiters=False)
+    except OSError as error:
+        log_handled(f"could not write {path}", error)
+        return False
+    return True
+
+
+def query_scheme_handler():
+    """Ask the desktop which application it would actually use, or None."""
+    try:
+        found = subprocess.run(
+            ["xdg-mime", "query", "default", SCHEME_MIME],
+            capture_output=True, text=True, check=False,
+        ).stdout.strip()
+        if found:
+            return found
+    except OSError as error:
+        log_handled("could not ask xdg-mime which handler is registered", error)
+
+    # No xdg-mime: read back the file that was just written.
+    import configparser
+
+    parser = configparser.RawConfigParser()
+    parser.optionxform = str
+    try:
+        parser.read(mimeapps_path(), encoding="utf-8")
+        return parser.get("Default Applications", SCHEME_MIME, fallback=None)
+    except (OSError, configparser.Error):
+        return None
+
+
 def desktop_entry_path():
     """Where a Linux session looks for the handler of a URL scheme."""
     data_home = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
@@ -481,6 +549,10 @@ def register_protocol():
             f"{command.replace(' %u', '')}"
         )
 
+    # No NoDisplay here. It hides an entry from the menus, and a desktop that hides it
+    # from the menus also leaves it out of the "Open With…" chooser — which is the
+    # dialog a browser puts up for llmquota://, so the one place the entry exists to
+    # be found is the one place it would not appear.
     entry = "\n".join([
         "[Desktop Entry]",
         "Type=Application",
@@ -488,7 +560,6 @@ def register_protocol():
         "Comment=Live AI quotas, always on top",
         f"Exec={command}",
         "Terminal=false",
-        "NoDisplay=true",
         "MimeType=x-scheme-handler/llmquota;",
         "",
     ])
@@ -497,18 +568,32 @@ def register_protocol():
     with io.open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(entry)
 
-    # Both are best-effort: the entry alone works on sessions that read it directly,
-    # and a desktop without these tools is not a reason to report failure.
     for argv in (
         ["update-desktop-database", os.path.dirname(path)],
-        ["xdg-mime", "default", os.path.basename(path), "x-scheme-handler/llmquota"],
+        ["xdg-mime", "default", os.path.basename(path), SCHEME_MIME],
     ):
         try:
             subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
         except OSError as error:
             log_handled(f"could not run {argv[0]}", error)
 
-    return f"{path}\n{command}"
+    # xdg-mime is not on every desktop, and when it is missing the association it was
+    # meant to write simply never happens. Writing it directly costs a few lines and
+    # removes the dependency; both end up in the same file.
+    associate_scheme(os.path.basename(path))
+
+    # And then check, rather than report a success that was never confirmed. Claiming
+    # to have registered a handler that the desktop cannot find is how someone ends up
+    # clicking a button that opens "No apps available".
+    default = query_scheme_handler()
+    if default == os.path.basename(path):
+        return f"{path}\n{command}"
+    return (
+        f"{path}\n{command}\n\n"
+        f"WARNING: this desktop still reports {default or 'no handler'} for "
+        f"{SCHEME_MIME}. The dashboard's Widget button will not start the widget "
+        f"until that resolves. Run it directly instead:\n  {command.replace(' %u', '')}"
+    )
 
 
 # Tk can load PNG directly. Other repository marks are SVG/WebP and intentionally

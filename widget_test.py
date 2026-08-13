@@ -481,5 +481,56 @@ class SpendBoundaryTest(unittest.TestCase):
         self.assertEqual(widget.fetch_usage_cost(), (5.5, False))
 
 
+class LinuxSchemeRegistrationTest(unittest.TestCase):
+    """The dashboard's Widget button opens an llmquota:// URL, and on Linux a desktop
+    entry is the only thing that answers it. Getting this wrong is invisible from the
+    code — the button simply opens "No apps available"."""
+
+    def _register(self, home):
+        environ = {"XDG_DATA_HOME": os.path.join(home, "data"),
+                   "XDG_CONFIG_HOME": os.path.join(home, "config")}
+        with patch.dict(os.environ, environ, clear=False), \
+             patch("widget.IS_WINDOWS", False), patch("widget.IS_MACOS", False), \
+             patch("widget.subprocess.run", side_effect=OSError("no xdg tools here")):
+            message = widget.register_protocol()
+            # Both files are read while the throwaway home still applies; outside this
+            # block the paths resolve to the real one.
+            entry = io.open(widget.desktop_entry_path(), encoding="utf-8").read()
+            associations = io.open(widget.mimeapps_path(), encoding="utf-8").read()
+        return message, entry, associations
+
+    def test_the_entry_is_visible_to_the_open_with_chooser(self):
+        import tempfile
+        message, entry, _ = self._register(tempfile.mkdtemp())
+
+        # NoDisplay hides an entry from the menus *and* from the application chooser,
+        # which is the one dialog this entry exists to appear in.
+        self.assertNotIn("NoDisplay", entry)
+        self.assertIn("MimeType=x-scheme-handler/llmquota;", entry)
+        # %u, or the URL the dashboard passes never reaches the widget.
+        self.assertTrue(entry.rstrip().count("%u"), "the Exec line drops the URL")
+        self.assertIn("llm-quota-widget.desktop", message)
+
+    def test_it_associates_the_scheme_without_xdg_mime(self):
+        import tempfile
+        _, _, associations = self._register(tempfile.mkdtemp())
+
+        self.assertIn("x-scheme-handler/llmquota=llm-quota-widget.desktop", associations)
+
+    def test_it_keeps_every_other_association_the_user_chose(self):
+        import tempfile
+        home = tempfile.mkdtemp()
+        config = os.path.join(home, "config")
+        os.makedirs(config, exist_ok=True)
+        with patch.dict(os.environ, {"XDG_CONFIG_HOME": config}, clear=False):
+            io.open(widget.mimeapps_path(), "w", encoding="utf-8").write(
+                "[Default Applications]\ntext/html=firefox.desktop\n")
+            widget.associate_scheme("llm-quota-widget.desktop")
+            kept = io.open(widget.mimeapps_path(), encoding="utf-8").read()
+
+        self.assertIn("text/html=firefox.desktop", kept)
+        self.assertIn("x-scheme-handler/llmquota=llm-quota-widget.desktop", kept)
+
+
 if __name__ == "__main__":
     unittest.main()
