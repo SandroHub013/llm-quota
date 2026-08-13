@@ -336,10 +336,35 @@ jobs:
           python-version: '3.12'
 
       # Tk is a separate package on Debian and Ubuntu, and importing the widget is the
-      # first thing every one of its tests does.
-      - name: Tk for Linux
+      # first thing every one of its tests does. desktop-file-utils carries
+      # update-desktop-database, and xdg-utils carries xdg-mime, both of which the
+      # registration step below is here to exercise for real.
+      - name: Tk and the desktop tools for Linux
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y python3-tk
+        run: sudo apt-get update && sudo apt-get install -y python3-tk desktop-file-utils xdg-utils
 
       - name: Widget tests
         run: python -m unittest widget_test
+
+      # The unit tests mock the desktop tools away, because the case worth pinning
+      # there is the machine that does not have them. This is the other half, and the
+      # commoner one: run the registration for real and ask the desktop what it would
+      # actually open. The bug this replaces reported a handler it had not registered,
+      # and clicking Widget in the dashboard opened "No apps available".
+      #
+      # No session bus is needed. xdg-mime writes and reads mimeapps.list, which is a
+      # file, so this holds on a headless runner.
+      - name: The dashboard's Widget button has something to open
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          python widget.py --register-protocol
+
+          entry="$HOME/.local/share/applications/llm-quota-widget.desktop"
+          desktop-file-validate "$entry"
+
+          handler=$(xdg-mime query default x-scheme-handler/llmquota)
+          if [ "$handler" != "llm-quota-widget.desktop" ]; then
+            echo "the scheme resolves to '${handler:-nothing}', not the widget"
+            exit 1
+          fi
