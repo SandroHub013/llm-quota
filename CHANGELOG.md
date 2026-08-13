@@ -30,6 +30,10 @@ All notable changes to this project are documented here. The format follows
   way around antivirus: only a signature answers a scanner that objects to the download itself.
 - `webviewInstallMode` is now `embedBootstrapper`. The default compiles an installer step that
   runs hidden PowerShell to download and execute an EXE — 1.8 MB saved is not the point.
+- **Linux ships the `.deb` only.** The AppImage was announced and never built: its bundler
+  resolves the shared libraries of every file it packages, `ldd` exits non-zero on the compiled
+  server, and linuxdeploy aborts on that rather than skipping the file. Anything that cannot
+  install a deb has the standalone server executable, which every release already carries.
 - **A portable Windows build**, `llm-quota-portable-windows-x64.zip`: unzip and run, no installer
   and no administrator prompt, for an account that cannot answer one.
 - **A standalone server executable** on every release, for anyone who wants the dashboard without
