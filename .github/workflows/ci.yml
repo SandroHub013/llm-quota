@@ -172,7 +172,7 @@ jobs:
           # linuxdeploy is an AppImage, and an AppImage mounts itself through FUSE,
           # which the runner image does not have. Unpack and run instead of mounting.
           APPIMAGE_EXTRACT_AND_RUN: 1
-        run: bun x @tauri-apps/cli build --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
+        run: bun x @tauri-apps/cli build -v --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
 
       - name: Install and verify (Windows)
         if: runner.os == 'Windows'
