@@ -105,6 +105,12 @@ jobs:
       - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The AppImage bundler runs linuxdeploy, which is itself an AppImage, and an
+          # AppImage mounts itself through FUSE. The GitHub runner image has no FUSE to
+          # mount it with, so the bundler stops on "failed to run linuxdeploy" after the
+          # deb has already been written. This tells every AppImage in the chain to
+          # unpack itself and run from the copy instead of mounting.
+          APPIMAGE_EXTRACT_AND_RUN: 1
         with:
           tagName: ${{ inputs.tag || github.ref_name }}
           releaseName: ${{ inputs.tag || github.ref_name }}
