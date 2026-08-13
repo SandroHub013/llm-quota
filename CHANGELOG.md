@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-08-13
+
 ### Added
 
 - **The widget runs on macOS and Linux.** It was Windows-only for a reason that had nothing to do
@@ -188,6 +190,7 @@ dashboard may read, and a card promising data that never arrives is worse than n
 
 Initial release: local-first live quota dashboard, CLI, and Windows widget.
 
+[0.5.0]: https://github.com/SandroHub013/llm-quota/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/SandroHub013/llm-quota/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/SandroHub013/llm-quota/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/SandroHub013/llm-quota/compare/v0.1.0...v0.2.0
