@@ -105,11 +105,18 @@ jobs:
       - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The app checks this release feed and refuses anything this key did not
+          # sign, so an update cannot be swapped in by whoever serves the download.
+          # Losing the key means installed copies can never be updated again.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
           tagName: ${{ inputs.tag || github.ref_name }}
           releaseName: ${{ inputs.tag || github.ref_name }}
           releaseDraft: true
           prerelease: false
+          # latest.json is what the app reads; without it the updater has a public key
+          # and nothing to check with it.
+          includeUpdaterJson: true
           args: --target ${{ matrix.target }}
 
       # Windows only. The MSI is the supported installer — every write is performed by

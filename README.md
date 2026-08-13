@@ -83,7 +83,9 @@ prompt every MSI asks for, and installs to `C:\Program Files\LLM Quota`.
 | Linux | `LLM.Quota_<version>_amd64.deb` |
 
 It lives in the tray: closing the window leaves it running, **Start at login** is one click, and
-**Quit** is the only thing that stops the server.
+**Quit** is the only thing that stops the server. It also tells you when a release is out —
+on Windows and macOS it can install one and restart itself; the Linux build points at the
+download instead, because the package manager owns the files it installed.
 
 > **The download is unsigned.** Code signing certificates are a recurring cost this project does
 > not carry, so the first launch is challenged: on Windows, SmartScreen says *unknown publisher* —
@@ -249,6 +251,11 @@ no Bun to install and no repository to clone — the compiled server is inside t
 - Its own window, so the dashboard is not a browser tab you lose.
 - A tray icon. Closing the window hides it; the server keeps running and **Quit** stops both.
 - **Start at login**, from the tray menu.
+- It notices releases. The tray has **Check for updates…**, and a launch that finds a newer
+  version says so once. On Windows and macOS it installs the update and restarts; on Linux it
+  opens the release, because the deb was installed by a package manager that owns those files.
+  Every update is checked against a signing key compiled into the app, so a release this project
+  did not sign is refused.
 - It takes port `4747` when free and any free port otherwise, so it never fights a `bun start` you
   already have open. The widget follows whichever origin the dashboard reports.
 

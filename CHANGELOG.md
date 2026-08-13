@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The app tells you when a release is out, and can install it.** A quota monitor is left running
+  for weeks, so it cannot rely on being relaunched to notice. Each launch asks once and stays quiet
+  unless there is something newer; the tray carries **Check for updates…** for asking on purpose,
+  which answers either way. On Windows and macOS, agreeing downloads the update, installs it and
+  restarts the app — nothing is downloaded before the answer. The Linux build opens the release
+  page instead: it was installed from a deb by a package manager that owns those files, and the
+  updater replaces AppImages, which this project does not ship.
+- Updates are signed. The app carries the public half of a key and refuses a release the matching
+  private half did not sign, which is what makes replacing itself from the internet safe to offer.
+  The update check is the only request this app makes to anything but loopback, and it goes through
+  the operating system's own TLS rather than a bundled certificate store — a machine behind a proxy
+  has already told its OS what to trust.
+
 ## [0.4.0] — 2026-08-13
 
 ### Added

@@ -20,6 +20,13 @@ tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-shell = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
+# The operating system's own TLS rather than a bundled rustls: the update check is the
+# one request this app makes to anything but loopback, and a machine behind a corporate
+# proxy has already told its OS which certificates to trust. It also drops `ring`, and
+# with it a C toolchain from the build.
+tauri-plugin-updater = { version = "2.10.1", default-features = false, features = ["native-tls"] }
+tauri-plugin-dialog = "2.7.2"
+serde_json = "1.0.151"
 
 # The bundle is what users download over a metered connection, and the Bun sidecar
 # already contributes ~100 MB of it. Optimise the shell for size rather than speed:

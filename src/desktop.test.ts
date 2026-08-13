@@ -96,6 +96,29 @@ test("Windows ships an MSI rather than an NSIS installer", async () => {
 });
 
 /**
+ * The updater trusts exactly one key. A release signed by anything else is refused,
+ * which is the only reason it is safe to let an app replace itself from the internet —
+ * so the three halves have to stay together: artifacts to serve, a key to check them
+ * against, and a workflow that signs with the matching private half.
+ *
+ * The endpoint is pinned to `releases/latest/download` rather than a tag, because the
+ * app asks the same URL forever and the release is what moves.
+ */
+test("the updater has artifacts, a public key and somewhere to look", async () => {
+  const config = JSON.parse(await read("src-tauri/tauri.conf.json"));
+
+  expect(config.bundle.createUpdaterArtifacts).toBe(true);
+  expect(config.plugins.updater.pubkey).toMatch(/^[A-Za-z0-9+/=]+$/);
+  expect(config.plugins.updater.endpoints).toEqual([
+    "https://github.com/SandroHub013/llm-quota/releases/latest/download/latest.json",
+  ]);
+
+  const workflow = await read(".github/workflows/release.yml");
+  expect(workflow).toContain("TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}");
+  expect(workflow).toContain("includeUpdaterJson: true");
+});
+
+/**
  * The splash screen is bundled into the desktop binary and shown before any server
  * exists. The dashboard's zero-third-party-request promise covers it too — and here it
  * is not even reachable over the network to be caught later.
