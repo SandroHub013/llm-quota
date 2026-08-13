@@ -55,7 +55,29 @@ updates:
           - minor
           - patch
 
-  # The workflows pin actions by major tag; this keeps those pins current too.
+  # cargo — the desktop shell in src-tauri/. Tauri and its plugins are the only
+  # direct dependencies, and they are what the window, the tray and the sidecar
+  # lifecycle are built on, so a security advisory there reaches every installer.
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:00'
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # The workflows pin actions by commit SHA rather than by tag, since a tag can be
+  # repointed at different code by whoever owns the action. This is what keeps those
+  # pins from going stale — without it, pinning trades a supply-chain risk for an
+  # unpatched one.
   - package-ecosystem: github-actions
     directory: /
     schedule:

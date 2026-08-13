@@ -1,8 +1,7 @@
 import { Hono, type Context } from "hono";
-import { dirname, join, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
-import { readFile } from "node:fs/promises";
 import { getProvider, providers } from "./providers/index.js";
+import { PUBLIC_ASSETS } from "./public-assets.generated.js";
+import { INDEX, mimeFor } from "./public-mime.js";
 import type { QuotaResult } from "./providers/types.js";
 import { JsonFileUnreadableError, readConfig, updateConfig } from "./credentials.js";
 import { installOfficialBridge, removeOfficialBridge, type OfficialBridgeProvider } from "./official-bridge.js";
@@ -11,7 +10,6 @@ import { normalizeUsageView, usageFiltersActive, usageHeadlineCosts } from "./us
 import { collectGitHubContributions } from "./github-contributions.prototype.js";
 
 const app = new Hono();
-const PUBLIC = resolve(dirname(fileURLToPath(import.meta.url)), "..", "public");
 
 /**
  * The server binds to loopback, which stops other machines but not other pages on
@@ -237,35 +235,25 @@ app.delete("/api/official-bridge/:id", async (context) => {
   }
 });
 
-const MIME: Record<string, string> = {
-  ".js": "text/javascript; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".woff2": "font/woff2",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".webp": "image/webp",
-};
-
 app.get("/", async (context) => {
-  const html = await readFile(join(PUBLIC, "index.html"), "utf8");
-  return context.html(html);
+  return context.html(await Bun.file(PUBLIC_ASSETS[INDEX]!).text());
 });
 
 app.get("/:a{.+}", async (context) => {
   const relative = context.req.path.slice(1);
-  const extension = relative.slice(relative.lastIndexOf("."));
-  const type = MIME[extension];
-  if (!type) return context.notFound();
+  const type = mimeFor(relative);
+  // The manifest is generated from public/, so a name that is not a key was never
+  // shipped — which is also why no traversal guard is needed here any more. Nothing
+  // in this route touches a caller-supplied path.
+  const asset = PUBLIC_ASSETS[relative];
+  if (!type || !asset) return context.notFound();
 
-  const file = resolve(PUBLIC, relative);
-  if (file !== PUBLIC && !file.startsWith(PUBLIC + sep)) return context.notFound();
-  // Deliberate: this route only serves files shipped inside public/. Any read
-  // failure here — absent, unreadable, a directory — is a 404 to the browser, and
-  // reporting which one would describe the server's own layout to the page.
-  const body = await readFile(file).catch(() => null);
+  // Deliberate: any read failure is a 404 to the browser. Reporting which one would
+  // describe the server's own layout to the page.
+  const body = await Bun.file(asset).bytes().catch(() => null);
   if (!body) return context.notFound();
 
-  const cache = extension === ".woff2" ? "public, max-age=31536000, immutable" : "no-cache";
+  const cache = relative.endsWith(".woff2") ? "public, max-age=31536000, immutable" : "no-cache";
   return context.body(body, 200, { "Content-Type": type, "Cache-Control": cache });
 });
 
