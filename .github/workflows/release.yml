@@ -102,7 +102,7 @@ jobs:
       - name: Compile the server sidecar
         run: bun run sidecar -- ${{ matrix.target }}
 
-      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The app checks this release feed and refuses anything this key did not
@@ -115,8 +115,11 @@ jobs:
           releaseDraft: true
           prerelease: false
           # latest.json is what the app reads; without it the updater has a public key
-          # and nothing to check with it.
-          includeUpdaterJson: true
+          # and nothing to check with it. Renamed from includeUpdaterJson in the
+          # action's 1.0.0 — an input Actions no longer recognises is a warning in a
+          # log nobody reads, and the first sign would have been installed copies that
+          # quietly stop finding updates.
+          uploadUpdaterJson: true
           args: --target ${{ matrix.target }}
 
       # Windows only. The MSI is the supported installer — every write is performed by
