@@ -64,20 +64,12 @@ const DESIGN_HEIGHT: f64 = 830.0;
 fn fit_to_design(window: &WebviewWindow) {
     let scale = window.scale_factor().unwrap_or(1.0);
 
-    // Leave the work area a margin: a window sized exactly to it sits under the
-    // taskbar on Windows and behind the menu bar on macOS.
-    let (max_width, max_height) = window
-        .current_monitor()
-        .ok()
-        .flatten()
-        .map(|monitor| {
-            let size = monitor.size().to_logical::<f64>(monitor.scale_factor());
-            (size.width - 48.0, size.height - 96.0)
-        })
-        .unwrap_or((DESIGN_WIDTH, DESIGN_HEIGHT));
+    let monitor = window.current_monitor().ok().flatten().map(|monitor| {
+        let size = monitor.size().to_logical::<f64>(monitor.scale_factor());
+        (size.width, size.height)
+    });
 
-    let width = DESIGN_WIDTH.min(max_width);
-    let height = DESIGN_HEIGHT.min(max_height);
+    let (width, height) = design_size(monitor);
 
     if let Err(error) = window.set_size(LogicalSize::new(width, height)) {
         eprintln!("llm-quota-desktop: could not size the window: {error}");
@@ -91,6 +83,21 @@ fn fit_to_design(window: &WebviewWindow) {
              narrower than the {DESIGN_WIDTH:.0} the dashboard is laid out for"
         );
     }
+}
+
+/// The design viewport, clamped to what a monitor of this logical size can hold.
+///
+/// Split out of [`fit_to_design`] because the clamp is the part that can be wrong and
+/// the window it sets is the part that cannot be built in a test. The margins leave the
+/// work area room: a window sized exactly to the monitor sits under the taskbar on
+/// Windows and behind the menu bar on macOS. A monitor the shell cannot identify is
+/// treated as large enough, which is the same assumption the config file makes.
+fn design_size(monitor: Option<(f64, f64)>) -> (f64, f64) {
+    let (max_width, max_height) = monitor
+        .map(|(width, height)| (width - 48.0, height - 96.0))
+        .unwrap_or((DESIGN_WIDTH, DESIGN_HEIGHT));
+
+    (DESIGN_WIDTH.min(max_width), DESIGN_HEIGHT.min(max_height))
 }
 
 /// The running server, so app exit can stop it. Without this the sidecar outlives the
@@ -272,4 +279,81 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A laptop at 1920×1080 has room to spare, so the dashboard gets the viewport it
+    /// is laid out for rather than the screen it landed on.
+    #[test]
+    fn a_large_monitor_gets_the_design_viewport() {
+        assert_eq!(design_size(Some((1920.0, 1080.0))), (DESIGN_WIDTH, DESIGN_HEIGHT));
+    }
+
+    /// The case the margins exist for. A window sized to the full work area sits under
+    /// the taskbar, so both axes clamp and neither is allowed to exceed the screen.
+    #[test]
+    fn a_small_monitor_clamps_both_axes_with_room_left() {
+        let (width, height) = design_size(Some((1024.0, 600.0)));
+
+        assert_eq!((width, height), (976.0, 504.0));
+        assert!(width < 1024.0 && height < 600.0);
+    }
+
+    /// Only one axis is short on a wide, shallow screen, and the other must not shrink
+    /// with it — the height threshold is what decides the token ledger's layout.
+    #[test]
+    fn a_short_monitor_clamps_only_the_height() {
+        assert_eq!(design_size(Some((2560.0, 800.0))), (DESIGN_WIDTH, 704.0));
+    }
+
+    /// A monitor the shell cannot identify is not a reason to open a window of zero
+    /// size, or of some fraction of a size nobody measured.
+    #[test]
+    fn an_unknown_monitor_falls_back_to_the_design_viewport() {
+        assert_eq!(design_size(None), (DESIGN_WIDTH, DESIGN_HEIGHT));
+    }
+
+    /// 4747 is what the README, the CLI and the widget all name, so it is taken when it
+    /// can be and never silently shared when it cannot.
+    #[test]
+    fn a_busy_preferred_port_falls_back_to_a_free_one() {
+        let Ok(held) = TcpListener::bind((Ipv4Addr::LOCALHOST, PREFERRED_PORT)) else {
+            // Something outside this test already holds it; the fallback is then what
+            // claim_port returns anyway, and asserting on a port we do not control
+            // would be asserting on the machine.
+            return;
+        };
+
+        let port = claim_port();
+        assert_ne!(port, PREFERRED_PORT, "the port was already held");
+        assert_ne!(port, 0, "0 asks the OS to choose again at bind time");
+
+        // Free, or the sidecar is about to be told to bind something it cannot have.
+        assert!(TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_ok());
+        drop(held);
+    }
+
+    /// The splash screen waits on this. Returning true for a port nothing is listening
+    /// on would point the window at a server that does not exist.
+    #[test]
+    fn waiting_gives_up_on_a_port_with_no_listener() {
+        let port = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .and_then(|listener| listener.local_addr())
+            .map(|address| address.port())
+            .expect("the OS should hand out an ephemeral port");
+
+        assert!(!wait_for_server(port, Duration::from_millis(300)));
+    }
+
+    /// And the other half: a listener that accepts is the signal to navigate.
+    #[test]
+    fn waiting_returns_as_soon_as_something_accepts() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+
+        assert!(wait_for_server(port, Duration::from_secs(5)));
+    }
 }

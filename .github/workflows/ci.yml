@@ -104,6 +104,9 @@ jobs:
       - name: Clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
   # The failure this job exists for: an installer that reports success and installs
   # nothing. The NSIS build this project shipped first did exactly that — no program
   # folder, no registry entry, no shortcut, exit code zero — and nothing in CI could
