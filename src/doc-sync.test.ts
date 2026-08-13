@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
 import { providers } from "./providers/index.js";
 
-const read = (path: string) => Bun.file(path).text();
+// Normalised, because git hands the Windows runner CRLF for the commit Linux gets as
+// LF. Every assertion in this file matches against file text, and any pattern that
+// spans two lines passes on Ubuntu and fails on Windows only.
+const read = async (path: string) => (await Bun.file(path).text()).replaceAll("\r\n", "\n");
 
 /**
  * Adding or removing a provider touches the registry, two READMEs, the landing page,
