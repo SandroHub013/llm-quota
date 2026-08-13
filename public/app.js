@@ -1096,9 +1096,22 @@ const titleEl = document.getElementById("title");
 if (titleEl) {
   const text = titleEl.textContent;
   titleEl.setAttribute("aria-label", text);
-  titleEl.innerHTML = [...text]
-    .map((c, i) => `<span class="ch" aria-hidden="true" style="--i:${i}">${c === " " ? "&nbsp;" : c}</span>`)
-    .join("");
+
+  // Built through the DOM rather than by concatenating innerHTML. The text is this
+  // page's own heading and carries no user input today, but the shape of the code is
+  // what a reader copies: a template string that interpolates DOM text into markup is
+  // the exact pattern that becomes an injection the day the source changes.
+  const spans = document.createDocumentFragment();
+  [...text].forEach((c, i) => {
+    const span = document.createElement("span");
+    span.className = "ch";
+    span.setAttribute("aria-hidden", "true");
+    span.style.setProperty("--i", String(i));
+    // A non-breaking space, so a space keeps its width once each character is a span.
+    span.textContent = c === " " ? " " : c;
+    spans.append(span);
+  });
+  titleEl.replaceChildren(spans);
 }
 
 // Custom cursor: dot tracks instantly, ring lerps behind.
