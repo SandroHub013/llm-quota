@@ -508,6 +508,9 @@ def register_macos_bundle(script_path, base_url=None):
         try:
             os.remove(source)
         except OSError:
+            # The AppleScript source is scratch: osacompile has already read it, and a
+            # leftover dotfile is not a reason to fail a registration that worked, nor
+            # to report one that did not.
             pass
 
     # osacompile writes a complete bundle but declares no URL scheme, so the one thing
