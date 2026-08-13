@@ -117,9 +117,9 @@ jobs:
       # build fail silently — but it installs per machine and therefore needs the
       # administrator prompt. This zip is for the account that cannot answer one.
       #
-      # Linux already ships the AppImage, which is portable by construction, and macOS
-      # keeps the dmg: Gatekeeper judges the app, not the container it arrived in, so a
-      # zip would buy nothing there.
+      # macOS keeps the dmg: Gatekeeper judges the app, not the container it arrived
+      # in, so a zip would buy nothing there. Linux has the deb and, for anything that
+      # cannot install one, the standalone server attached below.
       - name: Attach a portable build
         if: matrix.os == 'windows-latest'
         shell: bash

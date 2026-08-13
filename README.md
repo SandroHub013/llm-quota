@@ -80,7 +80,7 @@ prompt every MSI asks for, and installs to `C:\Program Files\LLM Quota`.
 | Windows 10/11 | `LLM.Quota_<version>_x64_en-US.msi` |
 | macOS (Apple silicon) | `LLM.Quota_<version>_aarch64.dmg` |
 | macOS (Intel) | `LLM.Quota_<version>_x64.dmg` |
-| Linux | `.AppImage` or `.deb` |
+| Linux | `LLM.Quota_<version>_amd64.deb` |
 
 It lives in the tray: closing the window leaves it running, **Start at login** is one click, and
 **Quit** is the only thing that stops the server.
@@ -243,7 +243,7 @@ Point it at another host or port with `LLM_QUOTA_URL=http://localhost:8080`.
 ## Desktop app
 
 [Every release](https://github.com/SandroHub013/llm-quota/releases/latest) ships an installer for
-Windows (`.msi`), macOS (`.dmg`, Apple silicon and Intel) and Linux (`.deb`, `.AppImage`). There is
+Windows (`.msi`), macOS (`.dmg`, Apple silicon and Intel) and Linux (`.deb`). There is
 no Bun to install and no repository to clone — the compiled server is inside the bundle.
 
 - Its own window, so the dashboard is not a browser tab you lose.
@@ -279,7 +279,10 @@ Unzip it anywhere and run
 `llm-quota-desktop.exe` — the server sits beside it and is started for you. Nothing is written
 outside the folder you chose except the usual per-user config in `~/.llm-quota/`.
 
-Linux users already have this: the `.AppImage` is portable by construction.
+Linux has no equivalent yet. The AppImage bundler resolves the shared libraries of everything
+it packages, and the compiled server is a binary `ldd` refuses, which aborts the build rather
+than skipping the file — so releases carry the `.deb` and, for anything that cannot install one,
+the standalone server below.
 </details>
 
 <details>
