@@ -6,19 +6,20 @@ The widget has two display modes:
 
 Features:
 - Local provider logos (Claude, ChatGPT/Codex, Z.ai, Gemini, Kimi)
-- Native Windows acrylic glass without changing the existing widget layout
+- Native Windows acrylic glass, and a plain translucent window everywhere else
 - A live reset countdown for every measurable quota
 - Hover details for every provider window
 - A pulsing red Q ring when a quota is at or below 15%, or rate limited
-- Windows notifications for low quotas and resets
+- Desktop notifications for low quotas and resets, on Windows, macOS and Linux
 - Dashboard and view-switch controls for both display modes
 """
 import ctypes
-import ctypes.wintypes as wintypes
+import io
 import json
 import os
 import queue
 import re
+import socket
 import subprocess
 import sys
 import threading
@@ -26,10 +27,29 @@ import time
 import tkinter as tk
 import urllib.request
 import webbrowser
-import winreg
 from datetime import datetime, timezone
 from math import isfinite, sqrt
 from urllib.parse import parse_qs, urlsplit
+
+# Tk runs everywhere; the chrome around it does not. Windows gets acrylic blur, a
+# clipped outline and a registered URL scheme through win32 calls that have no
+# equivalent to fall back to, so the imports that only exist there are taken only
+# there. Everything below treats their absence as a plainer window rather than as a
+# reason to refuse to start — a rectangular widget showing the right numbers beats no
+# widget at all.
+IS_WINDOWS = sys.platform == "win32"
+IS_MACOS = sys.platform == "darwin"
+
+if IS_WINDOWS:
+    import ctypes.wintypes as wintypes
+    import winreg
+
+    # Keeps a console window from flashing up behind every subprocess call.
+    NO_WINDOW = 0x08000000
+else:
+    wintypes = None
+    winreg = None
+    NO_WINDOW = 0
 
 DEFAULT_BASE = "http://localhost:4747"
 
@@ -136,65 +156,102 @@ def wake_running_instance():
     return False
 
 
+def _serve_wake_requests(server, wake_callback):
+    """Raise the running widget whenever another launch knocks on the wake port."""
+    def _listen():
+        try:
+            with server:
+                while True:
+                    try:
+                        conn, _ = server.accept()
+                    except socket.timeout:
+                        continue
+                    try:
+                        conn.settimeout(1.0)
+                        data = conn.recv(64)
+                    except OSError:
+                        data = b""
+                    finally:
+                        conn.close()
+                    if b"WAKE" in data:
+                        wake_callback()
+        except OSError as error:
+            # The wake listener is optional: losing it only means a second launch
+            # cannot raise the running widget, which stays alive either way. Worth
+            # reporting, because from the outside it looks like the widget ignores
+            # being started twice.
+            log_handled("wake listener stopped; a second launch cannot raise this window", error)
+
+    threading.Thread(target=_listen, daemon=True).start()
+
+
+def _bind_wake_port(reuse):
+    """Bind the loopback port a second launch knocks on, or None when it is taken."""
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        if reuse:
+            srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.settimeout(1.0)
+        srv.bind(("127.0.0.1", WAKE_PORT))
+        srv.listen(1)
+    except OSError:
+        srv.close()
+        return None
+    return srv
+
+
 def acquire_single_instance(wake_callback=None):
-    """Return a process-held Windows mutex, or None when widget is already open."""
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    create_mutex = kernel32.CreateMutexW
-    create_mutex.argtypes = (ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
-    create_mutex.restype = wintypes.HANDLE
-    handle = create_mutex(None, False, MUTEX_NAME)
-    if not handle:
-        wake_running_instance()
-        return None
-    if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
-        kernel32.CloseHandle(handle)
-        wake_running_instance()
-        return None
+    """Claim the right to be the one widget, or None when one is already open.
 
+    Windows has a named mutex, which answers the question directly. Everywhere else
+    the wake port is the lock: two processes cannot listen on the same loopback port,
+    so binding it is both the claim and the way the next launch reaches this one. That
+    is why SO_REUSEADDR is Windows-only here — it is what lets a second bind succeed,
+    which is exactly what must not happen where the bind is the mutex.
+    """
+    if IS_WINDOWS:
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        create_mutex = kernel32.CreateMutexW
+        create_mutex.argtypes = (ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
+        create_mutex.restype = wintypes.HANDLE
+        handle = create_mutex(None, False, MUTEX_NAME)
+        if not handle:
+            wake_running_instance()
+            return None
+        if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
+            kernel32.CloseHandle(handle)
+            wake_running_instance()
+            return None
+
+        if wake_callback:
+            server = _bind_wake_port(reuse=True)
+            if server is None:
+                log_handled(
+                    "wake port unavailable; a second launch cannot raise this window",
+                    OSError(f"port {WAKE_PORT} is in use"),
+                )
+            else:
+                _serve_wake_requests(server, wake_callback)
+        return handle
+
+    server = _bind_wake_port(reuse=False)
+    if server is None:
+        wake_running_instance()
+        return None
     if wake_callback:
-        import socket
-
-        def _listen():
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as srv:
-                    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    srv.settimeout(1.0)
-                    srv.bind(("127.0.0.1", WAKE_PORT))
-                    srv.listen(1)
-                    while True:
-                        try:
-                            conn, _ = srv.accept()
-                        except socket.timeout:
-                            continue
-                        try:
-                            conn.settimeout(1.0)
-                            data = conn.recv(64)
-                        except OSError:
-                            data = b""
-                        finally:
-                            conn.close()
-                        if b"WAKE" in data:
-                            wake_callback()
-            except OSError as error:
-                # The wake listener is optional: losing it only means a second launch
-                # cannot raise the running widget, which stays alive either way. Worth
-                # reporting, because from the outside it looks like the widget ignores
-                # being started twice.
-                log_handled("wake listener stopped; a second launch cannot raise this window", error)
-
-        t = threading.Thread(target=_listen, daemon=True)
-        t.start()
-
-    return handle
+        _serve_wake_requests(server, wake_callback)
+    return server
 
 
 
 class Rect(ctypes.Structure):
+    # c_long rather than wintypes.LONG: the two are the same type on Windows, and this
+    # one exists on the platforms where the window effects below are simply skipped.
     _fields_ = [
-        ("left", wintypes.LONG),
-        ("top", wintypes.LONG),
-        ("right", wintypes.LONG),
-        ("bottom", wintypes.LONG),
+        ("left", ctypes.c_long),
+        ("top", ctypes.c_long),
+        ("right", ctypes.c_long),
+        ("bottom", ctypes.c_long),
     ]
 
 
@@ -216,7 +273,9 @@ class WindowCompositionAttributeData(ctypes.Structure):
 
 
 def native_window_handle(window):
-    """Return the real Win32 handle behind a Tk top-level window."""
+    """Return the real Win32 handle behind a Tk top-level window, or None elsewhere."""
+    if not IS_WINDOWS:
+        return None
     user32 = ctypes.windll.user32
     user32.GetParent.argtypes = (wintypes.HWND,)
     user32.GetParent.restype = wintypes.HWND
@@ -233,6 +292,8 @@ def abgr_color(hex_color, alpha):
 
 def apply_native_acrylic(hwnd, tint=GLASS_TINT, alpha=GLASS_TINT_ALPHA):
     """Enable native Windows acrylic blur, leaving window alpha as fallback."""
+    if not IS_WINDOWS or hwnd is None:
+        return False
     try:
         policy = AccentPolicy(4, 2, abgr_color(tint, alpha), 0)
         data = WindowCompositionAttributeData(
@@ -264,6 +325,18 @@ def force_window_visible(window):
     """Restore a Tk window even when Windows hid it behind Tk's state tracking."""
     window.deiconify()
     window.update_idletasks()
+    if not IS_WINDOWS:
+        # Tk's own raise is enough where nothing is second-guessing it. -topmost is
+        # toggled rather than set, because a window that is already topmost ignores
+        # being told so again and stays behind whatever has focus.
+        try:
+            window.attributes("-topmost", False)
+            window.attributes("-topmost", True)
+            window.lift()
+            window.focus_force()
+        except tk.TclError as error:
+            log_handled("could not raise the widget window", error)
+        return
     try:
         hwnd = native_window_handle(window)
         user32 = ctypes.windll.user32
@@ -286,8 +359,13 @@ def force_window_visible(window):
 
 
 def set_window_shape(hwnd, regions):
-    """Clip the borderless window to rounded panels and the circular Q button."""
-    if not regions:
+    """Clip the borderless window to rounded panels and the circular Q button.
+
+    Windows only. X11 has a shape extension Tk does not expose and Quartz has no
+    equivalent at all, so elsewhere the window keeps its rectangle: the corners are
+    square, and every number inside them is the same.
+    """
+    if not regions or not IS_WINDOWS or hwnd is None:
         return
     gdi32, user32 = ctypes.windll.gdi32, ctypes.windll.user32
     gdi32.CreateRectRgn.argtypes = (ctypes.c_int,) * 4
@@ -332,10 +410,17 @@ def surface_above_logo_position(logo_x, logo_y, logo_width, surface_width, surfa
 
 
 def windows_work_area(screen_width, screen_height):
-    rect = Rect()
-    if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):
-        return rect.left, rect.top, rect.right, rect.bottom
-    return 0, 0, screen_width, screen_height
+    if IS_WINDOWS:
+        rect = Rect()
+        if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):
+            return rect.left, rect.top, rect.right, rect.bottom
+        return 0, 0, screen_width, screen_height
+
+    # No portable work-area query exists. The reserve keeps the widget clear of the
+    # macOS Dock and of a typical Linux panel; being a little short of the screen edge
+    # costs nothing, and overlapping a taskbar puts the numbers under it.
+    reserved = 90 if IS_MACOS else 60
+    return 0, 0, screen_width, screen_height - reserved
 
 
 def protocol_command(python_executable, script_path, base_url=None):
@@ -344,28 +429,87 @@ def protocol_command(python_executable, script_path, base_url=None):
     return f'"{pythonw}" "{script_path}"{server_option} "%1"'
 
 
-def register_protocol():
-    try:
-        python_executable = subprocess.check_output(
-            ["py", "-c", "import sys; print(sys.executable)"],
-            text=True,
-            creationflags=0x08000000,
-        ).strip()
-    except (OSError, subprocess.CalledProcessError):
-        python_executable = sys.executable
+def desktop_entry_path():
+    """Where a Linux session looks for the handler of a URL scheme."""
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    return os.path.join(data_home, "applications", "llm-quota-widget.desktop")
 
-    root = r"Software\Classes\llmquota"
+
+def register_protocol():
+    """Teach the desktop which command opens an `llmquota://` link.
+
+    This is what lets the dashboard's widget button start the widget. Windows keeps it
+    in the registry and Linux in a desktop entry; macOS has no equivalent for a plain
+    script, because a scheme handler there belongs to a bundled application, so it
+    reports what to run instead of pretending it registered something.
+    """
     registration_base = command_line_base_url(sys.argv)
     if registration_base is None:
         environment_base = os.environ.get("LLM_QUOTA_URL") or os.environ.get("WEBQUOTA_URL")
         registration_base = normalize_base_url(environment_base) if environment_base else None
-    command = protocol_command(python_executable, os.path.abspath(__file__), registration_base)
-    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, root) as key:
-        winreg.SetValueEx(key, "", 0, winreg.REG_SZ, "URL:LLM Quota Widget")
-        winreg.SetValueEx(key, "URL Protocol", 0, winreg.REG_SZ, "")
-    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, root + r"\shell\open\command") as key:
-        winreg.SetValueEx(key, "", 0, winreg.REG_SZ, command)
-    return command
+    script_path = os.path.abspath(__file__)
+
+    if IS_WINDOWS:
+        try:
+            python_executable = subprocess.check_output(
+                ["py", "-c", "import sys; print(sys.executable)"],
+                text=True,
+                creationflags=NO_WINDOW,
+            ).strip()
+        except (OSError, subprocess.CalledProcessError):
+            python_executable = sys.executable
+
+        root = r"Software\Classes\llmquota"
+        command = protocol_command(python_executable, script_path, registration_base)
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, root) as key:
+            winreg.SetValueEx(key, "", 0, winreg.REG_SZ, "URL:LLM Quota Widget")
+            winreg.SetValueEx(key, "URL Protocol", 0, winreg.REG_SZ, "")
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, root + r"\shell\open\command") as key:
+            winreg.SetValueEx(key, "", 0, winreg.REG_SZ, command)
+        return command
+
+    server_option = f' --server-url "{normalize_base_url(registration_base)}"' if registration_base is not None else ""
+    command = f'"{sys.executable}" "{script_path}"{server_option} %u'
+
+    if IS_MACOS:
+        # LSSetDefaultHandlerForURLScheme wants a bundle identifier, and a .py file has
+        # none. Saying so is more use than a silent no-op the user only discovers when
+        # the dashboard button does nothing.
+        return (
+            "macOS registers URL schemes for application bundles, not scripts, so the "
+            f"dashboard button cannot start the widget. Run it directly: "
+            f"{command.replace(' %u', '')}"
+        )
+
+    entry = "\n".join([
+        "[Desktop Entry]",
+        "Type=Application",
+        "Name=LLM Quota Widget",
+        "Comment=Live AI quotas, always on top",
+        f"Exec={command}",
+        "Terminal=false",
+        "NoDisplay=true",
+        "MimeType=x-scheme-handler/llmquota;",
+        "",
+    ])
+    path = desktop_entry_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with io.open(path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(entry)
+
+    # Both are best-effort: the entry alone works on sessions that read it directly,
+    # and a desktop without these tools is not a reason to report failure.
+    for argv in (
+        ["update-desktop-database", os.path.dirname(path)],
+        ["xdg-mime", "default", os.path.basename(path), "x-scheme-handler/llmquota"],
+    ):
+        try:
+            subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        except OSError as error:
+            log_handled(f"could not run {argv[0]}", error)
+
+    return f"{path}\n{command}"
+
 
 # Tk can load PNG directly. Other repository marks are SVG/WebP and intentionally
 # fall back to the local initials below rather than contacting a favicon service.
@@ -381,27 +525,52 @@ LOCAL_LOGO_FILES = {
 WIDGET_HIDDEN_PROVIDER_IDS = frozenset({"opencode-zen"})
 
 
-def send_win_notification(title, message):
+def send_notification(title, message):
+    """Raise a desktop notification, on whichever desktop this is.
+
+    Each backend is the one thing already present on its platform: PowerShell on
+    Windows, osascript on macOS, notify-send on Linux. A desktop that has none of them
+    costs the toast and nothing else — this runs on a daemon thread and the quota is on
+    screen regardless, which is the point of a widget.
+    """
     def _send():
         try:
-            ps_cmd = f"""
-            [reflection.assembly]::loadwithpartialname('System.Windows.Forms') | Out-Null
-            $notification = New-Object System.Windows.Forms.NotifyIcon
-            $notification.Icon = [System.Drawing.SystemIcons]::Warning
-            $notification.BalloonTipTitle = '{title.replace("'", "''")}'
-            $notification.BalloonTipText = '{message.replace("'", "''")}'
-            $notification.Visible = $true
-            $notification.ShowBalloonTip(4000)
-            Start-Sleep -s 5
-            $notification.Dispose()
-            """
-            subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=0x08000000)
+            if IS_WINDOWS:
+                ps_cmd = f"""
+                [reflection.assembly]::loadwithpartialname('System.Windows.Forms') | Out-Null
+                $notification = New-Object System.Windows.Forms.NotifyIcon
+                $notification.Icon = [System.Drawing.SystemIcons]::Warning
+                $notification.BalloonTipTitle = '{title.replace("'", "''")}'
+                $notification.BalloonTipText = '{message.replace("'", "''")}'
+                $notification.Visible = $true
+                $notification.ShowBalloonTip(4000)
+                Start-Sleep -s 5
+                $notification.Dispose()
+                """
+                argv = ["powershell", "-NoProfile", "-Command", ps_cmd]
+            elif IS_MACOS:
+                # Quoting by escaping, not by interpolation: a provider name with a
+                # quote in it would otherwise end the AppleScript string early.
+                script = 'display notification "{}" with title "{}"'.format(
+                    message.replace("\\", "\\\\").replace('"', '\\"'),
+                    title.replace("\\", "\\\\").replace('"', '\\"'),
+                )
+                argv = ["osascript", "-e", script]
+            else:
+                argv = ["notify-send", "--app-name=LLM Quota", title, message]
+
+            # creationflags exists only on Windows, and passing it anywhere else is a
+            # ValueError rather than a no-op.
+            options = {"creationflags": NO_WINDOW} if IS_WINDOWS else {}
+            subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **options)
         except OSError as error:
-            # A missing or restricted PowerShell costs the toast, never the widget:
-            # this runs on a daemon thread and the quota is on screen regardless.
-            log_handled("could not show a Windows notification", error)
+            # A missing or restricted notifier costs the toast, never the widget.
+            log_handled("could not show a desktop notification", error)
     threading.Thread(target=_send, daemon=True).start()
+
+
+# The name this was called before it worked anywhere but Windows.
+send_win_notification = send_notification
 
 
 def parse_reset_sec(reset_iso):
@@ -658,7 +827,17 @@ class Widget(tk.Tk):
         self.overrideredirect(True)
         self.attributes("-topmost", True)
         self.configure(bg=KEY)
-        self.attributes("-transparentcolor", KEY)
+        # -transparentcolor is a Windows-only Tk attribute: it is what makes the square
+        # around the round Q disappear. X11 and Aqua have no per-colour transparency, so
+        # there the whole window goes translucent instead — the Q keeps its background,
+        # which is a visible difference and not a broken one.
+        try:
+            self.attributes("-transparentcolor", KEY)
+        except tk.TclError:
+            try:
+                self.attributes("-alpha", SURFACE_OPACITY)
+            except tk.TclError as error:
+                log_handled("this Tk build has no window transparency", error)
 
         self.surface = tk.Toplevel(self)
         self.surface.overrideredirect(True)

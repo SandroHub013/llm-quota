@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- **The widget runs on macOS and Linux.** It was Windows-only for a reason that had nothing to do
+  with Tk: `winreg` and `ctypes.wintypes` were imported at module scope, so the file could not even
+  be read anywhere else. Those imports are now taken only where they exist, and each thing they were
+  used for has a local answer — the single-instance mutex becomes the wake port, which two processes
+  cannot bind at once; notifications go through `osascript` on macOS and `notify-send` on Linux;
+  `llmquota://` is registered through a desktop entry on Linux. macOS registers URL schemes for
+  application bundles rather than scripts, so there `--register-protocol` prints the command to run
+  instead of pretending. Acrylic blur, the clipped outline and the transparent colour key stay
+  Windows-only, because X11 and Quartz have no equivalent: the window is a plain rectangle
+  elsewhere, showing the same numbers. Its tests now run on all three platforms in CI, which is what
+  keeps the claim true.
+
 - **The app tells you when a release is out, and can install it.** A quota monitor is left running
   for weeks, so it cannot rely on being relaunched to notice. Each launch asks once and stays quiet
   unless there is something newer; the tray carries **Check for updates…** for asking on purpose,
