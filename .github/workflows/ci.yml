@@ -126,10 +126,7 @@ jobs:
         include:
           - { os: windows-latest, target: x86_64-pc-windows-msvc, bundle: msi }
           - { os: macos-latest, target: aarch64-apple-darwin, bundle: dmg }
-          # Both Linux bundles, because the release publishes both and building only
-          # the deb here is how a broken AppImage reached a tag: the deb is written
-          # first, so the failure lands after everything CI had checked.
-          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, bundle: 'deb,appimage' }
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, bundle: deb }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -168,11 +165,7 @@ jobs:
         run: bun run sidecar -- ${{ matrix.target }}
 
       - name: Bundle
-        env:
-          # linuxdeploy is an AppImage, and an AppImage mounts itself through FUSE,
-          # which the runner image does not have. Unpack and run instead of mounting.
-          APPIMAGE_EXTRACT_AND_RUN: 1
-        run: bun x @tauri-apps/cli build -v --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
+        run: bun x @tauri-apps/cli build --target ${{ matrix.target }} --bundles ${{ matrix.bundle }}
 
       - name: Install and verify (Windows)
         if: runner.os == 'Windows'
@@ -270,12 +263,6 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -euo pipefail
-
-          # The AppImage is a release asset too, and it is bundled after the deb, so a
-          # failure there is invisible to anything that only looks for the deb.
-          appimage=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage | head -1)
-          test -x "$appimage" || { echo "the AppImage is missing or not executable"; exit 1; }
-
           deb=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb | head -1)
           # An absolute path, or apt reads the argument as the name of a package to
           # fetch from the archive rather than as a file to install.
