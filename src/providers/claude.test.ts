@@ -36,3 +36,23 @@ test("out-of-range Claude reset timestamps do not break the metric", () => {
   expect(metrics[0]).toMatchObject({ label: "Session (5h)", used: 20, limit: 100 });
   expect(metrics[0]!.resetAt).toBeUndefined();
 });
+
+
+/**
+ * The bridge publishes quota through the official client's status line, and a status
+ * line runs with a reply — not with a launch. "Use Claude Code once" and "Start
+ * Antigravity CLI once" both left someone opening the client, seeing the card
+ * unchanged, and concluding the bridge was broken. Every waiting message has to name
+ * the action that actually produces data.
+ */
+test("no bridge message tells the user that opening the client is enough", async () => {
+  for (const path of ["src/providers/claude.ts", "src/providers/gemini.ts"]) {
+    const source = await Bun.file(path).text();
+    const messages = [...source.matchAll(/"([^"]*[Bb]ridge installed[^"]*)"/g)].map((m) => m[1]!);
+    expect(messages.length, `${path} has no waiting message`).toBeGreaterThan(0);
+
+    for (const message of messages) {
+      expect(message.toLowerCase(), `${path}: "${message}"`).toContain("send one message");
+    }
+  }
+});
