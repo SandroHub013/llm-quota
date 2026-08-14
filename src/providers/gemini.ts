@@ -68,7 +68,7 @@ export async function fetchGeminiQuota(home = homedir()): Promise<QuotaResult> {
       message: exhausted
         ? "Antigravity reports an exhausted quota bucket. Waiting for its official reset."
         : stale
-          ? "Last official update is stale. Use Antigravity CLI once to refresh the quota snapshot."
+          ? "This snapshot is old. Send a message in Antigravity: the status line publishes with the reply."
           : undefined,
     };
   }
@@ -80,7 +80,7 @@ export async function fetchGeminiQuota(home = homedir()): Promise<QuotaResult> {
     teardownUrl: installed ? "/api/official-bridge/gemini" : undefined,
     teardownLabel: installed ? "Disable bridge" : undefined,
     message: installed
-      ? "Bridge installed. Start Antigravity CLI once to publish its official model quotas."
+      ? "Bridge installed. Now send one message in Antigravity — launching it is not enough, because the status line publishes the quota along with a reply."
       : "Enable the Antigravity status-line bridge to receive model quota without OAuth or private APIs.",
   };
 }
