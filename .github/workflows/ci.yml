@@ -346,6 +346,20 @@ jobs:
       - name: Widget tests
         run: python -m unittest widget_test
 
+      # TypeScript has eslint and Rust has clippy; the two thousand lines of Python
+      # had nothing but their own tests. F and B only — pyflakes and bugbear, which
+      # find bugs — rather than the style rules, because a line-length argument in CI
+      # trains people to ignore the whole job.
+      #
+      # It earned its place immediately: a closure in the minibar bound the provider
+      # id but not the row beside it, so a tooltip could describe whichever provider
+      # the loop ended on.
+      - name: Lint the Python
+        if: runner.os == 'Linux'
+        run: |
+          python -m pip install --quiet ruff
+          ruff check --select F,B widget.py widget_test.py scripts/*.py
+
       # The unit tests mock the desktop tools away, because the case worth pinning
       # there is the machine that does not have them. This is the other half, and the
       # commoner one: run the registration for real and ask the desktop what it would

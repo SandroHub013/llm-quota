@@ -1271,7 +1271,10 @@ class Widget(tk.Tk):
     def _lerp(self, c1, c2, t):
         a = [int(c1[i:i + 2], 16) for i in (1, 3, 5)]
         b = [int(c2[i:i + 2], 16) for i in (1, 3, 5)]
-        return "#" + "".join(f"{round(x + (y - x) * t):02x}" for x, y in zip(a, b))
+        # strict: both sides are the three channels of a #rrggbb literal, so a length
+        # mismatch means a malformed colour upstream — better raised than silently
+        # blending whichever channels happened to line up.
+        return "#" + "".join(f"{round(x + (y - x) * t):02x}" for x, y in zip(a, b, strict=True))
 
     def _draw_logo(self, remaining, offline=False, critical=False):
         c = self.logo
@@ -1756,8 +1759,13 @@ class Widget(tk.Tk):
                 reset_label.pack(side="left", padx=(0, 2))
                 self._minibar_reset_labels[d["id"]] = reset_label
 
-            # Tooltip al passaggio del mouse
-            Tooltip(item, lambda provider_id=d["id"]: (self._provider(provider_id) or d).get("details_str"))
+            # Both bound as defaults, not captured. The id already was; `d` was not, so
+            # when a provider left the payload the fallback reached for whichever row
+            # the loop happened to end on and the tooltip described the wrong service.
+            Tooltip(
+                item,
+                lambda provider_id=d["id"], row=d: (self._provider(provider_id) or row).get("details_str"),
+            )
 
             if vertical:
                 item.pack(fill="x", padx=3, pady=1)
