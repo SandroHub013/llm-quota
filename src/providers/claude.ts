@@ -67,7 +67,7 @@ export async function fetchClaudeQuota(home = homedir()): Promise<QuotaResult> {
       message: exhausted
         ? "Claude reports an exhausted quota window. The card will recover after its official reset."
         : stale
-          ? "Last official update is stale. Use Claude Code once to refresh the quota snapshot."
+          ? "This snapshot is old. Send a message in Claude Code: the status line publishes with the reply."
           : undefined,
     };
   }
@@ -79,7 +79,7 @@ export async function fetchClaudeQuota(home = homedir()): Promise<QuotaResult> {
     teardownUrl: installed ? "/api/official-bridge/claude" : undefined,
     teardownLabel: installed ? "Disable bridge" : undefined,
     message: installed
-      ? "Bridge installed. Use Claude Code once; quota appears after its first API response."
+      ? "Bridge installed. Now send one message in Claude Code — opening it is not enough, because the status line publishes the quota along with a reply."
       : "Enable the official local bridge to receive 5-hour and 7-day quota without reading Claude OAuth.",
   };
 }
