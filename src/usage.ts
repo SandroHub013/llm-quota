@@ -102,6 +102,112 @@ export interface RawUsageRow {
   recordedAt?: string;
 }
 
+/**
+ * The shapes these logs carry, as far as this file reads them.
+ *
+ * Every field is optional and every leaf is `unknown`, which is the honest description:
+ * the formats belong to other people's CLIs and can change without telling anyone. The
+ * readers below coerce (`number`, `isoTimestamp`, `String`), so a field that changes
+ * type costs one row rather than the scan. These are documentation the compiler checks
+ * the reading side of, not validation of the writing side.
+ */
+interface CodexTokenUsage {
+  input_tokens?: unknown;
+  cached_input_tokens?: unknown;
+  cache_write_input_tokens?: unknown;
+  output_tokens?: unknown;
+  reasoning_output_tokens?: unknown;
+}
+
+interface CodexPayload {
+  type?: unknown;
+  session_id?: unknown;
+  id?: unknown;
+  model?: unknown;
+  effort?: unknown;
+  thread_source?: unknown;
+  source?: { subagent?: unknown };
+  info?: { total_token_usage?: CodexTokenUsage };
+}
+
+interface CodexRecord extends TimestampedRecord {
+  type?: unknown;
+  payload?: CodexPayload;
+}
+
+interface ClaudeUsage {
+  input_tokens?: unknown;
+  cache_read_input_tokens?: unknown;
+  cache_creation_input_tokens?: unknown;
+  cache_creation?: { ephemeral_5m_input_tokens?: unknown; ephemeral_1h_input_tokens?: unknown };
+  output_tokens?: unknown;
+  reasoning_tokens?: unknown;
+  thinking_tokens?: unknown;
+  speed?: unknown;
+}
+
+interface ClaudeRecord extends TimestampedRecord {
+  type?: unknown;
+  effort?: unknown;
+  isSidechain?: unknown;
+  agentId?: unknown;
+  message?: { id?: unknown; model?: unknown; usage?: ClaudeUsage };
+}
+
+interface KimiUsage {
+  input?: unknown;
+  inputOther?: unknown;
+  inputCacheRead?: unknown;
+  inputCacheCreation?: unknown;
+  output?: unknown;
+  outputReasoning?: unknown;
+  reasoning?: unknown;
+}
+
+interface KimiRecord extends TimestampedRecord {
+  type?: unknown;
+  model?: unknown;
+  modelAlias?: unknown;
+  thinkingEffort?: unknown;
+  usage?: KimiUsage;
+}
+
+interface PiUsage {
+  input?: unknown;
+  cacheRead?: unknown;
+  cacheWrite?: unknown;
+  output?: unknown;
+  reasoning?: unknown;
+  cost?: { total?: unknown };
+}
+
+interface PiRecord extends TimestampedRecord {
+  type?: unknown;
+  parentSession?: unknown;
+  rlmDepth?: unknown;
+  modelId?: unknown;
+  thinkingLevel?: unknown;
+  message?: { role?: unknown; model?: unknown; usage?: PiUsage };
+}
+
+interface NikcliInfo {
+  modelID?: unknown;
+  cost?: unknown;
+  time?: { created?: unknown };
+  tokens?: {
+    input?: unknown;
+    output?: unknown;
+    reasoning?: unknown;
+    cache?: { read?: unknown; write?: unknown };
+  };
+}
+
+/** OpenCode keeps the model id and its variant as JSON inside one column. */
+interface OpenCodeModel {
+  id?: unknown;
+  variant?: unknown;
+}
+
 interface ClaudeMessage {
   id: string;
   row: RawUsageRow;
@@ -245,7 +351,15 @@ const isoTimestamp = (value: unknown): string | undefined => {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 };
 
-const recordTimestamp = (record: any): string | undefined =>
+/** The four names these logs give the same field. */
+interface TimestampedRecord {
+  timestamp?: unknown;
+  time?: unknown;
+  created_at?: unknown;
+  createdAt?: unknown;
+}
+
+const recordTimestamp = (record: TimestampedRecord | undefined): string | undefined =>
   isoTimestamp(record?.timestamp ?? record?.time ?? record?.created_at ?? record?.createdAt);
 
 const totalOf = (row: Pick<RawUsageRow, "input" | "cacheRead" | "cacheWrite" | "output">) =>
@@ -474,7 +588,7 @@ const rawRow = (
   reasoning: 0,
 });
 
-function codexAgent(payload: any): AgentKind {
+function codexAgent(payload: CodexPayload | undefined): AgentKind {
   return payload?.thread_source === "subagent" || payload?.source?.subagent ? "subagent" : "main";
 }
 
@@ -490,9 +604,9 @@ export function parseCodexRecords(records: string[], fallbackId = "session"): Co
     if (!line.includes('"session_meta"') && !line.includes('"turn_context"') && !line.includes('"token_count"')) {
       continue;
     }
-    let record: any;
+    let record: CodexRecord;
     try {
-      record = JSON.parse(line);
+      record = JSON.parse(line) as CodexRecord;
     } catch (error) {
       // Deliberate: a session log is appended to while it is being read, so its last
       // line is routinely half-written. Dropping the whole file over one truncated
@@ -559,9 +673,9 @@ export function parseClaudeRecords(records: string[], subagentFile = false): Cla
   const messages = new Map<string, RawUsageRow>();
   for (const line of records) {
     if (!line.includes('"assistant"') || !line.includes('"usage"')) continue;
-    let record: any;
+    let record: ClaudeRecord;
     try {
-      record = JSON.parse(line);
+      record = JSON.parse(line) as ClaudeRecord;
     } catch (error) {
       // Deliberate: a session log is appended to while it is being read, so its last
       // line is routinely half-written. Dropping the whole file over one truncated
@@ -614,9 +728,9 @@ export function parseKimiRecords(records: string[], agent: AgentKind = "main"): 
   const rows: RawUsageRow[] = [];
   for (const line of records) {
     if (!line.includes('"llm.request"') && !line.includes('"usage.record"')) continue;
-    let record: any;
+    let record: KimiRecord;
     try {
-      record = JSON.parse(line);
+      record = JSON.parse(line) as KimiRecord;
     } catch (error) {
       // Deliberate: a session log is appended to while it is being read, so its last
       // line is routinely half-written. Dropping the whole file over one truncated
@@ -670,9 +784,9 @@ export function parsePiRecords(
   let kind = agent;
   const rows: RawUsageRow[] = [];
   for (const line of records) {
-    let record: any;
+    let record: PiRecord;
     try {
-      record = JSON.parse(line);
+      record = JSON.parse(line) as PiRecord;
     } catch (error) {
       // Deliberate: a session log is appended to while it is being read, so its last
       // line is routinely half-written. Dropping the whole file over one truncated
@@ -746,9 +860,9 @@ async function scanNikcli(path: string): Promise<RawUsageRow[]> {
 
     const rows: RawUsageRow[] = [];
     for (const message of messages) {
-      let info: any;
+      let info: NikcliInfo;
       try {
-        info = JSON.parse(String(message.info ?? "{}"));
+        info = JSON.parse(String(message.info ?? "{}")) as NikcliInfo;
       } catch (error) {
         // Deliberate: one unparseable `info` blob costs one message, not the database.
         warnOnce("parse:nikcli", "skipping a NikCLI message with an unreadable info blob", error);
@@ -952,9 +1066,9 @@ async function scanOpenCode(path: string): Promise<RawUsageRow[]> {
       FROM session
     `).all() as Record<string, unknown>[];
     return sessions.map((session) => {
-      let metadata: any = {};
+      let metadata: OpenCodeModel = {};
       try {
-        metadata = JSON.parse(String(session.model ?? "{}"));
+        metadata = JSON.parse(String(session.model ?? "{}")) as OpenCodeModel;
       } catch (error) {
         // Deliberate: only the model name and variant live in this column. Losing them
         // costs the row its label and its list price, while the token counts — which
@@ -1050,7 +1164,10 @@ function summarizeDailyUsage(raw: RawUsageRow[]): DailyUsage[] {
     pricingCoveragePct: day.tokens.total
       ? Math.round(day.pricedTokens / day.tokens.total * 1000) / 10
       : 0,
-    sources: [...day.sources].sort(),
+    // Both of these lists are read by a person — a day's sources in the calendar
+    // tooltip, the unpriced models under the total — so they are ordered the way names
+    // are ordered rather than by code point, which puts every capital first.
+    sources: [...day.sources].sort((a, b) => a.localeCompare(b)),
   }));
 }
 
@@ -1122,7 +1239,7 @@ export function summarizeUsageRows(
     rows,
     daily: summarizeDailyUsage(raw),
     sources,
-    unpricedModels: [...unpriced].sort(),
+    unpricedModels: [...unpriced].sort((a, b) => a.localeCompare(b)),
     generatedAt: new Date().toISOString(),
     pricing: {
       kind: "api_equivalent",

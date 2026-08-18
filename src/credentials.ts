@@ -24,7 +24,7 @@ export class JsonFileUnreadableError extends Error {
  * opposite handling: the first is the normal first-run state, the second means
  * the user has data here that this process cannot see.
  */
-export async function readJsonStrict<T = any>(path: string): Promise<T | undefined> {
+export async function readJsonStrict<T = unknown>(path: string): Promise<T | undefined> {
   if (!existsSync(path)) return undefined;
   let content: string;
   try {
@@ -48,7 +48,7 @@ export async function readJsonStrict<T = any>(path: string): Promise<T | undefin
  *
  * Do not use this on a path that is about to be rewritten: see `updateConfig`.
  */
-export async function readJson<T = any>(path: string): Promise<T | undefined> {
+export async function readJson<T = unknown>(path: string): Promise<T | undefined> {
   try {
     return await readJsonStrict<T>(path);
   } catch (error) {

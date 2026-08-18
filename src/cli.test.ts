@@ -67,7 +67,7 @@ describe("CLI summary", () => {
 
   test("stats command fetches npm and github download stats", async () => {
     const { run } = await import("./cli.js");
-    const mockRequest = async (url: any) => {
+    const mockRequest = async (url: string | URL | Request) => {
       const u = String(url);
       // Matched on the host rather than on a substring of the URL: `npmjs.org` also
       // appears inside `npmjs.org.example.com` and inside a path, so a mock keyed on

@@ -9,6 +9,7 @@ import { installOfficialBridge, removeOfficialBridge, type OfficialBridgeProvide
 import { collectUsage } from "./usage.js";
 import { normalizeUsageView, usageFiltersActive, usageHeadlineCosts } from "./usage-view.js";
 import { collectGitHubContributions } from "./github-contributions.prototype.js";
+import { reasonOf } from "./log.js";
 
 const app = new Hono();
 
@@ -84,14 +85,14 @@ async function fetchOne(id: string): Promise<QuotaResult> {
   const config = await readConfig();
   try {
     return await provider.fetch({ userKey: config.keys[id] });
-  } catch (error: any) {
+  } catch (error) {
     return {
       id: provider.id,
       name: provider.name,
       status: "error",
       consoleUrl: provider.consoleUrl,
       metrics: [],
-      message: `Internal error: ${String(error?.message ?? error)}`,
+      message: `Internal error: ${reasonOf(error)}`,
       updatedAt: new Date().toISOString(),
     };
   }
@@ -220,8 +221,8 @@ app.post("/api/official-bridge/:id", async (context) => {
     await installOfficialBridge(id as OfficialBridgeProvider);
     quotaCache = undefined;
     return context.json(await fetchOne(id), 200, { "Cache-Control": "no-store" });
-  } catch (error: any) {
-    return context.json({ error: String(error?.message ?? error) }, 500);
+  } catch (error) {
+    return context.json({ error: reasonOf(error) }, 500);
   }
 });
 
@@ -236,8 +237,8 @@ app.delete("/api/official-bridge/:id", async (context) => {
     await removeOfficialBridge(id as OfficialBridgeProvider);
     quotaCache = undefined;
     return context.json(await fetchOne(id), 200, { "Cache-Control": "no-store" });
-  } catch (error: any) {
-    return context.json({ error: String(error?.message ?? error) }, 500);
+  } catch (error) {
+    return context.json({ error: reasonOf(error) }, 500);
   }
 });
 
