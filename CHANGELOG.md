@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-08-18
+
+### Added
+
+- **An rpm, so half of Linux stops being told to build from source.** Releases carried a deb and
+  nothing else. The bundler now produces `LLM.Quota-<version>-1.x86_64.rpm` beside it, and CI
+  installs it inside Fedora's own image — package name read from the package, the shell and the
+  sidecar asserted present, the server started from its installed path and required to answer on
+  4747, then removed and checked for leftovers. The widget's tests run on Fedora too, where Tk is
+  a separate package under a different name again.
+
+### Changed
+
+- **Coverage is measured and printed.** Nothing measured it before. With test files left out of
+  the count — they cover themselves, and counting them read 86% where the code under test reads
+  73% — CI now prints per-file line and function coverage on every run. No threshold: a
+  repository-wide minimum says nothing about the change that lowered it.
+
 ## [0.6.1] — 2026-08-18
 
 ### Fixed
@@ -261,6 +279,7 @@ dashboard may read, and a card promising data that never arrives is worse than n
 
 Initial release: local-first live quota dashboard, CLI, and Windows widget.
 
+[0.6.2]: https://github.com/SandroHub013/llm-quota/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/SandroHub013/llm-quota/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/SandroHub013/llm-quota/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/SandroHub013/llm-quota/compare/v0.5.0...v0.5.1
