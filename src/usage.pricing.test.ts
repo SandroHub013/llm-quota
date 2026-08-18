@@ -217,6 +217,27 @@ test("the OpenAI family is priced at the list, not near it", () => {
   expect(cached.estimatedCostUsd).toBeCloseTo(0.2, 10);
 });
 
+/**
+ * MiniMax is the plan this project can price but cannot yet read: its Coding Plan covers
+ * these models, and what the ledger reports is what the same tokens would have cost
+ * through the API. Highspeed is the same model on a faster tier at twice the rate, which
+ * is the pair most likely to be mixed up.
+ */
+test("MiniMax models are priced, and highspeed costs twice standard", () => {
+  const standard = summarizeUsageRows([
+    row({ source: "opencode", model: "MiniMax-M2.7", input: M, output: M }),
+  ]);
+  const highspeed = summarizeUsageRows([
+    row({ source: "opencode", model: "MiniMax-M2.7-highspeed", input: M, output: M }),
+  ]);
+
+  expect(standard.estimatedCostUsd).toBeCloseTo(0.3 + 1.2, 10);
+  expect(highspeed.estimatedCostUsd).toBeCloseTo(0.6 + 2.4, 10);
+  // Named as the vendor writes it, whatever case the CLI logged.
+  expect(standard.rows[0]!.model).toBe("MiniMax M2.7");
+  expect(standard.unpricedModels).toEqual([]);
+});
+
 test("no rows is zero, not a division by zero", () => {
   const summary = summarizeUsageRows([]);
 

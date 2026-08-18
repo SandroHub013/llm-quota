@@ -253,6 +253,41 @@ Regola di prodotto consigliata: mostrare accanto a ogni numero `origine`, `autor
 | GitHub CLI → GraphQL contribution calendar | **Basso** | [`src/github-contributions.prototype.ts:58-83`](../../src/github-contributions.prototype.ts#L58-L83), [`src/github-contributions.prototype.ts:115-197`](../../src/github-contributions.prototype.ts#L115-L197) | API e campi documentati; token gestito da `gh`; cache 10 minuti. | Mantenere, con privacy e rate-limit handling. |
 | Scansione locale token/costi | **Basso** | [`src/usage.ts:681-790`](../../src/usage.ts#L681-L790) | Sola lettura locale; nessun accesso autenticato al provider; costo già dichiarato stimato. | Mantenere local-only, senza telemetria e con listino datato. |
 
+## MiniMax Coding Plan
+
+Valutato il 2026-08-18, insieme all'adapter in [`src/providers/minimax.ts`](../../src/providers/minimax.ts).
+
+**Rischio: basso in linea di principio, bloccato in pratica.** MiniMax documenta un endpoint che restituisce le finestre del piano — `GET https://www.minimax.io/v1/token_plan/remains` con `Authorization: Bearer <API Key>`, e la variante cinese `/v1/api/openplatform/coding_plan/remains` — autenticato con la chiave dell'utente. È esattamente la superficie che questo progetto considera lecita: nessuna credenziale di un altro client, nessun endpoint interno, nessuna identità presa in prestito.
+
+Il servizio però rifiuta la propria autenticazione documentata e risponde `1004: cookie is missing, log in again`, chiedendo una sessione browser ([MiniMax-AI/MiniMax-M2#88](https://github.com/MiniMax-AI/MiniMax-M2/issues/88), aperta da marzo 2026). Sollevare un cookie di sessione è la condotta rimossa per Antigravity e rifiutata per Z.ai: non si fa.
+
+**Decisione.** L'adapter resta scritto e testato ma **non registrato** in [`src/providers/index.ts`](../../src/providers/index.ts), come già per Kimi e Z.ai. La differenza va detta: qui non c'è un problema di policy, c'è un bug del fornitore. Registrare la card è una riga il giorno in cui una chiave vera restituisce i contatori.
+
+**Token spesi.** I modelli MiniMax sono prezzati nel registro locale ([`src/usage.ts`](../../src/usage.ts)), quindi la spesa su M2, M2.1, M2.5, M2.7 e M3 — comunque arrivi, da qualsiasi CLI scriva un log locale — viene conteggiata al valore API equivalente invece di finire tra i modelli senza prezzo. Questo non richiede alcuna credenziale e non tocca il fornitore.
+
+## Cursor
+
+Valutato il 2026-08-18. **Non implementabile per l'utente singolo; possibile per gli amministratori di team.**
+
+Cursor pubblica una **Admin API** documentata su `https://api.cursor.com` — fra gli altri `/teams/daily-usage-data` e gli endpoint di spesa — autenticata in HTTP Basic con una chiave che **solo un amministratore del team può creare** ([documentazione](https://cursor.com/docs/account/teams/admin-api)). Con quella chiave, e per il proprio team, l'accesso è lecito e rientra nella stessa categoria di Moonshot Open Platform: endpoint documentato, credenziale dell'utente.
+
+Restano due limiti che decidono la questione:
+
+1. **Un abbonato Pro individuale non ha alcun endpoint documentato** per la propria quota residua. Il numero esiste solo nella UI dell'app, dietro la sessione dell'utente: leggerlo significherebbe riusare quel cookie, che è la linea già tracciata sopra.
+2. **Quello che l'Admin API restituisce non è una finestra di piano** ma consumo e spesa aggregati del team, con granularità oraria e un rate limit di 20 richieste al minuto. Non si mappa sull'orizzonte dei reset attorno a cui è costruita questa dashboard.
+
+**Spesa token in locale:** nulla da leggere. Il database in `~/.cursor/ai-tracking/ai-code-tracking.db` contiene `ai_code_hashes` — hash del codice scritto dall'AI, estensione, file, `requestId`, `conversationId`, timestamp — e nessun contatore di token. Verificato sulla macchina di sviluppo il 2026-08-18.
+
+## xAI / Grok
+
+Valutato il 2026-08-18, a integrazione della issue [#79](https://github.com/SandroHub013/llm-quota/issues/79).
+
+**Rischio basso, valore basso, e meno pronto di quanto sembri.** xAI restituisce header di rate limit nelle risposte dell'API (`x-ratelimit-limit-requests`, `x-ratelimit-remaining-requests`, `x-ratelimit-reset-requests` e gli equivalenti sui token), ma la [documentazione ufficiale su consumo e rate limit](https://docs.x.ai/docs/key-information/consumption-and-rate-limits) **non li nomina** e non pubblica alcun endpoint per interrogare limiti, consumo o spesa: rimanda alla pagina Rate Limits della console. Groq, per confronto ([#76](https://github.com/SandroHub013/llm-quota/issues/76)), li documenta.
+
+Ne segue che leggerli richiederebbe **fare una chiamata a un modello** per guardare gli header della risposta: una richiesta pagata dall'utente, fatta solo per misurare. Va detto in chiaro prima di implementarlo.
+
+E comunque non risponde alla domanda di questa dashboard: sono limiti di una API key per tier di spesa, non la finestra di un abbonamento.
+
 ## Conclusione
 
 La strada sostenibile è chiara: **local-first non basta da solo; serve anche “official-surface-first”**. Il progetto può mantenere gran parte del suo valore usando log locali, API key documentate, GitHub GraphQL e IPC/CLI ufficiali. Deve invece eliminare impersonificazione, credenziali prese in prestito, endpoint non documentati e bypass di protezioni.
