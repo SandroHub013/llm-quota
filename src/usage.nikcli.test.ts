@@ -51,6 +51,7 @@ async function fixture(): Promise<{ paths: UsagePaths; root: string }> {
       pi: join(root, "pi"),
       prime: join(root, "prime"),
       nikcliDb: path,
+      antigravity: join(root, "antigravity"),
     },
   };
 }

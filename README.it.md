@@ -47,8 +47,8 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
   Antigravity consegnano volontariamente il JSON quota tramite bridge locali opt-in della status
   line. LLM Quota non legge né rinnova mai il token OAuth di un altro client.
 - 💶 **Registro token locale** — somma la cronologia di Codex, Claude Code, OpenCode, Kimi Code,
-  pi, Prime Agent e NikCLI per modello, effort e main/subagent, stimandone in euro il valore API equivalente e
-  mostrando un indice di efficienza basato sul riuso del contesto. Un calendario giornaliero in
+  pi, Prime Agent, NikCLI e Antigravity per modello, effort e main/subagent, stimandone in euro il
+  valore API equivalente e mostrando un indice di efficienza basato sul riuso del contesto. Un calendario giornaliero in
   stile GitHub mostra quando sono stati usati token ed euro; la vista GitHub opzionale usa sempre
   l'account autenticato localmente con `gh`.
 - 🔒 **Local-first** — nessun cloud, nessun database, nessun account. Chiavi e token non lasciano
@@ -127,8 +127,8 @@ Nessun account, username, valore quota o totale di spesa runtime è legato all'a
 - I bridge Claude/Antigravity, attivati esplicitamente, salvano soltanto finestre quota e reset;
   escludono identità, transcript e access token e preservano la status line personalizzata esistente.
 - Il registro token analizza la cronologia locale dell'utente per Codex, Claude Code, OpenCode,
-  Kimi Code, pi, Prime Agent e NikCLI. Hermes non tiene alcuna traccia locale dei token, quindi la
-  sua spesa non è conteggiabile.
+  Kimi Code, pi, Prime Agent, NikCLI e Antigravity. Hermes non tiene alcuna traccia locale dei
+  token, quindi la sua spesa non è conteggiabile.
 - Il calendario contribution opzionale interroga l'utente autenticato nella CLI ufficiale GitHub.
   Esegui `gh auth login` per abilitarlo; senza `gh`, il calendario della spesa locale continua a funzionare.
 - Una dashboard su una porta locale personalizzata passa automaticamente la propria origine al widget.
@@ -151,6 +151,8 @@ credenziali o cronologie d'uso reali.
 
 Oggi vengono spedite tre card provider. OpenCode, pi, Prime Agent e NikCLI sono fonti solo del
 registro: non pubblicano quota di piano, quindi contribuiscono alla spesa locale e a nessuna card.
+Antigravity fa entrambe le cose: il bridge della status line alimenta la card Gemini, la cronologia
+delle sue conversazioni alimenta il registro.
 Il gateway Zen di OpenCode è stato rimosso del tutto, perché l'endpoint pubblico espone il catalogo modelli e non
 utilizzo numerico, limiti o tempi di reset.
 Kimi è disabilitato per lo stesso motivo: la sua status line ufficiale non porta campi di quota, rate
@@ -328,8 +330,8 @@ Tk fa parte della libreria standard di Python ma su Debian e Ubuntu è un pacche
 - I loghi sono congelati nel repository di proposito: caricarli dal provider — o da un servizio di
   favicon, come faceva una versione precedente — direbbe a terzi quali abbonamenti AI possiedi, a
   ogni caricamento di pagina.
-- I file OAuth di Codex, Claude, Gemini, OpenCode, Kimi, pi, Prime Agent e NikCLI non vengono letti
-  né modificati: si leggono solo i transcript di sessione e i database locali. Le chiavi
+- I file OAuth di Codex, Claude, Gemini, OpenCode, Kimi, pi, Prime Agent, NikCLI e Antigravity non
+  vengono letti né modificati: si leggono solo i transcript di sessione e i database locali. Le chiavi
   Open Platform inserite dall'utente vengono usate soltanto con l'API documentata del provider.
 
 ---

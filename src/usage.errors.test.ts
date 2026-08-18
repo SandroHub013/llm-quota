@@ -35,6 +35,7 @@ async function scratch(): Promise<{ root: string; claude: string; paths: UsagePa
       pi: join(root, "absent-pi"),
       prime: join(root, "absent-prime"),
       nikcliDb: join(root, "absent-nikcli.db"),
+      antigravity: join(root, "absent-antigravity"),
     },
   };
 }
