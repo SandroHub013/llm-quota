@@ -1,0 +1,12 @@
+[test]
+# Test files cover themselves by definition, and counting them moves the number
+# without meaning anything: a file of assertions runs top to bottom every time. What
+# is left is the code under test, which is the only part a coverage figure is a
+# statement about.
+#
+# Printed in CI, deliberately without a threshold. A repository-wide minimum says
+# nothing about the code in the change that lowered it, and the two ways to satisfy one
+# — tests written for the metric, or the bar quietly lowered — both teach people to
+# stop reading the number. It is here to be looked at when a file gets thin, not to
+# fail a build.
+coverageSkipTestFiles = true
