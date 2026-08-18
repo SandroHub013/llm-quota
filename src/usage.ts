@@ -1003,6 +1003,13 @@ const antigravityModel = (id: string, label: string): string => {
 const antigravityEffort = (label: string): string =>
   label.match(/\(([^)]+)\)\s*$/)?.[1]?.toLowerCase() ?? "default";
 
+/** bun:sqlite hands a blob back as bytes or as a buffer depending on how it was stored. */
+function asBytes(value: unknown): Uint8Array | undefined {
+  if (value instanceof Uint8Array) return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  return undefined;
+}
+
 async function scanAntigravity(path: string): Promise<RawUsageRow[]> {
   if (typeof Bun === "undefined") return [];
   const { Database } = await import("bun:sqlite");
@@ -1016,11 +1023,7 @@ async function scanAntigravity(path: string): Promise<RawUsageRow[]> {
 
     const rows: RawUsageRow[] = [];
     for (const record of db.query("SELECT data FROM gen_metadata").all() as { data: unknown }[]) {
-      const blob = record.data instanceof Uint8Array
-        ? record.data
-        : record.data instanceof ArrayBuffer
-        ? new Uint8Array(record.data)
-        : undefined;
+      const blob = asBytes(record.data);
       if (!blob?.length) continue;
       const generation = protoBytes(blob, 1);
       const usage = generation && protoBytes(generation, 4);

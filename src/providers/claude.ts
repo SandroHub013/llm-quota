@@ -12,6 +12,16 @@ import { nowIso } from "./util.js";
 const CONSOLE = "https://claude.ai/settings/usage";
 const FRESH_MS = 15 * 60_000;
 
+/**
+ * What the card says under a live bridge: an exhausted window explains itself, a stale
+ * snapshot says how to refresh it, and a healthy one says nothing at all.
+ */
+function bridgeMessage(exhausted: boolean, stale: boolean): string | undefined {
+  if (exhausted) return "Claude reports an exhausted quota window. The card will recover after its official reset.";
+  if (stale) return "This snapshot is old. Send a message in Claude Code: the status line publishes with the reply.";
+  return undefined;
+}
+
 export const claude: Provider = {
   id: "claude",
   name: "Claude Code",
@@ -64,11 +74,7 @@ export async function fetchClaudeQuota(home = homedir()): Promise<QuotaResult> {
       metrics,
       teardownUrl: installed ? "/api/official-bridge/claude" : undefined,
       teardownLabel: installed ? "Disable bridge" : undefined,
-      message: exhausted
-        ? "Claude reports an exhausted quota window. The card will recover after its official reset."
-        : stale
-          ? "This snapshot is old. Send a message in Claude Code: the status line publishes with the reply."
-          : undefined,
+      message: bridgeMessage(exhausted, stale),
     };
   }
 
