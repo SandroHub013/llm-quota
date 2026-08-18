@@ -44,3 +44,7 @@ video-test/
 *.p12
 *.pfx
 .llm-quota-keys/
+
+# Written by `bun test --coverage --coverage-reporter=lcov`. The badge's number lives
+# in docs/coverage.json; the report itself is a local artefact.
+coverage/

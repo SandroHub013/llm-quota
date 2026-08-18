@@ -73,11 +73,34 @@ jobs:
           python -m pip install --quiet pip-audit
           pip-audit -r requirements-dev.txt
 
+      # The npm and pip trees are audited; the Rust one was not, and it is the tree
+      # that ends up inside the signed binary people download. RustSec advisories are
+      # read straight from Cargo.lock — no build, no toolchain beyond what the action
+      # brings.
+      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: src-tauri
+
   # The desktop shell is Rust, so `bun test` cannot see it break. This compiles the
   # shell against the real sidecar, which is what a change to either side breaks, and
   # it is the fast half: the `install` job below is the one that bundles and installs.
+  #
+  # On all three platforms, because the shell is where this project stops being
+  # portable: the sidecar is spawned through cmd.exe on Windows and directly elsewhere,
+  # the updater installs on two of the three and points at a download on the third, and
+  # the tray exists on fewer Linux desktops than not. Its own tests claim ports and wait
+  # on sockets — exactly the code that passes on Linux and surprises someone on Windows.
+  # `install` builds on all three already, but building is not running.
   desktop:
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+          - { os: macos-latest, target: aarch64-apple-darwin }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -94,8 +117,10 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: './src-tauri -> target'
+          key: desktop-${{ matrix.target }}
 
       - name: Linux build dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -108,7 +133,9 @@ jobs:
             file
 
       - name: Compile the server sidecar
-        run: bun run sidecar -- x86_64-unknown-linux-gnu
+        # Tauri refuses to build without a sidecar named for this target, so the shell
+        # cannot compile anywhere the server has not been compiled first.
+        run: bun run sidecar -- ${{ matrix.target }}
 
       - name: Clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
