@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The coverage check failed on whichever machine did not write the badge.** The shipped code
+  branches on platform, so Linux and Windows measure the same commit about a point apart and the
+  check demanded the exact figure. It now tolerates two points: enough for a platform, not for a
+  regression.
+- **An array body reset the saved ledger filter.** `PUT /api/usage-view` guarded with `typeof body
+  !== "object"`, and an array passes that: it reached the normalizer with no fields on it and the
+  stored source and agent filters were replaced by the defaults, for a body that was never a view.
+  Arrays are refused now, as they already were on the key route.
+
 ## [0.6.2] — 2026-08-18
 
 ### Added
