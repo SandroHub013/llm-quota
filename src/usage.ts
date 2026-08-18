@@ -1164,7 +1164,10 @@ function summarizeDailyUsage(raw: RawUsageRow[]): DailyUsage[] {
     pricingCoveragePct: day.tokens.total
       ? Math.round(day.pricedTokens / day.tokens.total * 1000) / 10
       : 0,
-    sources: [...day.sources].sort(),
+    // Both of these lists are read by a person — a day's sources in the calendar
+    // tooltip, the unpriced models under the total — so they are ordered the way names
+    // are ordered rather than by code point, which puts every capital first.
+    sources: [...day.sources].sort((a, b) => a.localeCompare(b)),
   }));
 }
 
@@ -1236,7 +1239,7 @@ export function summarizeUsageRows(
     rows,
     daily: summarizeDailyUsage(raw),
     sources,
-    unpricedModels: [...unpriced].sort(),
+    unpricedModels: [...unpriced].sort((a, b) => a.localeCompare(b)),
     generatedAt: new Date().toISOString(),
     pricing: {
       kind: "api_equivalent",
