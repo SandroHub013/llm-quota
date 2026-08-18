@@ -23,7 +23,7 @@ const SOURCE = "https://models.dev/api.json";
  * The providers whose own prices this ledger quotes. Everything else on models.dev is a
  * reseller or a gateway, and a gateway's markup is not the list price of the model.
  */
-const FIRST_PARTY = ["anthropic", "openai", "google", "moonshotai", "zhipuai", "zai"];
+const FIRST_PARTY = ["anthropic", "openai", "google", "moonshotai", "zhipuai", "zai", "minimax"];
 
 interface ModelsDevCost {
   input?: number;
@@ -48,6 +48,7 @@ const ALIASES: Record<string, string> = {
  * `src/usage.ts`, and re-reading it every run would train whoever runs this to skim.
  */
 const EXPECTED: Record<string, string> = {
+  "minimax-m2": "no published cached-input rate; this table charges cache reads at the input rate",
   "gemini-3.6-flash": "promotional rate through 2026-12-31; models.dev lists the rate after it",
   "gemini-3.7-flash": "promotional rate through 2026-12-31; models.dev lists the rate after it",
 };
@@ -68,9 +69,12 @@ const catalogue = (await fetch(SOURCE).then((response) => {
 })) as ModelsDev;
 
 const index = new Map<string, { provider: string; cost: ModelsDevCost }>();
+// Keyed lower-case: this table names models the way the vendor writes them in prose,
+// models.dev the way the API id is spelled, and MiniMax capitalises its own name.
 for (const provider of FIRST_PARTY) {
   for (const [id, model] of Object.entries(catalogue[provider]?.models ?? {})) {
-    if (!index.has(id) && model.cost) index.set(id, { provider, cost: model.cost });
+    const key = id.toLowerCase();
+    if (!index.has(key) && model.cost) index.set(key, { provider, cost: model.cost });
   }
 }
 
@@ -79,7 +83,7 @@ let absent = 0;
 let matched = 0;
 
 for (const [id, ours] of Object.entries(PRICES_FOR_AUDIT)) {
-  const hit = index.get(ALIASES[id] ?? id);
+  const hit = index.get((ALIASES[id] ?? id).toLowerCase());
   if (!hit) {
     absent += 1;
     console.log(`  ?  ${id}: not published by a first-party provider on models.dev`);

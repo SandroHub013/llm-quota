@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **MiniMax Coding Plan.** The adapter reads the plan's two rolling windows from the endpoint
+  MiniMax documents for the user's own API key, and ships **unregistered**: that endpoint currently
+  rejects bearer auth and demands a browser session cookie instead, which this project will not
+  lift. Unlike Kimi and Z.ai this is a vendor bug rather than a policy wall, so the card is one line
+  away the day a real key returns counters. MiniMax model prices are in the ledger now regardless,
+  so spend on M2, M2.1, M2.5, M2.7 and M3 is priced instead of counted as a hole.
+- **Terms assessments for Cursor and xAI** in `docs/research/provider-terms-assessment.md`. Cursor's
+  documented API is team-admin-only and reports team spend rather than a plan window; an individual
+  subscriber's remaining quota exists only behind a browser session. xAI publishes rate-limit
+  headers but documents neither them nor an endpoint to read them, so the only way to see them is to
+  pay for a model call — and they describe an API tier, not a subscription.
+
 ### Fixed
 
 - **Two OpenAI models were priced above their list.** GPT-5.6 Terra was carried at 2.50/15.00 against
