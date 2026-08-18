@@ -50,6 +50,13 @@ jobs:
   # reports on its own instead of turning the test run red.
   audit:
     runs-on: ubuntu-latest
+    # The RustSec action reports through a check run, which the default token cannot
+    # create on a push: the job failed on main with "Resource not accessible by
+    # integration" while passing on every pull request, which is the shape of a
+    # permissions problem rather than of an advisory.
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
