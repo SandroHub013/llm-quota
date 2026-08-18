@@ -1,0 +1,93 @@
+name: Prices
+
+# The ledger's headline figure rests entirely on a hand-maintained price table, and a
+# vendor changing a rate is invisible from inside this repository: nothing breaks, no
+# test fails, the euro total is simply wrong from that day on. The table carries a date
+# for that reason, and a date is a reminder rather than a check.
+#
+# This is the check. Once a week it holds the table against models.dev — an open,
+# per-provider database — and opens an issue when they disagree. models.dev raises the
+# question; the vendor's own pricing page answers it, which is why the issue asks for a
+# comparison rather than announcing a fix.
+#
+# Deliberately not part of CI: it depends on a third-party service being up, and a pull
+# request should not go red because someone else's site is down. For the same reason it
+# never edits the table itself — a price is a claim this project makes, and a robot
+# should not make it.
+on:
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: prices
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.3.14'
+
+      - run: bun install --frozen-lockfile
+
+      - name: Compare the price table against models.dev
+        id: compare
+        run: |
+          set +e
+          bun run prices:check > report.txt 2>&1
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+          cat report.txt
+
+      # One open issue at a time. A weekly job that files a fresh one every Monday
+      # teaches people to close it without reading, which is the opposite of the point.
+      - name: Open an issue when the table and the catalogue disagree
+        if: steps.compare.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="Price table disagrees with models.dev"
+          existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+
+          {
+            echo "\`bun run prices:check\` found rates in \`src/usage.ts\` that no longer match what"
+            echo "models.dev publishes for the first-party provider."
+            echo
+            echo '```'
+            cat report.txt
+            echo '```'
+            echo
+            echo "models.dev is a second opinion, not the source. Check the vendor's own pricing"
+            echo "page and change whichever is wrong — the table, or the entry in the script that"
+            echo "records why a difference is expected."
+            echo
+            echo "Run: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}>"
+          } > body.md
+
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh issue create --title "$title" --label bug --body-file body.md
+          fi
+
+      # Closing it is a person's call — the fix is a decision about which number is right,
+      # and a job that closes its own issues hides the week it was wrong.
+      - name: Say so when they agree again
+        if: steps.compare.outputs.status == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          existing=$(gh issue list --state open --search "Price table disagrees with models.dev in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "The table and models.dev agree again as of this run. Closing is a judgement about which number was right, so it is left open."
+          fi
