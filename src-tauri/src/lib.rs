@@ -127,10 +127,26 @@ struct Sidecar(Mutex<Option<CommandChild>>);
 /// A busy 4747 usually means the user already runs `bun start`. Rather than trying to
 /// adopt that server, this starts its own on another port: the two read the same local
 /// files, and the dashboard passes its own origin to the widget, so both keep working.
-fn claim_port() -> u16 {
-    if TcpListener::bind((Ipv4Addr::LOCALHOST, PREFERRED_PORT)).is_ok() {
-        return PREFERRED_PORT;
+/// How long a launch waits for the documented port before giving up on it.
+///
+/// An orphaned sidecar from a crashed or replaced shell notices its parent is gone
+/// within a couple of seconds and exits. Waiting that long costs a slow start in the
+/// rare case something else holds 4747 for good, and buys the common case the port the
+/// widget, the status line and every screenshot already name.
+const PORT_WAIT: Duration = Duration::from_secs(5);
+
+fn claim_port(wait: Duration) -> u16 {
+    let deadline = Instant::now() + wait;
+    loop {
+        if TcpListener::bind((Ipv4Addr::LOCALHOST, PREFERRED_PORT)).is_ok() {
+            return PREFERRED_PORT;
+        }
+        if Instant::now() >= deadline {
+            break;
+        }
+        thread::sleep(POLL_INTERVAL);
     }
+
     TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .and_then(|listener| listener.local_addr())
         .map(|address| address.port())
@@ -163,11 +179,16 @@ fn show_dashboard(app: &AppHandle) {
 
 /// Starts the server and points the window at it once it answers.
 fn start_server(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let port = claim_port();
+    let port = claim_port(PORT_WAIT);
     let (mut events, child) = app
         .shell()
         .sidecar("llm-quota-server")?
         .env("PORT", port.to_string())
+        // The sidecar outlives this process on every path that does not run the exit
+        // handler — an update that replaces this binary, a crash — and an orphan that
+        // keeps 4747 is worse than no server at all: the next launch takes another port
+        // while everything pointed at 4747 keeps reading the version it replaced.
+        .env("LLM_QUOTA_PARENT_PID", std::process::id().to_string())
         .spawn()?;
 
     app.state::<Sidecar>().0.lock().unwrap().replace(child);
@@ -513,6 +534,10 @@ pub fn run() {
 mod tests {
     use super::*;
 
+    /// Both port tests stage the same port, and cargo runs tests in parallel: without
+    /// this they would take 4747 from each other and fail for the other's reason.
+    static PORT_GUARD: Mutex<()> = Mutex::new(());
+
     /// A laptop at 1920×1080 has room to spare, so the dashboard gets the viewport it
     /// is laid out for rather than the screen it landed on.
     #[test]
@@ -548,6 +573,7 @@ mod tests {
     /// can be and never silently shared when it cannot.
     #[test]
     fn a_busy_preferred_port_falls_back_to_a_free_one() {
+        let _guard = PORT_GUARD.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let Ok(held) = TcpListener::bind((Ipv4Addr::LOCALHOST, PREFERRED_PORT)) else {
             // Something outside this test already holds it; the fallback is then what
             // claim_port returns anyway, and asserting on a port we do not control
@@ -555,7 +581,7 @@ mod tests {
             return;
         };
 
-        let port = claim_port();
+        let port = claim_port(Duration::ZERO);
         assert_ne!(port, PREFERRED_PORT, "the port was already held");
         assert_ne!(port, 0, "0 asks the OS to choose again at bind time");
 
@@ -578,6 +604,27 @@ mod tests {
         // A release published while the app stayed open is news again.
         assert!(!already_offered("0.6.1", Announce::OnlyWhenNewer));
         assert!(already_offered("0.6.1", Announce::OnlyWhenNewer));
+    }
+
+    /// An orphaned sidecar — one whose shell was replaced by an update or died in a
+    /// crash — notices and exits a moment after its parent goes. Waiting for that is the
+    /// difference between the port every screenshot names and an ephemeral one nobody
+    /// can be told about.
+    #[test]
+    fn a_port_freed_during_the_wait_is_still_claimed() {
+        let _guard = PORT_GUARD.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let held = match TcpListener::bind((Ipv4Addr::LOCALHOST, PREFERRED_PORT)) {
+            Ok(listener) => listener,
+            // Something on this machine owns 4747 for good; the case under test cannot
+            // be staged, and failing here would be a fact about the machine.
+            Err(_) => return,
+        };
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(400));
+            drop(held);
+        });
+
+        assert_eq!(claim_port(Duration::from_secs(4)), PREFERRED_PORT);
     }
 
     /// The splash screen waits on this. Returning true for a port nothing is listening

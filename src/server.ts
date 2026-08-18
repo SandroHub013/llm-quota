@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { getProvider, providers } from "./providers/index.js";
+import { watchParent } from "./parent-watch.js";
 import { PUBLIC_ASSETS } from "./public-assets.generated.js";
 import { INDEX, mimeFor } from "./public-mime.js";
 import type { QuotaResult } from "./providers/types.js";
@@ -256,6 +257,10 @@ app.get("/:a{.+}", async (context) => {
   const cache = relative.endsWith(".woff2") ? "public, max-age=31536000, immutable" : "no-cache";
   return context.body(body, 200, { "Content-Type": type, "Cache-Control": cache });
 });
+
+// Set by the desktop shell when it spawns this server. Without it — from source, or
+// from the CLI — there is no parent to outlive and nothing to watch.
+watchParent(Number(process.env.LLM_QUOTA_PARENT_PID) || undefined);
 
 const port = Number(process.env.PORT ?? 4747);
 console.log(`\n  LLM Quota → http://localhost:${port}\n`);

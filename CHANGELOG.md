@@ -14,6 +14,12 @@ All notable changes to this project are documented here. The format follows
   it in its own type, colour and radius, bottom right, waiting rather than interrupting. The
   dialog stays for the one case the page cannot cover: no window, or a window that has not
   reached the dashboard yet.
+- **A sidecar could outlive the shell that spawned it.** The shell kills its server when it exits,
+  which covers the ordinary quit and nothing else: an update replaces the binary and restarts, a
+  crash never reaches the handler, and the orphan keeps port 4747 while answering with the version
+  that was replaced. The server now watches the process that started it and stops when it goes, and
+  a launch waits up to five seconds for the documented port before falling back — long enough for
+  an orphan to notice, short enough not to be a startup someone waits through.
 - **An update left the server it replaced running.** `restart` does not run the handler that kills
   the sidecar, so the old one kept port 4747; the new app fell back to an ephemeral port and the
   widget, the wezterm strip and anything else told 4747 went on reading the version the update had
