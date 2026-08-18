@@ -152,7 +152,12 @@ app.get("/api/usage-view", async (context) => {
 
 app.put("/api/usage-view", async (context) => {
   const body = await context.req.json<Record<string, unknown>>().catch(() => undefined);
-  if (body == null || typeof body !== "object") return context.json({ error: "invalid view" }, 400);
+  // Arrays are objects, and an array reached `normalizeUsageView` with no fields on it:
+  // the stored filter was replaced by the defaults, silently, for a body that was never
+  // a view. `/api/key` already refused them; this route did not.
+  if (body == null || typeof body !== "object" || Array.isArray(body)) {
+    return context.json({ error: "invalid view" }, 400);
+  }
   const view = normalizeUsageView(body);
   try {
     await updateConfig((config) => ({ ...config, usageView: view }));
