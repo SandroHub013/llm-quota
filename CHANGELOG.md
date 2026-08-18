@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- **The Codex interpreter no longer comes from the environment.** Running the `codex` shim on
+  Windows needs `cmd.exe`, and it was taken from `ComSpec` — an ordinary environment variable that
+  whatever starts this process can point elsewhere, at a program this code then hands a command line
+  to. It comes from the Windows directory now, with `ComSpec` left only as the fallback for when
+  that is unreadable. Reported by CodeQL as `js/indirect-command-line-injection`.
+
 ## [0.6.3] — 2026-08-19
 
 ### Fixed
