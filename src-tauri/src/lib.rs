@@ -19,10 +19,9 @@ use std::time::{Duration, Instant};
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, LogicalSize, Manager, RunEvent, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, RunEvent, State, WebviewWindow, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
-#[cfg(target_os = "linux")]
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
@@ -217,72 +216,87 @@ enum Announce {
 /// Where a release the updater cannot install itself can be fetched by hand.
 const RELEASES_URL: &str = "https://github.com/SandroHub013/llm-quota/releases/latest";
 
-/// Linux installs from a deb, and the updater replaces AppImages. Rather than offer an
-/// update it cannot carry out, it points at the release and lets the package manager
-/// stay the thing that owns the files it installed.
-#[cfg(target_os = "linux")]
+/// The update this run found and has not installed yet.
+///
+/// The offer usually arrives before the dashboard exists — the check starts in `setup`,
+/// while the window is still on the splash screen — so it is kept here for the page to
+/// ask for once it has loaded, rather than emitted into a window that is not listening.
+struct PendingUpdate(Mutex<Option<tauri_plugin_updater::Update>>);
+
+/// Linux installs from a package, and the updater would be replacing files a package
+/// manager owns. The offer is still worth making; the button behind it is a download.
+const CAN_INSTALL: bool = !cfg!(target_os = "linux");
+
+fn offer_payload(version: &str) -> serde_json::Value {
+    serde_json::json!({ "version": version, "canInstall": CAN_INSTALL })
+}
+
+/// Hands the dashboard an update to draw.
+///
+/// It used to be a native message box. That works, and it looks like a Windows system
+/// dialog in front of an app that looks like nothing else on the desktop, and it takes
+/// focus to say something that is never urgent. The page draws it now. The dialog stays
+/// as the fallback for the case the page cannot cover: no window, or a window that has
+/// not reached the dashboard, which is where the update would otherwise vanish.
 fn offer_update(app: &AppHandle, update: tauri_plugin_updater::Update) {
+    let version = update.version.clone();
+    if let Ok(mut pending) = app.state::<PendingUpdate>().0.lock() {
+        *pending = Some(update);
+    }
+
+    if app.get_webview_window("main").is_some() && app.emit("update-available", offer_payload(&version)).is_ok() {
+        return;
+    }
+
     let handle = app.clone();
     app.dialog()
         .message(format!(
-            "LLM Quota {} is available. This copy was installed from a package, so the \
-             update is a download rather than something this window can apply.",
-            update.version
+            "LLM Quota {version} is available. It can be downloaded from {RELEASES_URL}"
         ))
         .title("Update available")
-        .buttons(MessageDialogButtons::OkCancelCustom(
-            "Open the release".to_owned(),
-            "Not now".to_owned(),
-        ))
-        .show(move |open| {
-            if open {
-                if let Err(error) = handle.opener().open_url(RELEASES_URL, None::<&str>) {
-                    eprintln!("llm-quota-desktop: could not open the release page: {error}");
-                }
+        .show(move |_| {
+            if let Err(error) = handle.opener().open_url(RELEASES_URL, None::<&str>) {
+                eprintln!("llm-quota-desktop: could not open the release page: {error}");
             }
         });
 }
 
-/// Windows and macOS: the updater can replace the installed app, so the dialog offers
-/// to do it. Downloading happens after the answer, never before — an update nobody
-/// agreed to should not be spending someone's connection in the background.
-#[cfg(not(target_os = "linux"))]
-fn offer_update(app: &AppHandle, update: tauri_plugin_updater::Update) {
-    let handle = app.clone();
-    app.dialog()
-        .message(format!(
-            "LLM Quota {} is available. Installing it restarts the app; the server it \
-             runs stops with it and comes back on the other side.",
-            update.version
-        ))
-        .title("Update available")
-        .buttons(MessageDialogButtons::OkCancelCustom(
-            "Update now".to_owned(),
-            "Not now".to_owned(),
-        ))
-        .show(move |accepted| {
-            if !accepted {
-                return;
-            }
-            let handle = handle.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(error) = update.download_and_install(|_, _| {}, || {}).await {
-                    eprintln!("llm-quota-desktop: the update did not install: {error}");
-                    handle
-                        .dialog()
-                        .message(format!(
-                            "The update could not be installed: {error}\n\nIt can be \
-                             downloaded by hand from {RELEASES_URL}"
-                        ))
-                        .title("Update failed")
-                        .show(|_| {});
-                    return;
-                }
-                // The installer has replaced the app on disk; this process is still the
-                // old one, and the sidecar it owns still holds the port.
-                handle.restart();
-            });
-        });
+/// What the page asks for on load, because the offer may predate it.
+#[tauri::command]
+fn pending_update(state: State<'_, PendingUpdate>) -> Option<serde_json::Value> {
+    let pending = state.0.lock().ok()?;
+    pending.as_ref().map(|update| offer_payload(&update.version))
+}
+
+/// Downloading happens after the answer, never before — an update nobody agreed to
+/// should not be spending someone's connection in the background.
+#[tauri::command]
+async fn install_update(app: AppHandle, state: State<'_, PendingUpdate>) -> Result<(), String> {
+    // Taken out of the lock before the first await: a guard held across one is not Send,
+    // and holding it for the length of a download would block the page asking again.
+    let update = {
+        let mut pending = state.0.lock().map_err(|error| error.to_string())?;
+        pending.take()
+    };
+    let update = update.ok_or_else(|| "the update is no longer available".to_owned())?;
+
+    update.download_and_install(|_, _| {}, || {}).await.map_err(|error| error.to_string())?;
+
+    // The installer has replaced the app on disk; this process is still the old one, and
+    // the sidecar it spawned is still listening on 4747. `restart` does not run the
+    // `RunEvent::Exit` handler that owns it, so without this the old server outlives the
+    // update: the new process finds its port taken, falls back to an ephemeral one, and
+    // every reader that was told 4747 — the widget, the wezterm strip, the CLI — keeps
+    // talking to a server running the version this update just replaced.
+    if let Some(child) = app.state::<Sidecar>().0.lock().ok().and_then(|mut sidecar| sidecar.take()) {
+        let _ = child.kill();
+    }
+    app.restart();
+}
+
+#[tauri::command]
+fn open_release_page(app: AppHandle) -> Result<(), String> {
+    app.opener().open_url(RELEASES_URL, None::<&str>).map_err(|error| error.to_string())
 }
 
 /// The version this run has already put in front of the user.
@@ -439,6 +453,8 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .manage(Sidecar(Mutex::new(None)))
+        .manage(PendingUpdate(Mutex::new(None)))
+        .invoke_handler(tauri::generate_handler![pending_update, install_update, open_release_page])
         .setup(|app| {
             let handle = app.handle();
 
