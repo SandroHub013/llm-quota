@@ -92,6 +92,9 @@ test("Windows ships an MSI rather than an NSIS installer", async () => {
   const bundle = JSON.parse(await read("src-tauri/tauri.conf.json")).bundle;
   expect(bundle.targets).toContain("msi");
   expect(bundle.targets).not.toContain("nsis");
+  // Both Linux families, because a release with only a deb tells half of Linux to
+  // build from source. The rpm is verified against Fedora itself in CI.
+  expect(bundle.targets).toEqual(expect.arrayContaining(["deb", "rpm"]));
   expect(bundle.windows.webviewInstallMode.type).toBe("embedBootstrapper");
 });
 
