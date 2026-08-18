@@ -128,7 +128,9 @@ jobs:
         include:
           - { os: windows-latest, target: x86_64-pc-windows-msvc, bundle: msi }
           - { os: macos-latest, target: aarch64-apple-darwin, bundle: dmg }
-          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, bundle: deb }
+          # Quoted, or the flow mapping reads the comma as its own separator and the
+          # bundler is asked for a deb alone — which is how this shipped for one run.
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, bundle: "deb,rpm" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -307,6 +309,49 @@ jobs:
             exit 1
           fi
 
+      # Fedora is the other half of the Linux this gets installed on, and an rpm is not
+      # a deb with a different extension: a different package name, a different file
+      # manifest and a different manager deciding what "installed" means. GitHub offers
+      # no Fedora runner, so the package built here is installed inside Fedora's own
+      # image — which is where a wrong dependency or an unpackaged file would surface.
+      - name: Install and verify the rpm (Fedora)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          rpm=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm | head -1)
+          echo "built $(basename "$rpm")"
+
+          docker run --rm -v "$PWD:/work" -w /work fedora:latest bash -euo pipefail -c '
+            rpm=$(ls src-tauri/target/*/release/bundle/rpm/*.rpm | head -1)
+            dnf install -y "$rpm"
+
+            package=$(rpm -qp --queryformat "%{NAME}" "$rpm")
+            files=$(rpm -ql "$package")
+            echo "$files" | grep -q "/llm-quota-desktop$" || { echo "the shell is not in the package"; exit 1; }
+            server=$(echo "$files" | grep "/llm-quota-server$" | head -1)
+            test -x "$server" || { echo "the sidecar is not in the package"; exit 1; }
+
+            PORT=4747 "$server" &
+            pid=$!
+
+            answered=
+            for _ in $(seq 30); do
+              if curl -fsS http://127.0.0.1:4747/ > /dev/null; then answered=yes; break; fi
+              sleep 1
+            done
+            kill $pid 2>/dev/null || true
+            if [ -z "$answered" ]; then
+              echo "the installed server never answered on 4747"
+              exit 1
+            fi
+
+            dnf remove -y "$package"
+            if [ -e "$server" ]; then
+              echo "removing the package left $server behind"
+              exit 1
+            fi
+          '
+
   # The widget is Tk, and Tk is where a cross-platform promise quietly stops being
   # true: an import of winreg, a -transparentcolor attribute or a creationflags
   # argument costs nothing on Windows and refuses to start everywhere else. Running
@@ -403,3 +448,32 @@ jobs:
             echo "the bundle declares '$scheme', not llmquota"
             exit 1
           fi
+
+  # Ubuntu is not Linux. Fedora packages Tk under another name, ships its own Python and
+  # its own GTK, and is the distribution this project is most often asked about after
+  # Debian's family. The widget is where that difference bites first — an import that
+  # resolves on one and not the other — so it is imported and tested here too, in
+  # Fedora's own image because GitHub has no Fedora runner.
+  widget-fedora:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # unzip is what the Bun installer unpacks with, and tkinter is a separate package
+      # here exactly as it is on Debian. desktop-file-utils and xdg-utils carry the two
+      # tools the widget's registration step calls for real.
+      - name: Fedora's Python, Tk and desktop tools
+        run: dnf install -y python3 python3-tkinter unzip tar which curl desktop-file-utils xdg-utils
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.3.14'
+
+      - run: bun install --frozen-lockfile
+
+      - name: TypeScript tests
+        run: bun test
+
+      - name: Widget tests
+        run: python3 -m unittest widget_test
