@@ -12,6 +12,16 @@ import { nowIso } from "./util.js";
 const CONSOLE = "https://antigravity.google/";
 const FRESH_MS = 15 * 60_000;
 
+/**
+ * What the card says under a live bridge: an exhausted bucket explains itself, a stale
+ * snapshot says how to refresh it, and a healthy one says nothing at all.
+ */
+function bridgeMessage(exhausted: boolean, stale: boolean): string | undefined {
+  if (exhausted) return "Antigravity reports an exhausted quota bucket. Waiting for its official reset.";
+  if (stale) return "This snapshot is old. Send a message in Antigravity: the status line publishes with the reply.";
+  return undefined;
+}
+
 export const gemini: Provider = {
   id: "gemini",
   name: "Gemini",
@@ -65,11 +75,7 @@ export async function fetchGeminiQuota(home = homedir()): Promise<QuotaResult> {
       metrics,
       teardownUrl: installed ? "/api/official-bridge/gemini" : undefined,
       teardownLabel: installed ? "Disable bridge" : undefined,
-      message: exhausted
-        ? "Antigravity reports an exhausted quota bucket. Waiting for its official reset."
-        : stale
-          ? "This snapshot is old. Send a message in Antigravity: the status line publishes with the reply."
-          : undefined,
+      message: bridgeMessage(exhausted, stale),
     };
   }
 

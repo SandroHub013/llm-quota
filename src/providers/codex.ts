@@ -46,20 +46,30 @@ export const codex: Provider = {
       };
     } catch (error) {
       const detail = String((error as Error | undefined)?.message ?? error);
-      const missing = /not recognized|not found|ENOENT|unavailable/i.test(detail);
       const auth = /login|auth|credential|unauthorized/i.test(detail);
       return {
         ...base,
         status: auth ? "unauthenticated" : "partial",
-        message: missing
-          ? "Codex CLI was not found. Install Codex and run `codex login`."
-          : auth
-            ? "Codex app-server needs a ChatGPT login. Run `codex login`."
-            : `Codex app-server is temporarily unavailable (${safeDetail(detail)}).`,
+        message: failureMessage(detail, auth),
       };
     }
   },
 };
+
+/**
+ * Turn what went wrong into what to do about it.
+ *
+ * The three cases are different problems: Codex is not installed, Codex is installed
+ * and nobody is logged in, or Codex answered with something else. Only the last one is
+ * worth showing the raw detail for — the other two have an instruction instead.
+ */
+function failureMessage(detail: string, auth: boolean): string {
+  if (/not recognized|not found|ENOENT|unavailable/i.test(detail)) {
+    return "Codex CLI was not found. Install Codex and run `codex login`.";
+  }
+  if (auth) return "Codex app-server needs a ChatGPT login. Run `codex login`.";
+  return `Codex app-server is temporarily unavailable (${safeDetail(detail)}).`;
+}
 
 /**
  * The `account/rateLimits/read` reply, as far as this reads it. Every leaf is `unknown`
