@@ -31,8 +31,10 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      # --coverage prints per-file line and function coverage, with test files left out
+      # of the count by bunfig.toml. No threshold: see the note there.
       - name: Test
-        run: bun test
+        run: bun test --coverage
 
       - name: Lint
         run: bun run lint
