@@ -173,6 +173,20 @@ test("codex is found on PATH by name and extension", () => {
   expect(found!.startsWith(root)).toBe(true);
 });
 
+/**
+ * `ComSpec` names the program this code hands a command line to, and it is an ordinary
+ * environment variable — anything that starts this process can point it elsewhere. The
+ * interpreter comes from the Windows directory instead, which a caller does not choose.
+ */
+test("the interpreter is not taken from the environment", async () => {
+  const source = await Bun.file("src/codex-app-server.ts").text();
+
+  expect(source).toContain('join(root, "System32", "cmd.exe")');
+  // ComSpec survives only as the last fallback, when the Windows directory is unreadable.
+  expect(source.indexOf("process.env.ComSpec")).toBeGreaterThan(source.indexOf("SystemRoot"));
+  expect(source).not.toContain('spawn(process.env.ComSpec');
+});
+
 test("an empty PATH resolves nothing rather than guessing", () => {
   expect(resolveCodex({ PATH: "", PATHEXT: ".EXE" })).toBeUndefined();
   expect(resolveCodex({})).toBeUndefined();
