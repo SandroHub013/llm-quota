@@ -307,6 +307,20 @@ const PRICES: Record<string, Price> = {
   // local record carries no per-request context size, so long prompts price low here.
   "gemini-3.1-pro": { input: 2, cacheRead: 0.2, cacheWrite: 2, output: 12 },
 
+  // MiniMax bills the API by token even where the Coding Plan covers the same models, so
+  // these are what that spend would have cost through the API — which is what this ledger
+  // reports. Highspeed is the same model on a faster tier at twice the rate.
+  "minimax-m2.7": { input: 0.3, cacheRead: 0.06, cacheWrite: 0.375, output: 1.2 },
+  "minimax-m2.7-highspeed": { input: 0.6, cacheRead: 0.06, cacheWrite: 0.375, output: 2.4 },
+  "minimax-m2.5": { input: 0.3, cacheRead: 0.03, cacheWrite: 0.375, output: 1.2 },
+  "minimax-m2.5-highspeed": { input: 0.6, cacheRead: 0.06, cacheWrite: 0.375, output: 2.4 },
+  "minimax-m2.1": { input: 0.3, cacheRead: 0.03, cacheWrite: 0.375, output: 1.2 },
+  // M2 and M3 have no published cached-input rate, so cache reads are priced at the input
+  // rate: an undocumented discount invented here would quietly understate the total.
+  "minimax-m2": { input: 0.3, cacheRead: 0.3, cacheWrite: 0.3, output: 1.2 },
+  // The tier below 200k tokens of context; above it MiniMax doubles every rate.
+  "minimax-m3": { input: 0.3, cacheRead: 0.06, cacheWrite: 0.3, output: 1.2 },
+
   "kimi-k3": { input: 3, cacheRead: 0.3, cacheWrite: 3, output: 15 },
   "kimi-k2.7-code": { input: 0.95, cacheRead: 0.19, cacheWrite: 0.95, output: 4 },
   "kimi-k2.7-code-highspeed": { input: 1.9, cacheRead: 0.38, cacheWrite: 1.9, output: 8 },
@@ -448,6 +462,13 @@ const displayModel = (model: string): string => {
     "gemini-3.6-flash": "Gemini 3.6 Flash",
     "gemini-3.5-flash": "Gemini 3.5 Flash",
     "gemini-3.1-pro": "Gemini 3.1 Pro",
+    "minimax-m3": "MiniMax M3",
+    "minimax-m2.7": "MiniMax M2.7",
+    "minimax-m2.7-highspeed": "MiniMax M2.7 Highspeed",
+    "minimax-m2.5": "MiniMax M2.5",
+    "minimax-m2.5-highspeed": "MiniMax M2.5 Highspeed",
+    "minimax-m2.1": "MiniMax M2.1",
+    "minimax-m2": "MiniMax M2",
     "kimi-k3": "Kimi K3",
     "kimi-k2.7-code": "Kimi K2.7 Code",
     "kimi-k2.7-code-highspeed": "Kimi K2.7 Code Highspeed",
