@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **An array body reset the saved ledger filter.** `PUT /api/usage-view` guarded with `typeof body
+  !== "object"`, and an array passes that: it reached the normalizer with no fields on it and the
+  stored source and agent filters were replaced by the defaults, for a body that was never a view.
+  Arrays are refused now, as they already were on the key route.
+
 ## [0.6.2] — 2026-08-18
 
 ### Added
