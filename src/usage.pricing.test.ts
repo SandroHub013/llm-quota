@@ -197,6 +197,26 @@ test("euros are the dollars, converted once, at the rate the summary publishes",
   expect(summary.pricing.kind).toBe("api_equivalent");
 });
 
+/**
+ * The two rates an external catalogue caught this table getting wrong: Terra was priced a
+ * quarter high and Luna five times high, for months, against a vendor page that said 2/12
+ * and 0.20/1.20. Pinned here so the numbers are visible where someone reads the maths,
+ * and so putting them back is a deliberate act. `bun run prices:check` is what would
+ * notice a vendor moving them again.
+ */
+test("the OpenAI family is priced at the list, not near it", () => {
+  const terra = summarizeUsageRows([row({ source: "codex", model: "gpt-5.6-terra", input: M, output: M })]);
+  expect(terra.estimatedCostUsd).toBeCloseTo(2 + 12, 10);
+
+  const luna = summarizeUsageRows([row({ source: "codex", model: "gpt-5.6-luna", input: M, output: M })]);
+  expect(luna.estimatedCostUsd).toBeCloseTo(0.2 + 1.2, 10);
+
+  // Cache reads are a tenth of input on this family, which is what makes a long session
+  // affordable — and what makes getting the input rate wrong expensive.
+  const cached = summarizeUsageRows([row({ source: "codex", model: "gpt-5.6-luna", cacheRead: 10 * M })]);
+  expect(cached.estimatedCostUsd).toBeCloseTo(0.2, 10);
+});
+
 test("no rows is zero, not a division by zero", () => {
   const summary = summarizeUsageRows([]);
 
