@@ -1,6 +1,6 @@
 {
   "name": "llm-quota",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "type": "module",
   "private": false,
   "description": "Local-first live quota dashboard, desktop app, CLI, and widget for Claude Code, Codex, and Gemini",
