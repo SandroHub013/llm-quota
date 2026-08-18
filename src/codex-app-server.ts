@@ -20,6 +20,11 @@ export interface CodexAppServerResult {
  * Looking on PATH ourselves gives the honest one: not installed, or installed and
  * broken. It also survives the case this app actually hits — a desktop shell launched
  * with the PATH the session had at login, missing what was installed after it.
+ *
+ * The first match on PATH wins, which is what a shell would have done with the same
+ * variable: a PATH an attacker can rewrite is a machine where anything the user types is
+ * already theirs. What this does not do is take the *interpreter* from the environment
+ * as well — see `interpreter` below.
  */
 export function resolveCodex(env: NodeJS.ProcessEnv = process.env): string | undefined {
   const directories = (env.PATH ?? env.Path ?? "").split(delimiter).filter(Boolean);
@@ -38,6 +43,20 @@ export function resolveCodex(env: NodeJS.ProcessEnv = process.env): string | und
 
 /** `.cmd` and `.bat` are scripts: Windows cannot execute them without its interpreter. */
 const needsShell = (path: string) => /\.(cmd|bat)$/i.test(path);
+
+/**
+ * The interpreter for those scripts, taken from the Windows directory rather than from
+ * `ComSpec`.
+ *
+ * `ComSpec` is an ordinary environment variable: anything that starts this process can
+ * point it somewhere else, and this code would then hand it a command line to run. The
+ * Windows directory is not a promise of safety either, but it is not a value a caller
+ * hands us — and the fallbacks below are only reached when that is unreadable.
+ */
+const interpreter = (): string => {
+  const root = process.env.SystemRoot || process.env.windir;
+  return root ? join(root, "System32", "cmd.exe") : process.env.ComSpec || "cmd.exe";
+};
 
 /** One JSON-RPC frame, as far as this client cares: an id, and one of the two halves. */
 interface RpcMessage {
@@ -62,7 +81,7 @@ export function readCodexRateLimits(timeoutMs = 8_000): Promise<CodexAppServerRe
       // `call` with the path as its own argument, rather than one quoted string: cmd
       // reads `/c "…"` by its own rules, and a command line that begins with a quote is
       // taken apart in a way that makes an absolute path unrecognisable to it.
-      ? spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "call", executable, "app-server"], {
+      ? spawn(interpreter(), ["/d", "/s", "/c", "call", executable, "app-server"], {
           stdio: ["pipe", "pipe", "pipe"],
           windowsHide: true,
         })
