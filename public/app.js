@@ -1,11 +1,16 @@
 import { installOfficialBridge, loadQuota, loadUsage, loadUsageView, removeOfficialBridge, saveProviderKey, storeUsageView } from "./api.js";
 import { dataSignature, escapeHtml } from "./ui.js";
 import { mountGitHubContributionPrototype } from "./github-contributions.prototype.js";
+import { mountUpdateNotice, tauriBridge } from "./update.js";
 
 const grid = document.getElementById("grid");
 const cards = new Map(); // id -> element
 const latest = new Map(); // id -> QuotaResult, the horizon reads from here
 const providerSignatures = new Map();
+
+// Only the desktop shell has an update to offer; in a browser tab this is null and the
+// notice never mounts.
+mountUpdateNotice(document.getElementById("updateNotice"), tauriBridge(window));
 
 const usageDialog = document.getElementById("usageDialog");
 const usageBody = document.getElementById("usageBody");
