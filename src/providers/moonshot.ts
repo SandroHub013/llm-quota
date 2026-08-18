@@ -2,6 +2,11 @@ import type { Provider, ProviderContext, QuotaResult } from "./types.js";
 import { fetchJson, nowIso } from "./util.js";
 
 const CONSOLE = "https://platform.moonshot.ai/console/account";
+/** What the Open Platform balance endpoint answers with, as far as this reads it. */
+interface MoonshotBalance {
+  data?: { available_balance?: unknown };
+}
+
 const BALANCE_HOSTS = ["https://api.moonshot.ai", "https://api.moonshot.cn"];
 
 export const moonshot: Provider = {
@@ -33,7 +38,7 @@ export const moonshot: Provider = {
 
     let unauthorized = 0;
     for (const host of BALANCE_HOSTS) {
-      const res = await fetchJson(`${host}/v1/users/me/balance`, {
+      const res = await fetchJson<MoonshotBalance>(`${host}/v1/users/me/balance`, {
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       });
       if (res.status === 401 || res.status === 403) {

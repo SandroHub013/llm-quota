@@ -9,21 +9,32 @@ import { nowIso } from "./util.js";
 const CONSOLE = "https://z.ai/manage-apikey/apikey-list";
 const FRESH_MS = 15 * 60_000;
 
+/** The GLM Coding Plan window, as the z.ai plugin writes it into the snapshot. */
+interface ZaiQuota {
+  used_percentage?: unknown;
+  resets_at?: unknown;
+}
+
 export function parseZaiBridgeUsage(snapshot?: OfficialBridgeSnapshot): QuotaMetric[] {
   if (!snapshot?.data) return [];
   const metrics: QuotaMetric[] = [];
   const data = snapshot.data;
 
   // Never fall back to rateLimits: that field is Claude's own quota, not GLM's.
-  const glm = data.glmQuota ?? data.zaiQuota;
+  const glm = (data.glmQuota ?? data.zaiQuota) as ZaiQuota | undefined;
   if (glm && typeof glm === "object") {
     if (typeof glm.used_percentage === "number") {
+      const resets = glm.resets_at;
       metrics.push({
         label: "GLM Coding Plan",
         used: Math.min(100, Math.max(0, Math.round(glm.used_percentage))),
         limit: 100,
         unit: "percent",
-        resetAt: typeof glm.resets_at === "number" ? new Date(glm.resets_at * 1000).toISOString() : glm.resets_at,
+        // Seconds when the plugin writes a number, an ISO string when it writes a date,
+        // and nothing when it writes something else — which is what it did before.
+        resetAt: typeof resets === "number"
+          ? new Date(resets * 1000).toISOString()
+          : typeof resets === "string" ? resets : undefined,
       });
     }
   }

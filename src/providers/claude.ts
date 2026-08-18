@@ -84,8 +84,16 @@ export async function fetchClaudeQuota(home = homedir()): Promise<QuotaResult> {
   };
 }
 
+/** One rolling window as the Claude Code status line writes it. */
+interface ClaudeWindow {
+  used_percentage?: unknown;
+  resets_at?: unknown;
+}
+
+type ClaudeWindowKey = "five_hour" | "seven_day";
+
 export function parseBridgeUsage(snapshot?: OfficialBridgeSnapshot): QuotaMetric[] {
-  const limits = snapshot?.data?.rateLimits;
+  const limits = snapshot?.data?.rateLimits as Partial<Record<ClaudeWindowKey, ClaudeWindow>> | undefined;
   if (!limits || typeof limits !== "object") return [];
   const definitions = [
     ["five_hour", "Session (5h)"],

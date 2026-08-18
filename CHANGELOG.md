@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **Every `any` in the source is gone**, and with it the last lint warning. The formats these
+  parsers read belong to other people's CLIs, so the shapes are now written down — optional fields,
+  `unknown` leaves, coerced by the readers that were already there. Nothing validates at runtime
+  that was not validating before; what changed is that the reading side is checked, and a field
+  this project invents for itself no longer typechecks.
+
 ### Fixed
 
 - **The coverage check failed on whichever machine did not write the badge.** The shipped code
