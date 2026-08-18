@@ -36,6 +36,13 @@ jobs:
       - name: Test
         run: bun test --coverage
 
+      # The README's badge is a JSON file in this repository rather than a number held
+      # by a coverage service, so nothing refreshes it on its own. This fails when it no
+      # longer matches what the tests just measured — whole percent, so a moved line
+      # does not send anyone back to regenerate it.
+      - name: The coverage badge still matches the tests
+        run: bun run coverage:badge --check
+
       - name: Lint
         run: bun run lint
 
@@ -321,7 +328,11 @@ jobs:
           rpm=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm | head -1)
           echo "built $(basename "$rpm")"
 
-          docker run --rm -v "$PWD:/work" -w /work fedora:latest bash -euo pipefail -c '
+          # Pinned to a release rather than :latest. Dependabot does not watch image
+          # names inside a workflow, so nothing would announce the day Fedora's latest
+          # became a major this package has never been installed on — and that failure
+          # would land on an unrelated pull request. Bump it deliberately instead.
+          docker run --rm -v "$PWD:/work" -w /work fedora:44 bash -euo pipefail -c '
             rpm=$(ls src-tauri/target/*/release/bundle/rpm/*.rpm | head -1)
             dnf install -y "$rpm"
 
@@ -456,7 +467,9 @@ jobs:
   # Fedora's own image because GitHub has no Fedora runner.
   widget-fedora:
     runs-on: ubuntu-latest
-    container: fedora:latest
+    # Pinned, for the reason spelled out beside the rpm step: an image that moves on
+    # its own turns a Fedora upgrade into a red tick on someone else's change.
+    container: fedora:44
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
