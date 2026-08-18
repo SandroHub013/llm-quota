@@ -1,10 +1,43 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { delimiter, join } from "node:path";
 import { createInterface } from "node:readline";
 
 export interface CodexAppServerResult {
   /** Whatever Codex answered with. `providers/codex.ts` is what reads its shape. */
   rateLimits: unknown;
 }
+
+/**
+ * Where `codex` is, or nothing.
+ *
+ * Resolved here rather than left to the shell because the shell's answer is a sentence
+ * in the user's own language, written in the console's OEM code page — an Italian
+ * Windows put "'codex' non � riconosciuto" on the dashboard, mojibake and all, and
+ * cmd exits 1 for it exactly as it does for a Codex that started and failed. Two very
+ * different answers, indistinguishable at the surface.
+ *
+ * Looking on PATH ourselves gives the honest one: not installed, or installed and
+ * broken. It also survives the case this app actually hits — a desktop shell launched
+ * with the PATH the session had at login, missing what was installed after it.
+ */
+export function resolveCodex(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const directories = (env.PATH ?? env.Path ?? "").split(delimiter).filter(Boolean);
+  const extensions = process.platform === "win32"
+    ? (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean)
+    : [""];
+
+  for (const directory of directories) {
+    for (const extension of extensions) {
+      const candidate = join(directory, `codex${extension.toLowerCase()}`);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return undefined;
+}
+
+/** `.cmd` and `.bat` are scripts: Windows cannot execute them without its interpreter. */
+const needsShell = (path: string) => /\.(cmd|bat)$/i.test(path);
 
 /** One JSON-RPC frame, as far as this client cares: an id, and one of the two halves. */
 interface RpcMessage {
@@ -19,13 +52,21 @@ interface RpcMessage {
  */
 export function readCodexRateLimits(timeoutMs = 8_000): Promise<CodexAppServerResult> {
   return new Promise((resolve, reject) => {
-    const windows = process.platform === "win32";
-    const child = windows
-      ? spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "codex app-server"], {
+    const executable = resolveCodex();
+    if (!executable) {
+      reject(new Error("codex_app_server_unavailable: codex is not on this PATH"));
+      return;
+    }
+
+    const child = needsShell(executable)
+      // `call` with the path as its own argument, rather than one quoted string: cmd
+      // reads `/c "…"` by its own rules, and a command line that begins with a quote is
+      // taken apart in a way that makes an absolute path unrecognisable to it.
+      ? spawn(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "call", executable, "app-server"], {
           stdio: ["pipe", "pipe", "pipe"],
           windowsHide: true,
         })
-      : spawn("codex", ["app-server"], {
+      : spawn(executable, ["app-server"], {
           stdio: ["pipe", "pipe", "pipe"],
         });
 
@@ -56,10 +97,9 @@ export function readCodexRateLimits(timeoutMs = 8_000): Promise<CodexAppServerRe
 
     child.on("error", (error) => finish(new Error(`codex_app_server_unavailable: ${error.message}`)));
     child.on("exit", (code) => {
-      if (!settled) {
-        const detail = cleanStderr(stderr) || `exit_${code ?? "unknown"}`;
-        finish(new Error(`codex_app_server_closed: ${detail}`));
-      }
+      if (settled) return;
+      const detail = cleanStderr(stderr) || `exit_${code ?? "unknown"}`;
+      finish(new Error(`codex_app_server_closed: ${detail}`));
     });
 
     lines.on("line", (line) => {

@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **The update notice could not install the update it announced.** Application commands are allowed
+  for a local window by default and refused for a remote one — and the dashboard is remote, served
+  over loopback by the sidecar. The notice drew itself from the event it was allowed to hear and then
+  answered `Command install_update not allowed by ACL` when someone pressed the button. The three
+  commands are declared in `build.rs` and granted by name in the capability now, and a test fails if
+  one is granted without being declared.
+- **The Codex card reported a missing CLI as a broken one, in mojibake.** It let the shell find
+  `codex`, and the shell answers in the user's own language in the console's OEM code page: an
+  Italian Windows read `'codex' non � riconosciuto` on the card, and cmd exits 1 for that exactly as
+  it does for a Codex that started and crashed. The two need different instructions, so the
+  executable is resolved on PATH first — not installed and installed-but-failing are told apart
+  before either message is written.
+
 ### Added
 
 - **MiniMax Coding Plan.** The adapter reads the plan's two rolling windows from the endpoint

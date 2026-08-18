@@ -16,7 +16,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { readCodexRateLimits } from "./codex-app-server.js";
+import { readCodexRateLimits, resolveCodex } from "./codex-app-server.js";
 
 const RATE_LIMITS = {
   primary: { used_percent: 42, window_minutes: 300, resets_in_seconds: 1_200 },
@@ -159,14 +159,48 @@ test("a Codex that never answers fails on the timeout rather than hanging", asyn
  * non-zero rather than failing to spawn, so the two paths report it differently — both
  * are the same fact to the caller: there is nothing to talk to.
  */
-test("no Codex at all is a failure and not a hang", async () => {
+/**
+ * Resolution is what separates "not installed" from "installed and failing", and the two
+ * get different instructions on the card. It is done here rather than left to the shell
+ * because the shell answers in the user's own language, in the console's code page:
+ * "'codex' non è riconosciuto" arrived on a dashboard as mojibake, and cmd exits 1 for it
+ * exactly as it does for a Codex that started and crashed.
+ */
+test("codex is found on PATH by name and extension", () => {
+  const found = resolveCodex({ PATH: root, PATHEXT: ".COM;.EXE;.BAT;.CMD" });
+
+  expect(found).toBeDefined();
+  expect(found!.startsWith(root)).toBe(true);
+});
+
+test("an empty PATH resolves nothing rather than guessing", () => {
+  expect(resolveCodex({ PATH: "", PATHEXT: ".EXE" })).toBeUndefined();
+  expect(resolveCodex({})).toBeUndefined();
+});
+
+test("no Codex at all is reported as missing, not as broken", async () => {
   const withoutFake = process.env.PATH;
   process.env.PATH = join(root, "empty");
   try {
     const failure = await readCodexRateLimits(5_000).catch((error: Error) => error);
     expect(failure).toBeInstanceOf(Error);
-    expect((failure as Error).message).toMatch(/codex_app_server_(unavailable|closed)/);
+    // Not installed and installed-but-failing are different answers, and the card gives
+    // different instructions for them: one says install Codex, the other says try later.
+    expect((failure as Error).message).toContain("codex_app_server_unavailable");
   } finally {
     process.env.PATH = withoutFake;
   }
 });
+
+test("a Codex that never answers fails on the timeout rather than hanging", async () => {
+  process.env.FAKE_CODEX = "silent";
+
+  expect(readCodexRateLimits(300)).rejects.toThrow("codex_app_server_timeout");
+});
+
+/**
+ * No Codex on PATH at all. Windows reaches this through cmd.exe, which exists and exits
+ * non-zero rather than failing to spawn, so the two paths report it differently — both
+ * are the same fact to the caller: there is nothing to talk to.
+ */
+
