@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The dashboard is served by the local sidecar and calls no Tauri API, so the webview is granted nothing beyond the core defaults. Spawning the sidecar, the tray menu and the autostart toggle all run on the Rust side, where capabilities do not apply — keeping them out of the webview means a compromised page cannot reach them.",
+  "description": "The splash screen and any local page. Spawning the sidecar, the tray menu and the autostart toggle all run on the Rust side, where capabilities do not apply — keeping them out of the webview means a compromised page cannot reach them.",
   "windows": ["main"],
   "permissions": ["core:default"]
 }

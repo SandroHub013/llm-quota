@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "update-notice",
+  "description": "The dashboard is served over loopback by the sidecar, and the shell hands it one thing: the update offer it would otherwise raise as a native dialog. This grants that page the event channel it listens on and nothing else — the three commands behind it are the app's own (ask what is pending, install it, open the release page), every one of them about an update from the signed feed. The sidecar, the tray and the autostart toggle stay unreachable from the page, which is the point of keeping this capability this small.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://localhost:*", "http://127.0.0.1:*"]
+  },
+  "permissions": ["core:event:default"]
+}

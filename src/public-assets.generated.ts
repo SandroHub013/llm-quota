@@ -19,6 +19,7 @@ import asset14 from "../public/logos/moonshot.png" with { type: "file" };
 import asset15 from "../public/logos/zai.svg" with { type: "file" };
 import asset16 from "../public/og.jpg" with { type: "file" };
 import asset17 from "../public/ui.js" with { type: "file" };
+import asset18 from "../public/update.js" with { type: "file" };
 
 /**
  * Served file name → a path `Bun.file` can read: the real one from source, the
@@ -43,4 +44,5 @@ export const PUBLIC_ASSETS: Record<string, string> = {
   "logos/zai.svg": asset15,
   "og.jpg": asset16,
   "ui.js": asset17,
+  "update.js": asset18,
 };
