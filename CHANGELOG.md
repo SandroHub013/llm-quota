@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Antigravity history is counted.** The CLI that launches as `agy` keeps one SQLite file per
+  conversation under `~/.gemini/antigravity-cli/conversations`, and records each request as a
+  protobuf blob with no schema shipped alongside it — so its spend was missing from a ledger that
+  claims to total local CLI usage. A minimal wire-format reader now takes the model id, the effort
+  from the display label, the input, cache-read, output and thinking counters, and the request
+  timestamp. Gemini 3.1 Pro, 3.5 / 3.6 / 3.7 Flash and Claude Opus 4.6 list prices were added with
+  them; Antigravity routes several internal aliases at one published model, and those are resolved
+  so the rows price instead of landing in `unpricedModels`.
+
 ## [0.5.1] — 2026-08-13
 
 ### Fixed
