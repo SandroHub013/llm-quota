@@ -35,7 +35,8 @@ export interface OfficialBridgeSnapshot {
   version: 1;
   provider: OfficialBridgeSource;
   capturedAt: string;
-  data: Record<string, any>;
+  /** Whatever the official client wrote. Each provider's parser reads its own shape. */
+  data: Record<string, unknown>;
 }
 
 interface BridgeMetadata {
@@ -139,9 +140,13 @@ export async function installOfficialBridge(
   await migrateLegacyOrigin(paths, home);
 
   if (existsSync(paths.config)) {
-    await copyFile(paths.config, `${paths.config}.llm-quota.bak`, constants.COPYFILE_EXCL).catch((error: any) => {
-      if (error?.code !== "EEXIST") throw error;
-    });
+    await copyFile(paths.config, `${paths.config}.llm-quota.bak`, constants.COPYFILE_EXCL).catch(
+      (error: NodeJS.ErrnoException) => {
+        // A backup that already exists is the first one, and the first one is the copy
+        // worth keeping: it predates anything this bridge wrote.
+        if (error?.code !== "EEXIST") throw error;
+      },
+    );
   }
 
   if (!alreadyBridged) {
@@ -582,7 +587,7 @@ function commandOf(statusLine: unknown): string {
   return typeof statusLine.command === "string" ? statusLine.command.trim() : "";
 }
 
-async function readSettings(path: string): Promise<Record<string, any>> {
+async function readSettings(path: string): Promise<Record<string, unknown>> {
   if (!existsSync(path)) return {};
   const text = stripBom(await readFile(path, "utf8"));
   let parsed: unknown;
@@ -624,6 +629,6 @@ function jsLiteral(value: string): string {
   return JSON.stringify(value);
 }
 
-function isRecord(value: unknown): value is Record<string, any> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }

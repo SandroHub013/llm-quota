@@ -89,7 +89,7 @@ export function parseQuota(snapshot?: OfficialBridgeSnapshot): QuotaMetric[] {
   const quota = snapshot?.data?.quota;
   if (!quota || typeof quota !== "object") return [];
   const metrics: QuotaMetric[] = [];
-  for (const [id, value] of Object.entries(quota) as [string, any][]) {
+  for (const [id, value] of Object.entries(quota) as [string, GeminiBucket][]) {
     const remaining = number(value?.remaining_fraction);
     if (remaining == null) continue;
     metrics.push({
@@ -103,7 +103,14 @@ export function parseQuota(snapshot?: OfficialBridgeSnapshot): QuotaMetric[] {
   return metrics.sort((a, b) => (b.used ?? 0) - (a.used ?? 0));
 }
 
-function resetIso(value: any): string | undefined {
+/** One quota bucket as the Antigravity status line writes it. */
+interface GeminiBucket {
+  remaining_fraction?: unknown;
+  reset_time?: unknown;
+  reset_in_seconds?: unknown;
+}
+
+function resetIso(value: GeminiBucket | undefined): string | undefined {
   if (typeof value?.reset_time === "string") {
     const date = new Date(value.reset_time);
     if (Number.isFinite(date.getTime())) return date.toISOString();

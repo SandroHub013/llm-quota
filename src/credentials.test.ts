@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { readLlmQuotaConfig, writeConfigAt } from "./credentials.js";
+import { readLlmQuotaConfig, writeConfigAt, type LlmQuotaConfig } from "./credentials.js";
 
 const dirs: string[] = [];
 afterEach(async () => Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))));
@@ -58,10 +58,12 @@ test("unrelated fields in the config survive a read", async () => {
   const primary = join(dir, "config.json");
   await writeFile(primary, JSON.stringify({ keys: { codex: "k" }, theme: "dark" }));
 
+  // `theme` is not on the type: this asserts the reader keeps fields it does not know
+  // about, so an older build does not strip a newer one's settings.
   expect(await readLlmQuotaConfig(primary, join(dir, "absent.json"))).toEqual({
     keys: { codex: "k" },
     theme: "dark",
-  } as any);
+  } as unknown as LlmQuotaConfig);
 });
 
 test("new config wins when both brand paths exist", async () => {

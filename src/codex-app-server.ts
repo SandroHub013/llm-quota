@@ -2,7 +2,15 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 
 export interface CodexAppServerResult {
-  rateLimits: any;
+  /** Whatever Codex answered with. `providers/codex.ts` is what reads its shape. */
+  rateLimits: unknown;
+}
+
+/** One JSON-RPC frame, as far as this client cares: an id, and one of the two halves. */
+interface RpcMessage {
+  id?: unknown;
+  error?: { message?: unknown };
+  result?: unknown;
 }
 
 /**
@@ -55,9 +63,9 @@ export function readCodexRateLimits(timeoutMs = 8_000): Promise<CodexAppServerRe
     });
 
     lines.on("line", (line) => {
-      let message: any;
+      let message: RpcMessage;
       try {
-        message = JSON.parse(line);
+        message = JSON.parse(line) as RpcMessage;
       } catch {
         // Deliberate: the protocol is JSON-RPC over stdout, but Codex is free to
         // print banners, upgrade notices and progress there too. A line that is
@@ -68,7 +76,7 @@ export function readCodexRateLimits(timeoutMs = 8_000): Promise<CodexAppServerRe
 
       if (message.id === 0) {
         if (message.error) {
-          finish(new Error(`codex_initialize_failed: ${message.error.message ?? "unknown"}`));
+          finish(new Error(`codex_initialize_failed: ${String(message.error.message ?? "unknown")}`));
           return;
         }
         send({ method: "initialized", params: {} });
@@ -78,7 +86,7 @@ export function readCodexRateLimits(timeoutMs = 8_000): Promise<CodexAppServerRe
 
       if (message.id === 1) {
         if (message.error) {
-          finish(new Error(`codex_rate_limits_failed: ${message.error.message ?? "unknown"}`));
+          finish(new Error(`codex_rate_limits_failed: ${String(message.error.message ?? "unknown")}`));
           return;
         }
         finish(undefined, { rateLimits: message.result });
@@ -106,6 +114,9 @@ export function readCodexRateLimits(timeoutMs = 8_000): Promise<CodexAppServerRe
 
 function cleanStderr(value: string): string {
   return value
+    // The escape is the point: Codex colours its errors and this string is rendered
+    // in a card, where the raw codes would show up as `[31m`.
+    // eslint-disable-next-line no-control-regex
     .replace(/\x1b\[[0-9;]*m/g, "")
     .replace(/\s+/g, " ")
     .trim()
