@@ -274,8 +274,8 @@ export const USAGE_SOURCE_IDS = Object.keys(SOURCE_NAMES) as UsageSourceId[];
 // Reasoning tokens are included in output tokens by every supported log format.
 const PRICES: Record<string, Price> = {
   "gpt-5.6-sol": { input: 5, cacheRead: 0.5, cacheWrite: 6.25, output: 30 },
-  "gpt-5.6-terra": { input: 2.5, cacheRead: 0.25, cacheWrite: 3.125, output: 15 },
-  "gpt-5.6-luna": { input: 1, cacheRead: 0.1, cacheWrite: 1.25, output: 6 },
+  "gpt-5.6-terra": { input: 2, cacheRead: 0.2, cacheWrite: 2.5, output: 12 },
+  "gpt-5.6-luna": { input: 0.2, cacheRead: 0.02, cacheWrite: 0.25, output: 1.2 },
   "gpt-5.5": { input: 5, cacheRead: 0.5, cacheWrite: 5, output: 30 },
 
   "claude-fable-5": { input: 10, cacheRead: 1, cacheWrite: 12.5, cacheWrite1h: 20, output: 50 },
@@ -312,8 +312,15 @@ const PRICES: Record<string, Price> = {
   "kimi-k2.7-code-highspeed": { input: 1.9, cacheRead: 0.38, cacheWrite: 1.9, output: 8 },
 };
 
+/**
+ * Exported for `scripts/prices-check.ts`, which holds this list against models.dev and
+ * reports what disagrees. Nothing in the shipped app reads a third-party catalogue: the
+ * check is a development-time second opinion, and the vendor's own page decides.
+ */
+export const PRICES_FOR_AUDIT: Record<string, Price> = PRICES;
+
 const USD_PER_EUR = 1.1485;
-const PRICING_AS_OF = "2026-08-02";
+export const PRICING_AS_OF = "2026-08-02";
 const FX_AS_OF = "2026-07-31";
 
 const codexCache = new Map<string, FileCacheEntry<CodexFileUsage>>();

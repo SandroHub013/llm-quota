@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Two OpenAI models were priced above their list.** GPT-5.6 Terra was carried at 2.50/15.00 against
+  a published 2.00/12.00, and Luna at 1.00/6.00 against 0.20/1.20 — five times the real rate. Any
+  ledger with Codex sessions on those models has been reporting a total above what the API would
+  have charged. The rates now match the vendor's page, and a test pins them where the arithmetic is
+  read.
+
+### Added
+
+- **`bun run prices:check`** holds the price table against [models.dev](https://models.dev), an open
+  per-provider database, and reports what disagrees. The table's date was the only thing standing
+  between a vendor changing a rate and this ledger quietly being wrong; a date is a reminder, not a
+  check. The shipped app still reads no third-party catalogue — the comparison is a development-time
+  second opinion, and the vendor's own page decides. Its first run found both errors above.
+
 ### Changed
 
 - **Every `any` in the source is gone**, and with it the last lint warning. The formats these
