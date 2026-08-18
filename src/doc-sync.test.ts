@@ -134,6 +134,9 @@ test("the site's download links point at this version's assets", async () => {
     `LLM.Quota_${version}_aarch64.dmg`,
     `LLM.Quota_${version}_x64.dmg`,
     `LLM.Quota_${version}_amd64.deb`,
+    // The rpm is named by rpm's own convention, not the bundler's: name-version-release
+    // and the architecture, with the space GitHub turns into a dot like the rest.
+    `LLM.Quota-${version}-1.x86_64.rpm`,
   ]) {
     expect(site, `the site does not link ${asset}`).toContain(base + asset);
   }

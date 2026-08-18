@@ -198,7 +198,7 @@ Per host o porta diversi: `LLM_QUOTA_URL=http://localhost:8080`.
 ## App desktop
 
 [Ogni release](https://github.com/SandroHub013/llm-quota/releases/latest) pubblica un installer per
-Windows (`.msi`), macOS (`.dmg`, Apple silicon e Intel) e Linux (`.deb`). Nessun Bun da
+Windows (`.msi`), macOS (`.dmg`, Apple silicon e Intel) e Linux (`.deb` e `.rpm`). Nessun Bun da
 installare, nessun repository da clonare: il server compilato è dentro il bundle.
 
 - Finestra propria, così la dashboard non è una scheda del browser che si perde.
@@ -257,8 +257,8 @@ fuori dalla cartella che hai scelto, a parte la solita configurazione per utente
 
 Su Linux non c'è ancora l'equivalente. Il bundler AppImage risolve le librerie condivise di tutto
 quello che impacchetta, e il server compilato è un binario che `ldd` rifiuta: invece di saltarlo,
-aborta la build. Le release portano quindi il `.deb` e, per chi non può installarlo, il server
-standalone qui sotto.
+aborta la build. Le release portano quindi il `.deb` e l'`.rpm` e, per chi non può installarne
+nessuno dei due, il server standalone qui sotto.
 </details>
 
 <details>

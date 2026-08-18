@@ -82,7 +82,8 @@ prompt every MSI asks for, and installs to `C:\Program Files\LLM Quota`.
 | Windows 10/11 | `LLM.Quota_<version>_x64_en-US.msi` |
 | macOS (Apple silicon) | `LLM.Quota_<version>_aarch64.dmg` |
 | macOS (Intel) | `LLM.Quota_<version>_x64.dmg` |
-| Linux | `LLM.Quota_<version>_amd64.deb` |
+| Linux (Debian, Ubuntu) | `LLM.Quota_<version>_amd64.deb` |
+| Linux (Fedora, RHEL, openSUSE) | `LLM.Quota-<version>-1.x86_64.rpm` |
 
 It lives in the tray: closing the window leaves it running, **Start at login** is one click, and
 **Quit** is the only thing that stops the server. It also tells you when a release is out —
