@@ -126,7 +126,9 @@ jobs:
         include:
           - { os: windows-latest, target: x86_64-pc-windows-msvc, bundle: msi }
           - { os: macos-latest, target: aarch64-apple-darwin, bundle: dmg }
-          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, bundle: deb,rpm }
+          # Quoted, or the flow mapping reads the comma as its own separator and the
+          # bundler is asked for a deb alone — which is how this shipped for one run.
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, bundle: "deb,rpm" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
