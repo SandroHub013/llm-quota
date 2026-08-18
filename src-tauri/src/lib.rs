@@ -38,6 +38,15 @@ const READY_TIMEOUT: Duration = Duration::from_secs(30);
 
 const POLL_INTERVAL: Duration = Duration::from_millis(120);
 
+/// How often a running app asks the release feed again.
+///
+/// The check at startup is not enough on its own: this window is meant to be left open
+/// for weeks, so on the machine it was written for it would have asked once and then
+/// never again — a release published an hour after launch reaches nobody who does not
+/// quit first. Six hours is slow enough to be invisible and quick enough that a release
+/// is seen the day it ships.
+const UPDATE_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+
 /// The viewport the dashboard is laid out for.
 ///
 /// Width: below 1240 CSS pixels the card flow drops from four columns to two, so the
@@ -276,6 +285,30 @@ fn offer_update(app: &AppHandle, update: tauri_plugin_updater::Update) {
         });
 }
 
+/// The version this run has already put in front of the user.
+///
+/// Without it the recurring check turns "Not now" into the same dialog every six hours,
+/// which is how a user learns to dismiss this window's dialogs without reading them.
+/// A version is offered once per run; asking from the tray offers it again regardless,
+/// because that is someone asking.
+static OFFERED: Mutex<Option<String>> = Mutex::new(None);
+
+fn already_offered(version: &str, announce: Announce) -> bool {
+    if announce == Announce::Always {
+        return false;
+    }
+    let mut offered = match OFFERED.lock() {
+        Ok(offered) => offered,
+        // A poisoned lock is not a reason to withhold a release.
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if offered.as_deref() == Some(version) {
+        return true;
+    }
+    *offered = Some(version.to_owned());
+    false
+}
+
 /// Asks the release feed whether there is anything newer, and offers what it finds.
 ///
 /// Failures here are reported to the console and nowhere else on the automatic check:
@@ -293,7 +326,11 @@ fn check_for_updates(app: &AppHandle, announce: Announce) {
         };
 
         match updater.check().await {
-            Ok(Some(update)) => offer_update(&handle, update),
+            Ok(Some(update)) => {
+                if !already_offered(&update.version, announce) {
+                    offer_update(&handle, update);
+                }
+            }
             Ok(None) => {
                 if announce == Announce::Always {
                     handle
@@ -417,9 +454,14 @@ pub fn run() {
             }
 
             // A quota monitor is left running for weeks, so it cannot rely on being
-            // relaunched to notice a release. This asks once per launch and says
-            // nothing unless there is something to say.
+            // relaunched to notice a release. This asks at launch and every six hours
+            // after it, and says nothing unless there is something to say.
             check_for_updates(handle, Announce::OnlyWhenNewer);
+            let recurring = handle.clone();
+            thread::spawn(move || loop {
+                thread::sleep(UPDATE_INTERVAL);
+                check_for_updates(&recurring, Announce::OnlyWhenNewer);
+            });
 
             // Closing the window hides it. A quota monitor that has to be relaunched to
             // answer "am I back yet?" is a quota monitor nobody keeps running; Quit in
@@ -504,6 +546,22 @@ mod tests {
         // Free, or the sidecar is about to be told to bind something it cannot have.
         assert!(TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_ok());
         drop(held);
+    }
+
+    /// The recurring check runs every six hours for as long as the app is open, and the
+    /// release it finds does not change between them. Offering it once is the difference
+    /// between a notification and a nag.
+    #[test]
+    fn a_version_is_offered_once_per_run_but_always_on_request() {
+        *OFFERED.lock().expect("lock") = None;
+
+        assert!(!already_offered("0.6.0", Announce::OnlyWhenNewer));
+        assert!(already_offered("0.6.0", Announce::OnlyWhenNewer));
+        // Asking from the tray is someone asking, and gets an answer every time.
+        assert!(!already_offered("0.6.0", Announce::Always));
+        // A release published while the app stayed open is news again.
+        assert!(!already_offered("0.6.1", Announce::OnlyWhenNewer));
+        assert!(already_offered("0.6.1", Announce::OnlyWhenNewer));
     }
 
     /// The splash screen waits on this. Returning true for a port nothing is listening

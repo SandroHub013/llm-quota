@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **A running app never noticed a release.** The update check ran once, in setup, and the code's own
+  comment said why that is not enough: this window is meant to be left open for weeks, so a release
+  published an hour after launch reached nobody who did not quit first. It now asks again every six
+  hours, and a version it has already offered is not offered a second time in the same run — the
+  recurring check must not turn "Not now" into the same dialog four times a day. Asking from the
+  tray still answers every time, because that is someone asking.
+
 ## [0.6.0] — 2026-08-18
 
 ### Added
