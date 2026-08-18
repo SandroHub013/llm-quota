@@ -123,6 +123,13 @@ interface Price {
 interface FileCacheEntry<T> {
   size: number;
   mtimeMs: number;
+  /**
+   * Stat of a sidecar whose change means the file's content changed even though the file
+   * itself did not: SQLite in WAL mode leaves the database untouched until a checkpoint,
+   * so a scan keyed on the database alone would serve a stale ledger for as long as the
+   * CLI keeps writing.
+   */
+  sidecar?: string;
   value: T;
 }
 
@@ -403,6 +410,7 @@ async function cachedFile<T>(
   cache: Map<string, FileCacheEntry<T>>,
   path: string,
   read: () => Promise<T>,
+  sidecar?: string,
 ): Promise<T | undefined> {
   let info: Awaited<ReturnType<typeof stat>>;
   try {
@@ -412,8 +420,18 @@ async function cachedFile<T>(
     if (vanished(error)) return undefined;
     throw new Error(`unreadable_history_file: ${path}`, { cause: error });
   }
+  // A sidecar that is absent is a state of its own: it is there while the CLI writes and
+  // gone once the database has absorbed it, and both must invalidate what was cached.
+  const stamp = sidecar
+    ? await stat(sidecar).then((info) => `${info.size}:${info.mtimeMs}`).catch(() => "none")
+    : undefined;
   const cached = cache.get(path);
-  if (cached && cached.size === info.size && cached.mtimeMs === info.mtimeMs) return cached.value;
+  if (
+    cached && cached.size === info.size && cached.mtimeMs === info.mtimeMs &&
+    cached.sidecar === stamp
+  ) {
+    return cached.value;
+  }
   let value: T;
   try {
     value = await read();
@@ -422,7 +440,7 @@ async function cachedFile<T>(
     if (vanished(error)) return undefined;
     throw new Error(`unreadable_history_file: ${path}`, { cause: error });
   }
-  cache.set(path, { size: info.size, mtimeMs: info.mtimeMs, value });
+  cache.set(path, { size: info.size, mtimeMs: info.mtimeMs, sidecar: stamp, value });
   return value;
 }
 
@@ -764,9 +782,9 @@ async function scanNikcli(path: string): Promise<RawUsageRow[]> {
 /**
  * Antigravity — the CLI launched as `agy` — writes one SQLite file per conversation and
  * keeps the per-request record as a schemaless protobuf blob. No `.proto` ships with the
- * CLI, so the reader below walks wire types alone and reads the four fields that were
- * stable across every conversation on disk: the model id, the display label carrying the
- * effort, the token counters and the request timestamp. An unknown field is skipped, and
+ * CLI, so the reader below walks wire types alone and reads the fields that were stable
+ * across every conversation on disk: the model id, the display label carrying the effort,
+ * the token counters and the request timestamp. An unknown field is skipped, and
  * a blob that stops making sense ends that record rather than the scan.
  */
 interface ProtoField {
@@ -1296,7 +1314,8 @@ export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<
     const files = await walk(paths.antigravity, ".db");
     pruneCache(antigravityCache, files);
     for (const file of files) {
-      raw.push(...(await cachedFile(antigravityCache, file, () => scanAntigravity(file)) ?? []));
+      const rows = await cachedFile(antigravityCache, file, () => scanAntigravity(file), `${file}-wal`);
+      raw.push(...(rows ?? []));
     }
     sources.push({
       id: "antigravity",

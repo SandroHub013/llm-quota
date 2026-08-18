@@ -185,6 +185,38 @@ test("a conversation with no request, or an unreadable one, costs only itself", 
   }
 });
 
+/**
+ * Every conversation on disk carries a `-wal` sidecar, because the CLI is still writing to
+ * it. SQLite in WAL mode leaves the database file itself untouched until a checkpoint, so
+ * a per-file cache keyed on the database alone would keep serving the ledger the machine
+ * had when the server started.
+ */
+test("a request written to the write-ahead log reaches the ledger before a checkpoint", async () => {
+  const { paths, root, conversations } = await fixture();
+  const path = join(conversations, "live.db");
+  const db = new Database(path, { create: true });
+  db.run("PRAGMA journal_mode = WAL");
+  db.run("CREATE TABLE gen_metadata (idx INTEGER PRIMARY KEY, data BLOB, size INTEGER)");
+  try {
+    const before = await collectUsage(paths);
+    expect(before.rows.filter((row) => row.source === "antigravity")).toHaveLength(2);
+
+    const blob = record("gemini-3.1-pro-low", "Gemini 3.1 Pro (Low)", {
+      input: 2_000,
+      output: 200,
+      thinking: 120,
+      visible: 80,
+    }, 1_785_517_640);
+    db.run("INSERT INTO gen_metadata VALUES (?, ?, ?)", [0, blob, blob.length]);
+
+    const after = await collectUsage(paths);
+    expect(after.rows.find((row) => row.model === "Gemini 3.1 Pro")?.effort).toBe("low");
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("an unreadable conversation is an error, and a missing directory is not", async () => {
   const { paths, root, conversations } = await fixture();
   try {

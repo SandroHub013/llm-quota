@@ -17,6 +17,14 @@ All notable changes to this project are documented here. The format follows
   them; Antigravity routes several internal aliases at one published model, and those are resolved
   so the rows price instead of landing in `unpricedModels`.
 
+### Fixed
+
+- **The per-file history cache could serve a stale ledger.** It keyed on the file it read, and every
+  Antigravity conversation on disk carries a write-ahead log: SQLite leaves the database itself
+  untouched until a checkpoint, so spend from a CLI that is still running would not have appeared
+  until it stopped. The cache now also watches the sidecar, whether it appears, changes or is
+  absorbed.
+
 ## [0.5.1] — 2026-08-13
 
 ### Fixed
