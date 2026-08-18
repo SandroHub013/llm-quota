@@ -39,7 +39,7 @@
     "active": true,
     "publisher": "Alessandro Boni",
     "createUpdaterArtifacts": true,
-    "targets": ["msi", "app", "dmg", "deb"],
+    "targets": ["msi", "app", "dmg", "deb", "rpm"],
     "category": "DeveloperTool",
     "shortDescription": "Live quota dashboard for your AI subscriptions",
     "longDescription": "One live dashboard for every AI subscription you pay for. Quotas, reset times and local token spend for Claude Code, Codex and Gemini, on one horizon. Runs entirely on your machine: no cloud, no database, no account.",
