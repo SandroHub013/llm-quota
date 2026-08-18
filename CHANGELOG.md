@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-08-18
+
 ### Fixed
 
 - **The update was announced by a Windows dialog.** A native message box, centred and
@@ -259,6 +261,7 @@ dashboard may read, and a card promising data that never arrives is worse than n
 
 Initial release: local-first live quota dashboard, CLI, and Windows widget.
 
+[0.6.1]: https://github.com/SandroHub013/llm-quota/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/SandroHub013/llm-quota/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/SandroHub013/llm-quota/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/SandroHub013/llm-quota/compare/v0.4.0...v0.5.0
