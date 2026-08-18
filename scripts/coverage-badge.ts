@@ -17,6 +17,14 @@ import { write } from "bun";
 
 const BADGE = "docs/coverage.json";
 
+/**
+ * Points of drift `--check` tolerates. The shipped code branches on platform — a Windows
+ * spawn path, a POSIX one — so Linux and Windows measure the same commit about a point
+ * apart, and demanding the exact figure would fail whichever machine did not write it.
+ * Enough for a platform, not for a regression.
+ */
+const DRIFT = 2;
+
 /** Green enough to be honest, never green enough to be smug. */
 const colorFor = (percent: number): string => {
   if (percent >= 90) return "brightgreen";
@@ -61,14 +69,15 @@ if (import.meta.main) {
 
   if (process.argv.includes("--check")) {
     const current = await Bun.file(BADGE).text().catch(() => "");
-    if (current !== rendered) {
+    const claimed = Number.parseFloat(JSON.parse(current || "{}").message ?? "");
+    if (!Number.isFinite(claimed) || Math.abs(claimed - Number.parseFloat(badge.message)) > DRIFT) {
       console.error(
         `${BADGE} is stale: it says ${JSON.parse(current || "{}").message ?? "nothing"}, the tests say ${badge.message}.\n` +
         "Run `bun run coverage:badge` and commit the result.",
       );
       process.exit(1);
     }
-    console.log(`${BADGE} matches the tests: ${badge.message}`);
+    console.log(`${BADGE} says ${JSON.parse(current).message}, the tests measured ${badge.message}`);
   } else {
     await write(BADGE, rendered);
     console.log(`${BADGE} → ${badge.message}`);
