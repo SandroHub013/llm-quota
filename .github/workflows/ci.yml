@@ -31,8 +31,17 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      # --coverage prints per-file line and function coverage, with test files left out
+      # of the count by bunfig.toml. No threshold: see the note there.
       - name: Test
-        run: bun test
+        run: bun test --coverage
+
+      # The README's badge is a JSON file in this repository rather than a number held
+      # by a coverage service, so nothing refreshes it on its own. This fails when it no
+      # longer matches what the tests just measured — whole percent, so a moved line
+      # does not send anyone back to regenerate it.
+      - name: The coverage badge still matches the tests
+        run: bun run coverage:badge --check
 
       - name: Lint
         run: bun run lint
@@ -41,6 +50,13 @@ jobs:
   # reports on its own instead of turning the test run red.
   audit:
     runs-on: ubuntu-latest
+    # The RustSec action reports through a check run, which the default token cannot
+    # create on a push: the job failed on main with "Resource not accessible by
+    # integration" while passing on every pull request, which is the shape of a
+    # permissions problem rather than of an advisory.
+    permissions:
+      contents: read
+      checks: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -64,11 +80,34 @@ jobs:
           python -m pip install --quiet pip-audit
           pip-audit -r requirements-dev.txt
 
+      # The npm and pip trees are audited; the Rust one was not, and it is the tree
+      # that ends up inside the signed binary people download. RustSec advisories are
+      # read straight from Cargo.lock — no build, no toolchain beyond what the action
+      # brings.
+      - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: src-tauri
+
   # The desktop shell is Rust, so `bun test` cannot see it break. This compiles the
   # shell against the real sidecar, which is what a change to either side breaks, and
   # it is the fast half: the `install` job below is the one that bundles and installs.
+  #
+  # On all three platforms, because the shell is where this project stops being
+  # portable: the sidecar is spawned through cmd.exe on Windows and directly elsewhere,
+  # the updater installs on two of the three and points at a download on the third, and
+  # the tray exists on fewer Linux desktops than not. Its own tests claim ports and wait
+  # on sockets — exactly the code that passes on Linux and surprises someone on Windows.
+  # `install` builds on all three already, but building is not running.
   desktop:
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc }
+          - { os: macos-latest, target: aarch64-apple-darwin }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -85,8 +124,10 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: './src-tauri -> target'
+          key: desktop-${{ matrix.target }}
 
       - name: Linux build dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -99,7 +140,9 @@ jobs:
             file
 
       - name: Compile the server sidecar
-        run: bun run sidecar -- x86_64-unknown-linux-gnu
+        # Tauri refuses to build without a sidecar named for this target, so the shell
+        # cannot compile anywhere the server has not been compiled first.
+        run: bun run sidecar -- ${{ matrix.target }}
 
       - name: Clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
@@ -126,7 +169,9 @@ jobs:
         include:
           - { os: windows-latest, target: x86_64-pc-windows-msvc, bundle: msi }
           - { os: macos-latest, target: aarch64-apple-darwin, bundle: dmg }
-          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, bundle: deb }
+          # Quoted, or the flow mapping reads the comma as its own separator and the
+          # bundler is asked for a deb alone — which is how this shipped for one run.
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, bundle: "deb,rpm" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -305,6 +350,53 @@ jobs:
             exit 1
           fi
 
+      # Fedora is the other half of the Linux this gets installed on, and an rpm is not
+      # a deb with a different extension: a different package name, a different file
+      # manifest and a different manager deciding what "installed" means. GitHub offers
+      # no Fedora runner, so the package built here is installed inside Fedora's own
+      # image — which is where a wrong dependency or an unpackaged file would surface.
+      - name: Install and verify the rpm (Fedora)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          rpm=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm | head -1)
+          echo "built $(basename "$rpm")"
+
+          # Pinned to a release rather than :latest. Dependabot does not watch image
+          # names inside a workflow, so nothing would announce the day Fedora's latest
+          # became a major this package has never been installed on — and that failure
+          # would land on an unrelated pull request. Bump it deliberately instead.
+          docker run --rm -v "$PWD:/work" -w /work fedora:44 bash -euo pipefail -c '
+            rpm=$(ls src-tauri/target/*/release/bundle/rpm/*.rpm | head -1)
+            dnf install -y "$rpm"
+
+            package=$(rpm -qp --queryformat "%{NAME}" "$rpm")
+            files=$(rpm -ql "$package")
+            echo "$files" | grep -q "/llm-quota-desktop$" || { echo "the shell is not in the package"; exit 1; }
+            server=$(echo "$files" | grep "/llm-quota-server$" | head -1)
+            test -x "$server" || { echo "the sidecar is not in the package"; exit 1; }
+
+            PORT=4747 "$server" &
+            pid=$!
+
+            answered=
+            for _ in $(seq 30); do
+              if curl -fsS http://127.0.0.1:4747/ > /dev/null; then answered=yes; break; fi
+              sleep 1
+            done
+            kill $pid 2>/dev/null || true
+            if [ -z "$answered" ]; then
+              echo "the installed server never answered on 4747"
+              exit 1
+            fi
+
+            dnf remove -y "$package"
+            if [ -e "$server" ]; then
+              echo "removing the package left $server behind"
+              exit 1
+            fi
+          '
+
   # The widget is Tk, and Tk is where a cross-platform promise quietly stops being
   # true: an import of winreg, a -transparentcolor attribute or a creationflags
   # argument costs nothing on Windows and refuses to start everywhere else. Running
@@ -345,6 +437,20 @@ jobs:
 
       - name: Widget tests
         run: python -m unittest widget_test
+
+      # TypeScript has eslint and Rust has clippy; the two thousand lines of Python
+      # had nothing but their own tests. F and B only — pyflakes and bugbear, which
+      # find bugs — rather than the style rules, because a line-length argument in CI
+      # trains people to ignore the whole job.
+      #
+      # It earned its place immediately: a closure in the minibar bound the provider
+      # id but not the row beside it, so a tooltip could describe whichever provider
+      # the loop ended on.
+      - name: Lint the Python
+        if: runner.os == 'Linux'
+        run: |
+          python -m pip install --quiet ruff
+          ruff check --select F,B widget.py widget_test.py scripts/*.py
 
       # The unit tests mock the desktop tools away, because the case worth pinning
       # there is the machine that does not have them. This is the other half, and the
@@ -387,3 +493,34 @@ jobs:
             echo "the bundle declares '$scheme', not llmquota"
             exit 1
           fi
+
+  # Ubuntu is not Linux. Fedora packages Tk under another name, ships its own Python and
+  # its own GTK, and is the distribution this project is most often asked about after
+  # Debian's family. The widget is where that difference bites first — an import that
+  # resolves on one and not the other — so it is imported and tested here too, in
+  # Fedora's own image because GitHub has no Fedora runner.
+  widget-fedora:
+    runs-on: ubuntu-latest
+    # Pinned, for the reason spelled out beside the rpm step: an image that moves on
+    # its own turns a Fedora upgrade into a red tick on someone else's change.
+    container: fedora:44
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # unzip is what the Bun installer unpacks with, and tkinter is a separate package
+      # here exactly as it is on Debian. desktop-file-utils and xdg-utils carry the two
+      # tools the widget's registration step calls for real.
+      - name: Fedora's Python, Tk and desktop tools
+        run: dnf install -y python3 python3-tkinter unzip tar which curl desktop-file-utils xdg-utils
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.3.14'
+
+      - run: bun install --frozen-lockfile
+
+      - name: TypeScript tests
+        run: bun test
+
+      - name: Widget tests
+        run: python3 -m unittest widget_test

@@ -44,30 +44,66 @@ export const codex: Provider = {
         authSource: "Codex app-server",
         message: "Codex is connected, but it returned no active ChatGPT quota windows.",
       };
-    } catch (error: any) {
-      const detail = String(error?.message ?? error);
-      const missing = /not recognized|not found|ENOENT|unavailable/i.test(detail);
+    } catch (error) {
+      const detail = String((error as Error | undefined)?.message ?? error);
       const auth = /login|auth|credential|unauthorized/i.test(detail);
       return {
         ...base,
         status: auth ? "unauthenticated" : "partial",
-        message: missing
-          ? "Codex CLI was not found. Install Codex and run `codex login`."
-          : auth
-            ? "Codex app-server needs a ChatGPT login. Run `codex login`."
-            : `Codex app-server is temporarily unavailable (${safeDetail(detail)}).`,
+        message: failureMessage(detail, auth),
       };
     }
   },
 };
 
+/**
+ * Turn what went wrong into what to do about it.
+ *
+ * The three cases are different problems: Codex is not installed, Codex is installed
+ * and nobody is logged in, or Codex answered with something else. Only the last one is
+ * worth showing the raw detail for — the other two have an instruction instead.
+ */
+function failureMessage(detail: string, auth: boolean): string {
+  if (/not recognized|not found|ENOENT|unavailable/i.test(detail)) {
+    return "Codex CLI was not found. Install Codex and run `codex login`.";
+  }
+  if (auth) return "Codex app-server needs a ChatGPT login. Run `codex login`.";
+  return `Codex app-server is temporarily unavailable (${safeDetail(detail)}).`;
+}
+
+/**
+ * The `account/rateLimits/read` reply, as far as this reads it. Every leaf is `unknown`
+ * because Codex owns the format: the readers below coerce, and a field that changes
+ * type becomes a missing metric rather than a thrown error on the dashboard.
+ */
+interface CodexWindow {
+  usedPercent?: unknown;
+  windowDurationMins?: unknown;
+  resetsAt?: unknown;
+}
+
+interface CodexBucket {
+  limitName?: unknown;
+  limitId?: unknown;
+  planType?: unknown;
+  primary?: CodexWindow;
+  secondary?: CodexWindow;
+}
+
+export interface CodexRateLimits {
+  planType?: unknown;
+  rateLimits?: CodexBucket;
+  rateLimitsByLimitId?: Record<string, CodexBucket | null>;
+}
+
 /** Parse the stable account/rateLimits/read response. */
-export function parseRateLimits(body: any): QuotaMetric[] {
-  const byId = body?.rateLimitsByLimitId;
-  const buckets: any[] = byId && typeof byId === "object"
-    ? Object.values(byId).filter(Boolean)
-    : body?.rateLimits
-      ? [body.rateLimits]
+export function parseRateLimits(body: unknown): QuotaMetric[] {
+  const payload = (body ?? undefined) as CodexRateLimits | undefined;
+  const byId = payload?.rateLimitsByLimitId;
+  const buckets: CodexBucket[] = byId && typeof byId === "object"
+    ? Object.values(byId).filter((bucket): bucket is CodexBucket => Boolean(bucket))
+    : payload?.rateLimits
+      ? [payload.rateLimits]
       : [];
   const multiple = buckets.length > 1;
   const metrics: QuotaMetric[] = [];
@@ -76,7 +112,8 @@ export function parseRateLimits(body: any): QuotaMetric[] {
     const prefix = multiple ? `${bucket.limitName ?? bucket.limitId ?? "Codex"} \u00b7 ` : "";
     for (const window of [bucket.primary, bucket.secondary]) {
       const used = number(window?.usedPercent);
-      if (used == null) continue;
+      // A bucket Codex left out is not a window with no usage; it is no window.
+      if (window == null || used == null) continue;
       metrics.push({
         label: `${prefix}${windowLabel(number(window.windowDurationMins))}`,
         used: Math.max(0, Math.min(100, used)),
@@ -89,10 +126,12 @@ export function parseRateLimits(body: any): QuotaMetric[] {
   return metrics;
 }
 
-function readPlan(body: any): string | undefined {
-  if (body?.planType) return String(body.planType);
-  const buckets = body?.rateLimitsByLimitId && Object.values(body.rateLimitsByLimitId) as any[];
-  const plan = buckets?.find((bucket: any) => bucket?.planType)?.planType ?? body?.rateLimits?.planType;
+function readPlan(body: unknown): string | undefined {
+  const payload = (body ?? undefined) as CodexRateLimits | undefined;
+  if (payload?.planType) return String(payload.planType);
+  const byId = payload?.rateLimitsByLimitId;
+  const buckets = byId && typeof byId === "object" ? Object.values(byId) : undefined;
+  const plan = buckets?.find((bucket) => bucket?.planType)?.planType ?? payload?.rateLimits?.planType;
   return plan ? String(plan) : undefined;
 }
 

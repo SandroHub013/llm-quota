@@ -1,12 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "LLM Quota",
-  "version": "0.5.0",
+  "version": "0.6.3",
   "identifier": "app.llmquota.desktop",
   "build": {
     "frontendDist": "splash"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "label": "main",
@@ -23,7 +24,7 @@
     ],
     "security": {
       "csp": null,
-      "capabilities": ["default"]
+      "capabilities": ["default", "update-notice"]
     }
   },
   "plugins": {
@@ -38,7 +39,7 @@
     "active": true,
     "publisher": "Alessandro Boni",
     "createUpdaterArtifacts": true,
-    "targets": ["msi", "app", "dmg", "deb"],
+    "targets": ["msi", "app", "dmg", "deb", "rpm"],
     "category": "DeveloperTool",
     "shortDescription": "Live quota dashboard for your AI subscriptions",
     "longDescription": "One live dashboard for every AI subscription you pay for. Quotas, reset times and local token spend for Claude Code, Codex and Gemini, on one horizon. Runs entirely on your machine: no cloud, no database, no account.",

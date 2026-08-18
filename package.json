@@ -1,6 +1,6 @@
 {
   "name": "llm-quota",
-  "version": "0.5.0",
+  "version": "0.6.3",
   "type": "module",
   "private": false,
   "description": "Local-first live quota dashboard, desktop app, CLI, and widget for Claude Code, Codex, and Gemini",
@@ -55,6 +55,8 @@
     "start": "bun run src/server.ts",
     "cli": "bun run src/cli.ts",
     "generate:assets": "bun run scripts/generate-public-manifest.ts",
+    "coverage:badge": "bun run scripts/coverage-badge.ts",
+    "prices:check": "bun run scripts/prices-check.ts",
     "sidecar": "bun run scripts/build-sidecar.ts",
     "desktop": "bun run sidecar && bun x @tauri-apps/cli dev",
     "desktop:build": "bun run sidecar && bun x @tauri-apps/cli build",

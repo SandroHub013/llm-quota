@@ -12,6 +12,7 @@ Gira sulla tua macchina. Non parla con nessuno tranne i provider.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml/badge.svg)](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FSandroHub013%2Fllm-quota%2Fmain%2Fdocs%2Fcoverage.json)](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml)
 [![Runtime: Bun](https://img.shields.io/badge/runtime-Bun-000?logo=bun)](https://bun.sh)
 [![GitHub Release Downloads](https://img.shields.io/github/downloads/SandroHub013/llm-quota/total?color=green&logo=github)](https://github.com/SandroHub013/llm-quota/releases)
 
@@ -47,8 +48,8 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
   Antigravity consegnano volontariamente il JSON quota tramite bridge locali opt-in della status
   line. LLM Quota non legge né rinnova mai il token OAuth di un altro client.
 - 💶 **Registro token locale** — somma la cronologia di Codex, Claude Code, OpenCode, Kimi Code,
-  pi, Prime Agent e NikCLI per modello, effort e main/subagent, stimandone in euro il valore API equivalente e
-  mostrando un indice di efficienza basato sul riuso del contesto. Un calendario giornaliero in
+  pi, Prime Agent, NikCLI e Antigravity per modello, effort e main/subagent, stimandone in euro il
+  valore API equivalente e mostrando un indice di efficienza basato sul riuso del contesto. Un calendario giornaliero in
   stile GitHub mostra quando sono stati usati token ed euro; la vista GitHub opzionale usa sempre
   l'account autenticato localmente con `gh`.
 - 🔒 **Local-first** — nessun cloud, nessun database, nessun account. Chiavi e token non lasciano
@@ -127,8 +128,8 @@ Nessun account, username, valore quota o totale di spesa runtime è legato all'a
 - I bridge Claude/Antigravity, attivati esplicitamente, salvano soltanto finestre quota e reset;
   escludono identità, transcript e access token e preservano la status line personalizzata esistente.
 - Il registro token analizza la cronologia locale dell'utente per Codex, Claude Code, OpenCode,
-  Kimi Code, pi, Prime Agent e NikCLI. Hermes non tiene alcuna traccia locale dei token, quindi la
-  sua spesa non è conteggiabile.
+  Kimi Code, pi, Prime Agent, NikCLI e Antigravity. Hermes non tiene alcuna traccia locale dei
+  token, quindi la sua spesa non è conteggiabile.
 - Il calendario contribution opzionale interroga l'utente autenticato nella CLI ufficiale GitHub.
   Esegui `gh auth login` per abilitarlo; senza `gh`, il calendario della spesa locale continua a funzionare.
 - Una dashboard su una porta locale personalizzata passa automaticamente la propria origine al widget.
@@ -151,6 +152,8 @@ credenziali o cronologie d'uso reali.
 
 Oggi vengono spedite tre card provider. OpenCode, pi, Prime Agent e NikCLI sono fonti solo del
 registro: non pubblicano quota di piano, quindi contribuiscono alla spesa locale e a nessuna card.
+Antigravity fa entrambe le cose: il bridge della status line alimenta la card Gemini, la cronologia
+delle sue conversazioni alimenta il registro.
 Il gateway Zen di OpenCode è stato rimosso del tutto, perché l'endpoint pubblico espone il catalogo modelli e non
 utilizzo numerico, limiti o tempi di reset.
 Kimi è disabilitato per lo stesso motivo: la sua status line ufficiale non porta campi di quota, rate
@@ -196,7 +199,7 @@ Per host o porta diversi: `LLM_QUOTA_URL=http://localhost:8080`.
 ## App desktop
 
 [Ogni release](https://github.com/SandroHub013/llm-quota/releases/latest) pubblica un installer per
-Windows (`.msi`), macOS (`.dmg`, Apple silicon e Intel) e Linux (`.deb`). Nessun Bun da
+Windows (`.msi`), macOS (`.dmg`, Apple silicon e Intel) e Linux (`.deb` e `.rpm`). Nessun Bun da
 installare, nessun repository da clonare: il server compilato è dentro il bundle.
 
 - Finestra propria, così la dashboard non è una scheda del browser che si perde.
@@ -213,6 +216,20 @@ installare, nessun repository da clonare: il server compilato è dentro il bundl
 La shell è [Tauri](https://tauri.app): usa la webview del sistema operativo invece di portarsi
 dietro un browser, per questo il download è ~30 MB invece di ~150 MB. Non contiene logica di
 prodotto — dashboard, API e adattatori sono lo stesso codice dell'installazione da sorgenti.
+
+<details>
+<summary>La finestra resta vuota, o le card appaiono solo passandoci sopra il mouse (Linux)</summary>
+
+Risolto dalla 0.5.1. Sulle versioni precedenti, avvialo disattivando il renderer che WebKitGTK usa
+su molti desktop:
+
+```bash
+WEBKIT_DISABLE_DMABUF_RENDERER=1 llm-quota-desktop
+```
+
+Ora l'app lo imposta da sé su Linux. Se una build disegnasse ancora male, `WEBKIT_DISABLE_COMPOSITING_MODE=1`
+è il ripiego più pesante: disattiva del tutto il compositing accelerato.
+</details>
 
 > **Gli installer non sono firmati.** SmartScreen su Windows dirà "editore sconosciuto" — *Ulteriori
 > informazioni → Esegui comunque*. Gatekeeper su macOS rifiuterà il doppio clic — tasto destro
@@ -241,8 +258,8 @@ fuori dalla cartella che hai scelto, a parte la solita configurazione per utente
 
 Su Linux non c'è ancora l'equivalente. Il bundler AppImage risolve le librerie condivise di tutto
 quello che impacchetta, e il server compilato è un binario che `ldd` rifiuta: invece di saltarlo,
-aborta la build. Le release portano quindi il `.deb` e, per chi non può installarlo, il server
-standalone qui sotto.
+aborta la build. Le release portano quindi il `.deb` e l'`.rpm` e, per chi non può installarne
+nessuno dei due, il server standalone qui sotto.
 </details>
 
 <details>
@@ -314,8 +331,8 @@ Tk fa parte della libreria standard di Python ma su Debian e Ubuntu è un pacche
 - I loghi sono congelati nel repository di proposito: caricarli dal provider — o da un servizio di
   favicon, come faceva una versione precedente — direbbe a terzi quali abbonamenti AI possiedi, a
   ogni caricamento di pagina.
-- I file OAuth di Codex, Claude, Gemini, OpenCode, Kimi, pi, Prime Agent e NikCLI non vengono letti
-  né modificati: si leggono solo i transcript di sessione e i database locali. Le chiavi
+- I file OAuth di Codex, Claude, Gemini, OpenCode, Kimi, pi, Prime Agent, NikCLI e Antigravity non
+  vengono letti né modificati: si leggono solo i transcript di sessione e i database locali. Le chiavi
   Open Platform inserite dall'utente vengono usate soltanto con l'API documentata del provider.
 
 ---

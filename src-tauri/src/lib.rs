@@ -19,10 +19,9 @@ use std::time::{Duration, Instant};
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, LogicalSize, Manager, RunEvent, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, RunEvent, State, WebviewWindow, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
-#[cfg(target_os = "linux")]
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
@@ -37,6 +36,15 @@ const PREFERRED_PORT: u16 = 4747;
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
 
 const POLL_INTERVAL: Duration = Duration::from_millis(120);
+
+/// How often a running app asks the release feed again.
+///
+/// The check at startup is not enough on its own: this window is meant to be left open
+/// for weeks, so on the machine it was written for it would have asked once and then
+/// never again — a release published an hour after launch reaches nobody who does not
+/// quit first. Six hours is slow enough to be invisible and quick enough that a release
+/// is seen the day it ships.
+const UPDATE_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 
 /// The viewport the dashboard is laid out for.
 ///
@@ -119,10 +127,26 @@ struct Sidecar(Mutex<Option<CommandChild>>);
 /// A busy 4747 usually means the user already runs `bun start`. Rather than trying to
 /// adopt that server, this starts its own on another port: the two read the same local
 /// files, and the dashboard passes its own origin to the widget, so both keep working.
-fn claim_port() -> u16 {
-    if TcpListener::bind((Ipv4Addr::LOCALHOST, PREFERRED_PORT)).is_ok() {
-        return PREFERRED_PORT;
+/// How long a launch waits for the documented port before giving up on it.
+///
+/// An orphaned sidecar from a crashed or replaced shell notices its parent is gone
+/// within a couple of seconds and exits. Waiting that long costs a slow start in the
+/// rare case something else holds 4747 for good, and buys the common case the port the
+/// widget, the status line and every screenshot already name.
+const PORT_WAIT: Duration = Duration::from_secs(5);
+
+fn claim_port(wait: Duration) -> u16 {
+    let deadline = Instant::now() + wait;
+    loop {
+        if TcpListener::bind((Ipv4Addr::LOCALHOST, PREFERRED_PORT)).is_ok() {
+            return PREFERRED_PORT;
+        }
+        if Instant::now() >= deadline {
+            break;
+        }
+        thread::sleep(POLL_INTERVAL);
     }
+
     TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .and_then(|listener| listener.local_addr())
         .map(|address| address.port())
@@ -155,11 +179,16 @@ fn show_dashboard(app: &AppHandle) {
 
 /// Starts the server and points the window at it once it answers.
 fn start_server(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let port = claim_port();
+    let port = claim_port(PORT_WAIT);
     let (mut events, child) = app
         .shell()
         .sidecar("llm-quota-server")?
         .env("PORT", port.to_string())
+        // The sidecar outlives this process on every path that does not run the exit
+        // handler — an update that replaces this binary, a crash — and an orphan that
+        // keeps 4747 is worse than no server at all: the next launch takes another port
+        // while everything pointed at 4747 keeps reading the version it replaced.
+        .env("LLM_QUOTA_PARENT_PID", std::process::id().to_string())
         .spawn()?;
 
     app.state::<Sidecar>().0.lock().unwrap().replace(child);
@@ -208,72 +237,111 @@ enum Announce {
 /// Where a release the updater cannot install itself can be fetched by hand.
 const RELEASES_URL: &str = "https://github.com/SandroHub013/llm-quota/releases/latest";
 
-/// Linux installs from a deb, and the updater replaces AppImages. Rather than offer an
-/// update it cannot carry out, it points at the release and lets the package manager
-/// stay the thing that owns the files it installed.
-#[cfg(target_os = "linux")]
+/// The update this run found and has not installed yet.
+///
+/// The offer usually arrives before the dashboard exists — the check starts in `setup`,
+/// while the window is still on the splash screen — so it is kept here for the page to
+/// ask for once it has loaded, rather than emitted into a window that is not listening.
+struct PendingUpdate(Mutex<Option<tauri_plugin_updater::Update>>);
+
+/// Linux installs from a package, and the updater would be replacing files a package
+/// manager owns. The offer is still worth making; the button behind it is a download.
+const CAN_INSTALL: bool = !cfg!(target_os = "linux");
+
+fn offer_payload(version: &str) -> serde_json::Value {
+    serde_json::json!({ "version": version, "canInstall": CAN_INSTALL })
+}
+
+/// Hands the dashboard an update to draw.
+///
+/// It used to be a native message box. That works, and it looks like a Windows system
+/// dialog in front of an app that looks like nothing else on the desktop, and it takes
+/// focus to say something that is never urgent. The page draws it now. The dialog stays
+/// as the fallback for the case the page cannot cover: no window, or a window that has
+/// not reached the dashboard, which is where the update would otherwise vanish.
 fn offer_update(app: &AppHandle, update: tauri_plugin_updater::Update) {
+    let version = update.version.clone();
+    if let Ok(mut pending) = app.state::<PendingUpdate>().0.lock() {
+        *pending = Some(update);
+    }
+
+    if app.get_webview_window("main").is_some() && app.emit("update-available", offer_payload(&version)).is_ok() {
+        return;
+    }
+
     let handle = app.clone();
     app.dialog()
         .message(format!(
-            "LLM Quota {} is available. This copy was installed from a package, so the \
-             update is a download rather than something this window can apply.",
-            update.version
+            "LLM Quota {version} is available. It can be downloaded from {RELEASES_URL}"
         ))
         .title("Update available")
-        .buttons(MessageDialogButtons::OkCancelCustom(
-            "Open the release".to_owned(),
-            "Not now".to_owned(),
-        ))
-        .show(move |open| {
-            if open {
-                if let Err(error) = handle.opener().open_url(RELEASES_URL, None::<&str>) {
-                    eprintln!("llm-quota-desktop: could not open the release page: {error}");
-                }
+        .show(move |_| {
+            if let Err(error) = handle.opener().open_url(RELEASES_URL, None::<&str>) {
+                eprintln!("llm-quota-desktop: could not open the release page: {error}");
             }
         });
 }
 
-/// Windows and macOS: the updater can replace the installed app, so the dialog offers
-/// to do it. Downloading happens after the answer, never before — an update nobody
-/// agreed to should not be spending someone's connection in the background.
-#[cfg(not(target_os = "linux"))]
-fn offer_update(app: &AppHandle, update: tauri_plugin_updater::Update) {
-    let handle = app.clone();
-    app.dialog()
-        .message(format!(
-            "LLM Quota {} is available. Installing it restarts the app; the server it \
-             runs stops with it and comes back on the other side.",
-            update.version
-        ))
-        .title("Update available")
-        .buttons(MessageDialogButtons::OkCancelCustom(
-            "Update now".to_owned(),
-            "Not now".to_owned(),
-        ))
-        .show(move |accepted| {
-            if !accepted {
-                return;
-            }
-            let handle = handle.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(error) = update.download_and_install(|_, _| {}, || {}).await {
-                    eprintln!("llm-quota-desktop: the update did not install: {error}");
-                    handle
-                        .dialog()
-                        .message(format!(
-                            "The update could not be installed: {error}\n\nIt can be \
-                             downloaded by hand from {RELEASES_URL}"
-                        ))
-                        .title("Update failed")
-                        .show(|_| {});
-                    return;
-                }
-                // The installer has replaced the app on disk; this process is still the
-                // old one, and the sidecar it owns still holds the port.
-                handle.restart();
-            });
-        });
+/// What the page asks for on load, because the offer may predate it.
+#[tauri::command]
+fn pending_update(state: State<'_, PendingUpdate>) -> Option<serde_json::Value> {
+    let pending = state.0.lock().ok()?;
+    pending.as_ref().map(|update| offer_payload(&update.version))
+}
+
+/// Downloading happens after the answer, never before — an update nobody agreed to
+/// should not be spending someone's connection in the background.
+#[tauri::command]
+async fn install_update(app: AppHandle, state: State<'_, PendingUpdate>) -> Result<(), String> {
+    // Taken out of the lock before the first await: a guard held across one is not Send,
+    // and holding it for the length of a download would block the page asking again.
+    let update = {
+        let mut pending = state.0.lock().map_err(|error| error.to_string())?;
+        pending.take()
+    };
+    let update = update.ok_or_else(|| "the update is no longer available".to_owned())?;
+
+    update.download_and_install(|_, _| {}, || {}).await.map_err(|error| error.to_string())?;
+
+    // The installer has replaced the app on disk; this process is still the old one, and
+    // the sidecar it spawned is still listening on 4747. `restart` does not run the
+    // `RunEvent::Exit` handler that owns it, so without this the old server outlives the
+    // update: the new process finds its port taken, falls back to an ephemeral one, and
+    // every reader that was told 4747 — the widget, the wezterm strip, the CLI — keeps
+    // talking to a server running the version this update just replaced.
+    if let Some(child) = app.state::<Sidecar>().0.lock().ok().and_then(|mut sidecar| sidecar.take()) {
+        let _ = child.kill();
+    }
+    app.restart();
+}
+
+#[tauri::command]
+fn open_release_page(app: AppHandle) -> Result<(), String> {
+    app.opener().open_url(RELEASES_URL, None::<&str>).map_err(|error| error.to_string())
+}
+
+/// The version this run has already put in front of the user.
+///
+/// Without it the recurring check turns "Not now" into the same dialog every six hours,
+/// which is how a user learns to dismiss this window's dialogs without reading them.
+/// A version is offered once per run; asking from the tray offers it again regardless,
+/// because that is someone asking.
+static OFFERED: Mutex<Option<String>> = Mutex::new(None);
+
+fn already_offered(version: &str, announce: Announce) -> bool {
+    if announce == Announce::Always {
+        return false;
+    }
+    let mut offered = match OFFERED.lock() {
+        Ok(offered) => offered,
+        // A poisoned lock is not a reason to withhold a release.
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if offered.as_deref() == Some(version) {
+        return true;
+    }
+    *offered = Some(version.to_owned());
+    false
 }
 
 /// Asks the release feed whether there is anything newer, and offers what it finds.
@@ -293,7 +361,11 @@ fn check_for_updates(app: &AppHandle, announce: Announce) {
         };
 
         match updater.check().await {
-            Ok(Some(update)) => offer_update(&handle, update),
+            Ok(Some(update)) => {
+                if !already_offered(&update.version, announce) {
+                    offer_update(&handle, update);
+                }
+            }
             Ok(None) => {
                 if announce == Announce::Always {
                     handle
@@ -363,7 +435,34 @@ fn build_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Turns off WebKitGTK's DMA-BUF renderer, which does not draw this app correctly on
+/// a large number of Linux desktops.
+///
+/// The symptom is specific and recognisable: cards are not painted at all until the
+/// pointer moves over them, and what appears then is torn or half-drawn. Nothing is
+/// wrong with the page — the compositor simply never hands over what was rendered, so
+/// only the regions an input event invalidates ever reach the screen. It shows up most
+/// on GNOME under Wayland and on NVIDIA's driver, which together are a large share of
+/// the Linux desktops this will land on.
+///
+/// The cost is a slower path for compositing, on a window that shows a dashboard
+/// refreshing every few seconds rather than anything animating at speed. A window that
+/// draws correctly and slowly beats one that draws quickly and wrong.
+///
+/// Set before the webview exists, because it is read when WebKitGTK initialises.
+#[cfg(target_os = "linux")]
+fn work_around_webkit_rendering() {
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn work_around_webkit_rendering() {}
+
 pub fn run() {
+    work_around_webkit_rendering();
+
     tauri::Builder::default()
         // A second launch must not start a second server. Focus what is already running.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -375,6 +474,8 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .manage(Sidecar(Mutex::new(None)))
+        .manage(PendingUpdate(Mutex::new(None)))
+        .invoke_handler(tauri::generate_handler![pending_update, install_update, open_release_page])
         .setup(|app| {
             let handle = app.handle();
 
@@ -390,9 +491,14 @@ pub fn run() {
             }
 
             // A quota monitor is left running for weeks, so it cannot rely on being
-            // relaunched to notice a release. This asks once per launch and says
-            // nothing unless there is something to say.
+            // relaunched to notice a release. This asks at launch and every six hours
+            // after it, and says nothing unless there is something to say.
             check_for_updates(handle, Announce::OnlyWhenNewer);
+            let recurring = handle.clone();
+            thread::spawn(move || loop {
+                thread::sleep(UPDATE_INTERVAL);
+                check_for_updates(&recurring, Announce::OnlyWhenNewer);
+            });
 
             // Closing the window hides it. A quota monitor that has to be relaunched to
             // answer "am I back yet?" is a quota monitor nobody keeps running; Quit in
@@ -427,6 +533,10 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Both port tests stage the same port, and cargo runs tests in parallel: without
+    /// this they would take 4747 from each other and fail for the other's reason.
+    static PORT_GUARD: Mutex<()> = Mutex::new(());
 
     /// A laptop at 1920×1080 has room to spare, so the dashboard gets the viewport it
     /// is laid out for rather than the screen it landed on.
@@ -463,6 +573,7 @@ mod tests {
     /// can be and never silently shared when it cannot.
     #[test]
     fn a_busy_preferred_port_falls_back_to_a_free_one() {
+        let _guard = PORT_GUARD.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let Ok(held) = TcpListener::bind((Ipv4Addr::LOCALHOST, PREFERRED_PORT)) else {
             // Something outside this test already holds it; the fallback is then what
             // claim_port returns anyway, and asserting on a port we do not control
@@ -470,13 +581,50 @@ mod tests {
             return;
         };
 
-        let port = claim_port();
+        let port = claim_port(Duration::ZERO);
         assert_ne!(port, PREFERRED_PORT, "the port was already held");
         assert_ne!(port, 0, "0 asks the OS to choose again at bind time");
 
         // Free, or the sidecar is about to be told to bind something it cannot have.
         assert!(TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_ok());
         drop(held);
+    }
+
+    /// The recurring check runs every six hours for as long as the app is open, and the
+    /// release it finds does not change between them. Offering it once is the difference
+    /// between a notification and a nag.
+    #[test]
+    fn a_version_is_offered_once_per_run_but_always_on_request() {
+        *OFFERED.lock().expect("lock") = None;
+
+        assert!(!already_offered("0.6.0", Announce::OnlyWhenNewer));
+        assert!(already_offered("0.6.0", Announce::OnlyWhenNewer));
+        // Asking from the tray is someone asking, and gets an answer every time.
+        assert!(!already_offered("0.6.0", Announce::Always));
+        // A release published while the app stayed open is news again.
+        assert!(!already_offered("0.6.1", Announce::OnlyWhenNewer));
+        assert!(already_offered("0.6.1", Announce::OnlyWhenNewer));
+    }
+
+    /// An orphaned sidecar — one whose shell was replaced by an update or died in a
+    /// crash — notices and exits a moment after its parent goes. Waiting for that is the
+    /// difference between the port every screenshot names and an ephemeral one nobody
+    /// can be told about.
+    #[test]
+    fn a_port_freed_during_the_wait_is_still_claimed() {
+        let _guard = PORT_GUARD.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let held = match TcpListener::bind((Ipv4Addr::LOCALHOST, PREFERRED_PORT)) {
+            Ok(listener) => listener,
+            // Something on this machine owns 4747 for good; the case under test cannot
+            // be staged, and failing here would be a fact about the machine.
+            Err(_) => return,
+        };
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(400));
+            drop(held);
+        });
+
+        assert_eq!(claim_port(Duration::from_secs(4)), PREFERRED_PORT);
     }
 
     /// The splash screen waits on this. Returning true for a port nothing is listening

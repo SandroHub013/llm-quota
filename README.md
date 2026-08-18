@@ -9,6 +9,7 @@ Runs on your machine. Talks to nobody but the providers.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml/badge.svg)](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FSandroHub013%2Fllm-quota%2Fmain%2Fdocs%2Fcoverage.json)](https://github.com/SandroHub013/llm-quota/actions/workflows/ci.yml)
 [![Runtime: Bun](https://img.shields.io/badge/runtime-Bun-000?logo=bun)](https://bun.sh)
 [![GitHub Release Downloads](https://img.shields.io/github/downloads/SandroHub013/llm-quota/total?color=green&logo=github)](https://github.com/SandroHub013/llm-quota/releases)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -45,9 +46,9 @@ glance which subscription is free, which is cooling down, and exactly when to co
 - 🔑 **Official-surface first** — Codex is queried through `codex app-server`; Claude Code and
   Antigravity deliberately deliver quota JSON through opt-in local status-line bridges. LLM Quota
   never reads or refreshes another client's OAuth token.
-- 💶 **Local token ledger** — totals Codex, Claude Code, OpenCode, Kimi Code, pi, Prime Agent
-  and NikCLI history by
-  model, effort and main/subagent, with an estimated API-equivalent value in euros and a
+- 💶 **Local token ledger** — totals Codex, Claude Code, OpenCode, Kimi Code, pi, Prime Agent,
+  NikCLI and Antigravity history by model, effort and main/subagent, with an estimated
+  API-equivalent value in euros and a
   context-reuse efficiency index. A GitHub-style daily calendar shows when those tokens and euros
   were spent; its optional GitHub view always uses the locally authenticated `gh` account.
 - 🔒 **Local-first** — no cloud, no database, no account. Keys and tokens never leave the machine.
@@ -82,12 +83,27 @@ prompt every MSI asks for, and installs to `C:\Program Files\LLM Quota`.
 | Windows 10/11 | `LLM.Quota_<version>_x64_en-US.msi` |
 | macOS (Apple silicon) | `LLM.Quota_<version>_aarch64.dmg` |
 | macOS (Intel) | `LLM.Quota_<version>_x64.dmg` |
-| Linux | `LLM.Quota_<version>_amd64.deb` |
+| Linux (Debian, Ubuntu) | `LLM.Quota_<version>_amd64.deb` |
+| Linux (Fedora, RHEL, openSUSE) | `LLM.Quota-<version>-1.x86_64.rpm` |
 
 It lives in the tray: closing the window leaves it running, **Start at login** is one click, and
 **Quit** is the only thing that stops the server. It also tells you when a release is out —
 on Windows and macOS it can install one and restart itself; the Linux build points at the
 download instead, because the package manager owns the files it installed.
+
+<details>
+<summary>The window is blank, or cards only appear when the pointer passes over them (Linux)</summary>
+
+Fixed as of 0.5.1. On earlier versions, start it with the renderer WebKitGTK uses on many
+desktops turned off:
+
+```bash
+WEBKIT_DISABLE_DMABUF_RENDERER=1 llm-quota-desktop
+```
+
+The app now sets that itself on Linux. If a build still draws wrong, `WEBKIT_DISABLE_COMPOSITING_MODE=1`
+is the heavier fallback — it turns off accelerated compositing entirely.
+</details>
 
 > **The download is unsigned.** Code signing certificates are a recurring cost this project does
 > not carry, so the first launch is challenged: on Windows, SmartScreen says *unknown publisher* —
@@ -179,7 +195,8 @@ No runtime account, username, quota, or spend total is tied to the project autho
 - Opt-in Claude/Antigravity bridges cache only quota windows and reset times. They exclude account
   identity, transcripts and access tokens, and preserve an existing custom status line.
 - The token ledger scans the current user's local Codex, Claude Code, OpenCode, Kimi Code, pi,
-  Prime Agent and NikCLI history. Hermes keeps no local token record, so its spend cannot be counted.
+  Prime Agent, NikCLI and Antigravity history. Hermes keeps no local token record, so its spend
+  cannot be counted.
 - The optional contribution calendar queries the viewer authenticated by the official GitHub CLI.
   Run `gh auth login` to enable it; without `gh`, the local spend calendar continues to work.
 - A dashboard running on a custom local port passes its own origin to the widget automatically.
@@ -202,8 +219,9 @@ credentials, or real usage history.
 | **Kimi / Moonshot** | Card disabled | Kimi Code plan quota has no compliant machine-readable source; token spend still appears in the local ledger |
 
 Three provider cards ship today. OpenCode, pi, Prime Agent and NikCLI are ledger-only sources: they
-publish no plan quota, so they contribute local spend and no card. OpenCode's Zen
-gateway was dropped entirely, because the public endpoint exposes a model catalog rather than
+publish no plan quota, so they contribute local spend and no card. Antigravity does both — its
+status-line bridge feeds the Gemini card, and its conversation history feeds the ledger.
+OpenCode's Zen gateway was dropped entirely, because the public endpoint exposes a model catalog rather than
 numeric usage, limits or reset times. Kimi is disabled for the same reason: its official status line
 carries no quota, rate limit or subscription field, the plan windows behind `/usage` are reachable
 only with the Kimi Code CLI's own OAuth token, and the documented Open Platform balance is API credit
@@ -364,8 +382,8 @@ This is the point of the project, so it is worth being precise:
 - Provider logos are frozen in the repo deliberately: loading them from the provider — or from a
   favicon service, as an earlier version did — would tell a third party which AI subscriptions
   you hold, on every page load.
-- OAuth credential files belonging to Codex, Claude, Gemini, OpenCode, Kimi, pi, Prime Agent and
-  NikCLI are not read or modified. Only their session transcripts and local databases are scanned. User-supplied Open Platform keys are used only with their documented provider API.
+- OAuth credential files belonging to Codex, Claude, Gemini, OpenCode, Kimi, pi, Prime Agent,
+  NikCLI and Antigravity are not read or modified. Only their session transcripts and local databases are scanned. User-supplied Open Platform keys are used only with their documented provider API.
 
 ---
 

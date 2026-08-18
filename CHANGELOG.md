@@ -6,6 +6,161 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.3] — 2026-08-19
+
+### Fixed
+
+- **The update notice could not install the update it announced.** Application commands are allowed
+  for a local window by default and refused for a remote one — and the dashboard is remote, served
+  over loopback by the sidecar. The notice drew itself from the event it was allowed to hear and then
+  answered `Command install_update not allowed by ACL` when someone pressed the button. The three
+  commands are declared in `build.rs` and granted by name in the capability now, and a test fails if
+  one is granted without being declared.
+- **The Codex card reported a missing CLI as a broken one, in mojibake.** It let the shell find
+  `codex`, and the shell answers in the user's own language in the console's OEM code page: an
+  Italian Windows read `'codex' non � riconosciuto` on the card, and cmd exits 1 for that exactly as
+  it does for a Codex that started and crashed. The two need different instructions, so the
+  executable is resolved on PATH first — not installed and installed-but-failing are told apart
+  before either message is written.
+
+### Added
+
+- **MiniMax Coding Plan.** The adapter reads the plan's two rolling windows from the endpoint
+  MiniMax documents for the user's own API key, and ships **unregistered**: that endpoint currently
+  rejects bearer auth and demands a browser session cookie instead, which this project will not
+  lift. Unlike Kimi and Z.ai this is a vendor bug rather than a policy wall, so the card is one line
+  away the day a real key returns counters. MiniMax model prices are in the ledger now regardless,
+  so spend on M2, M2.1, M2.5, M2.7 and M3 is priced instead of counted as a hole.
+- **Terms assessments for Cursor and xAI** in `docs/research/provider-terms-assessment.md`. Cursor's
+  documented API is team-admin-only and reports team spend rather than a plan window; an individual
+  subscriber's remaining quota exists only behind a browser session. xAI publishes rate-limit
+  headers but documents neither them nor an endpoint to read them, so the only way to see them is to
+  pay for a model call — and they describe an API tier, not a subscription.
+
+### Fixed
+
+- **Two OpenAI models were priced above their list.** GPT-5.6 Terra was carried at 2.50/15.00 against
+  a published 2.00/12.00, and Luna at 1.00/6.00 against 0.20/1.20 — five times the real rate. Any
+  ledger with Codex sessions on those models has been reporting a total above what the API would
+  have charged. The rates now match the vendor's page, and a test pins them where the arithmetic is
+  read.
+
+### Added
+
+- **`bun run prices:check`** holds the price table against [models.dev](https://models.dev), an open
+  per-provider database, and reports what disagrees. The table's date was the only thing standing
+  between a vendor changing a rate and this ledger quietly being wrong; a date is a reminder, not a
+  check. The shipped app still reads no third-party catalogue — the comparison is a development-time
+  second opinion, and the vendor's own page decides. Its first run found both errors above.
+
+### Changed
+
+- **Every `any` in the source is gone**, and with it the last lint warning. The formats these
+  parsers read belong to other people's CLIs, so the shapes are now written down — optional fields,
+  `unknown` leaves, coerced by the readers that were already there. Nothing validates at runtime
+  that was not validating before; what changed is that the reading side is checked, and a field
+  this project invents for itself no longer typechecks.
+
+### Fixed
+
+- **The coverage check failed on whichever machine did not write the badge.** The shipped code
+  branches on platform, so Linux and Windows measure the same commit about a point apart and the
+  check demanded the exact figure. It now tolerates two points: enough for a platform, not for a
+  regression.
+- **An array body reset the saved ledger filter.** `PUT /api/usage-view` guarded with `typeof body
+  !== "object"`, and an array passes that: it reached the normalizer with no fields on it and the
+  stored source and agent filters were replaced by the defaults, for a body that was never a view.
+  Arrays are refused now, as they already were on the key route.
+
+## [0.6.2] — 2026-08-18
+
+### Added
+
+- **An rpm, so half of Linux stops being told to build from source.** Releases carried a deb and
+  nothing else. The bundler now produces `LLM.Quota-<version>-1.x86_64.rpm` beside it, and CI
+  installs it inside Fedora's own image — package name read from the package, the shell and the
+  sidecar asserted present, the server started from its installed path and required to answer on
+  4747, then removed and checked for leftovers. The widget's tests run on Fedora too, where Tk is
+  a separate package under a different name again.
+
+### Changed
+
+- **Coverage is measured and printed.** Nothing measured it before. With test files left out of
+  the count — they cover themselves, and counting them read 86% where the code under test reads
+  73% — CI now prints per-file line and function coverage on every run. No threshold: a
+  repository-wide minimum says nothing about the change that lowered it.
+
+## [0.6.1] — 2026-08-18
+
+### Fixed
+
+- **The update was announced by a Windows dialog.** A native message box, centred and
+  focus-stealing, in front of an app that looks like nothing else on the desktop — to say
+  something that is never urgent. The shell now hands the dashboard the offer and the page draws
+  it in its own type, colour and radius, bottom right, waiting rather than interrupting. The
+  dialog stays for the one case the page cannot cover: no window, or a window that has not
+  reached the dashboard yet.
+- **A sidecar could outlive the shell that spawned it.** The shell kills its server when it exits,
+  which covers the ordinary quit and nothing else: an update replaces the binary and restarts, a
+  crash never reaches the handler, and the orphan keeps port 4747 while answering with the version
+  that was replaced. The server now watches the process that started it and stops when it goes, and
+  a launch waits up to five seconds for the documented port before falling back — long enough for
+  an orphan to notice, short enough not to be a startup someone waits through.
+- **An update left the server it replaced running.** `restart` does not run the handler that kills
+  the sidecar, so the old one kept port 4747; the new app fell back to an ephemeral port and the
+  widget, the wezterm strip and anything else told 4747 went on reading the version the update had
+  just replaced — stale numbers, presented as current.
+- **A running app never noticed a release.** The update check ran once, in setup, and the code's own
+  comment said why that is not enough: this window is meant to be left open for weeks, so a release
+  published an hour after launch reached nobody who did not quit first. It now asks again every six
+  hours, and a version it has already offered is not offered a second time in the same run — the
+  recurring check must not turn "Not now" into the same dialog four times a day. Asking from the
+  tray still answers every time, because that is someone asking.
+
+## [0.6.0] — 2026-08-18
+
+### Added
+
+- **Antigravity history is counted.** The CLI that launches as `agy` keeps one SQLite file per
+  conversation under `~/.gemini/antigravity-cli/conversations`, and records each request as a
+  protobuf blob with no schema shipped alongside it — so its spend was missing from a ledger that
+  claims to total local CLI usage. A minimal wire-format reader now takes the model id, the effort
+  from the display label, the input, cache-read, output and thinking counters, and the request
+  timestamp. Gemini 3.1 Pro, 3.5 / 3.6 / 3.7 Flash and Claude Opus 4.6 list prices were added with
+  them; Antigravity routes several internal aliases at one published model, and those are resolved
+  so the rows price instead of landing in `unpricedModels`.
+
+### Fixed
+
+- **The per-file history cache could serve a stale ledger.** It keyed on the file it read, and every
+  Antigravity conversation on disk carries a write-ahead log: SQLite leaves the database itself
+  untouched until a checkpoint, so spend from a CLI that is still running would not have appeared
+  until it stopped. The cache now also watches the sidecar, whether it appears, changes or is
+  absorbed.
+
+## [0.5.1] — 2026-08-13
+
+### Fixed
+
+- **The Linux window drew nothing until the pointer moved over it**, and what appeared then was torn.
+  Nothing was wrong with the page: WebKitGTK's DMA-BUF renderer never hands over what it drew on a
+  large share of desktops — GNOME under Wayland and NVIDIA's driver especially — so only the regions
+  an input event invalidated ever reached the screen. The shell now turns that renderer off on Linux
+  before the webview starts, and leaves it alone if the environment already sets it. The cost is a
+  slower compositing path on a window that refreshes every few seconds; a window that draws
+  correctly and slowly beats one that draws quickly and wrong.
+- **The widget used fonts only Windows has.** Eleven call sites named `Cascadia Mono` and `Segoe UI`
+  directly, and Tk substitutes silently rather than raising — so on Linux and macOS it drew in
+  whatever the desktop picked. The provider rows are laid out in character widths, a measurement
+  that only means something in a monospaced face, so a proportional substitute put the numbers out
+  of line with their labels. Families are now chosen at startup from what is installed, Windows
+  names first so that machine is unchanged.
+- **The dashboard's Widget button did nothing on Linux and macOS.** The Linux desktop entry carried
+  `NoDisplay=true`, which hides it from the chooser the browser opens, and registration reported a
+  success it never verified. macOS registered nothing at all; it now builds a small AppleScript
+  launcher bundle, because a URL there arrives as an Apple Event rather than as arguments and
+  anything simpler loses the server the dashboard named.
+
 ## [0.5.0] — 2026-08-13
 
 ### Added
@@ -190,6 +345,11 @@ dashboard may read, and a card promising data that never arrives is worse than n
 
 Initial release: local-first live quota dashboard, CLI, and Windows widget.
 
+[0.6.3]: https://github.com/SandroHub013/llm-quota/compare/v0.6.2...v0.6.3
+[0.6.2]: https://github.com/SandroHub013/llm-quota/compare/v0.6.1...v0.6.2
+[0.6.1]: https://github.com/SandroHub013/llm-quota/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/SandroHub013/llm-quota/compare/v0.5.1...v0.6.0
+[0.5.1]: https://github.com/SandroHub013/llm-quota/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/SandroHub013/llm-quota/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/SandroHub013/llm-quota/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/SandroHub013/llm-quota/compare/v0.2.0...v0.3.0

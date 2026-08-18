@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { getProvider, providers } from "./providers/index.js";
+import { watchParent } from "./parent-watch.js";
 import { PUBLIC_ASSETS } from "./public-assets.generated.js";
 import { INDEX, mimeFor } from "./public-mime.js";
 import type { QuotaResult } from "./providers/types.js";
@@ -8,6 +9,7 @@ import { installOfficialBridge, removeOfficialBridge, type OfficialBridgeProvide
 import { collectUsage } from "./usage.js";
 import { normalizeUsageView, usageFiltersActive, usageHeadlineCosts } from "./usage-view.js";
 import { collectGitHubContributions } from "./github-contributions.prototype.js";
+import { reasonOf } from "./log.js";
 
 const app = new Hono();
 
@@ -83,14 +85,14 @@ async function fetchOne(id: string): Promise<QuotaResult> {
   const config = await readConfig();
   try {
     return await provider.fetch({ userKey: config.keys[id] });
-  } catch (error: any) {
+  } catch (error) {
     return {
       id: provider.id,
       name: provider.name,
       status: "error",
       consoleUrl: provider.consoleUrl,
       metrics: [],
-      message: `Internal error: ${String(error?.message ?? error)}`,
+      message: `Internal error: ${reasonOf(error)}`,
       updatedAt: new Date().toISOString(),
     };
   }
@@ -151,7 +153,12 @@ app.get("/api/usage-view", async (context) => {
 
 app.put("/api/usage-view", async (context) => {
   const body = await context.req.json<Record<string, unknown>>().catch(() => undefined);
-  if (body == null || typeof body !== "object") return context.json({ error: "invalid view" }, 400);
+  // Arrays are objects, and an array reached `normalizeUsageView` with no fields on it:
+  // the stored filter was replaced by the defaults, silently, for a body that was never
+  // a view. `/api/key` already refused them; this route did not.
+  if (body == null || typeof body !== "object" || Array.isArray(body)) {
+    return context.json({ error: "invalid view" }, 400);
+  }
   const view = normalizeUsageView(body);
   try {
     await updateConfig((config) => ({ ...config, usageView: view }));
@@ -214,8 +221,8 @@ app.post("/api/official-bridge/:id", async (context) => {
     await installOfficialBridge(id as OfficialBridgeProvider);
     quotaCache = undefined;
     return context.json(await fetchOne(id), 200, { "Cache-Control": "no-store" });
-  } catch (error: any) {
-    return context.json({ error: String(error?.message ?? error) }, 500);
+  } catch (error) {
+    return context.json({ error: reasonOf(error) }, 500);
   }
 });
 
@@ -230,8 +237,8 @@ app.delete("/api/official-bridge/:id", async (context) => {
     await removeOfficialBridge(id as OfficialBridgeProvider);
     quotaCache = undefined;
     return context.json(await fetchOne(id), 200, { "Cache-Control": "no-store" });
-  } catch (error: any) {
-    return context.json({ error: String(error?.message ?? error) }, 500);
+  } catch (error) {
+    return context.json({ error: reasonOf(error) }, 500);
   }
 });
 
@@ -256,6 +263,10 @@ app.get("/:a{.+}", async (context) => {
   const cache = relative.endsWith(".woff2") ? "public, max-age=31536000, immutable" : "no-cache";
   return context.body(body, 200, { "Content-Type": type, "Cache-Control": cache });
 });
+
+// Set by the desktop shell when it spawns this server. Without it — from source, or
+// from the CLI — there is no parent to outlive and nothing to watch.
+watchParent(Number(process.env.LLM_QUOTA_PARENT_PID) || undefined);
 
 const port = Number(process.env.PORT ?? 4747);
 console.log(`\n  LLM Quota → http://localhost:${port}\n`);

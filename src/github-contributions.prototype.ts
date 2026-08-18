@@ -83,6 +83,42 @@ query LlmQuotaContributionCalendar {
 }
 `;
 
+/**
+ * The slice of GitHub's GraphQL contributions response this reads. Leaves are `unknown`
+ * where they are coerced anyway — the `gh` CLI owns the schema, and a field that changes
+ * type should cost a number rather than the whole calendar.
+ */
+interface GraphQLResponse {
+  data?: {
+    viewer?: {
+      login?: string;
+      name?: string;
+      url?: string;
+      contributionsCollection?: {
+        startedAt?: unknown;
+        endedAt?: unknown;
+        totalCommitContributions?: unknown;
+        totalPullRequestContributions?: unknown;
+        totalPullRequestReviewContributions?: unknown;
+        totalIssueContributions?: unknown;
+        restrictedContributionsCount?: unknown;
+        contributionCalendar?: {
+          totalContributions?: unknown;
+          weeks?: { firstDay?: unknown; contributionDays?: GraphQLDay[] }[];
+          months?: { firstDay?: unknown; name?: unknown; totalWeeks?: unknown; year?: unknown }[];
+        };
+      };
+    };
+  };
+}
+
+interface GraphQLDay {
+  date?: unknown;
+  contributionCount?: unknown;
+  contributionLevel?: unknown;
+  weekday?: unknown;
+}
+
 const LEVELS: Record<string, GitHubContributionDay["level"]> = {
   NONE: 0,
   FIRST_QUARTILE: 1,
@@ -127,15 +163,15 @@ async function queryGitHub(): Promise<GitHubContributionsResult> {
     ]);
     if (exitCode !== 0) throw new Error("gh_failed");
 
-    const response = JSON.parse(stdout);
+    const response = JSON.parse(stdout) as GraphQLResponse;
     const viewer = response?.data?.viewer;
     const collection = viewer?.contributionsCollection;
     const calendar = collection?.contributionCalendar;
-    if (!viewer?.login || !calendar?.weeks) throw new Error("invalid_github_response");
+    if (!viewer?.login || !collection || !calendar?.weeks) throw new Error("invalid_github_response");
 
-    const weeks: GitHubContributionWeek[] = calendar.weeks.map((week: any) => ({
+    const weeks: GitHubContributionWeek[] = calendar.weeks.map((week) => ({
       firstDay: String(week.firstDay),
-      days: (week.contributionDays ?? []).map((day: any) => ({
+      days: (week.contributionDays ?? []).map((day) => ({
         date: String(day.date),
         count: Math.max(0, Number(day.contributionCount) || 0),
         level: LEVELS[String(day.contributionLevel)] ?? 0,
@@ -168,7 +204,7 @@ async function queryGitHub(): Promise<GitHubContributionsResult> {
         issues: Math.max(0, Number(collection.totalIssueContributions) || 0),
         restricted: Math.max(0, Number(collection.restrictedContributionsCount) || 0),
       },
-      months: (calendar.months ?? []).map((month: any) => ({
+      months: (calendar.months ?? []).map((month) => ({
         firstDay: String(month.firstDay),
         name: String(month.name),
         totalWeeks: Math.max(0, Number(month.totalWeeks) || 0),

@@ -12,6 +12,16 @@ import { nowIso } from "./util.js";
 const CONSOLE = "https://claude.ai/settings/usage";
 const FRESH_MS = 15 * 60_000;
 
+/**
+ * What the card says under a live bridge: an exhausted window explains itself, a stale
+ * snapshot says how to refresh it, and a healthy one says nothing at all.
+ */
+function bridgeMessage(exhausted: boolean, stale: boolean): string | undefined {
+  if (exhausted) return "Claude reports an exhausted quota window. The card will recover after its official reset.";
+  if (stale) return "This snapshot is old. Send a message in Claude Code: the status line publishes with the reply.";
+  return undefined;
+}
+
 export const claude: Provider = {
   id: "claude",
   name: "Claude Code",
@@ -64,11 +74,7 @@ export async function fetchClaudeQuota(home = homedir()): Promise<QuotaResult> {
       metrics,
       teardownUrl: installed ? "/api/official-bridge/claude" : undefined,
       teardownLabel: installed ? "Disable bridge" : undefined,
-      message: exhausted
-        ? "Claude reports an exhausted quota window. The card will recover after its official reset."
-        : stale
-          ? "Last official update is stale. Use Claude Code once to refresh the quota snapshot."
-          : undefined,
+      message: bridgeMessage(exhausted, stale),
     };
   }
 
@@ -79,13 +85,21 @@ export async function fetchClaudeQuota(home = homedir()): Promise<QuotaResult> {
     teardownUrl: installed ? "/api/official-bridge/claude" : undefined,
     teardownLabel: installed ? "Disable bridge" : undefined,
     message: installed
-      ? "Bridge installed. Use Claude Code once; quota appears after its first API response."
+      ? "Bridge installed. Now send one message in Claude Code — opening it is not enough, because the status line publishes the quota along with a reply."
       : "Enable the official local bridge to receive 5-hour and 7-day quota without reading Claude OAuth.",
   };
 }
 
+/** One rolling window as the Claude Code status line writes it. */
+interface ClaudeWindow {
+  used_percentage?: unknown;
+  resets_at?: unknown;
+}
+
+type ClaudeWindowKey = "five_hour" | "seven_day";
+
 export function parseBridgeUsage(snapshot?: OfficialBridgeSnapshot): QuotaMetric[] {
-  const limits = snapshot?.data?.rateLimits;
+  const limits = snapshot?.data?.rateLimits as Partial<Record<ClaudeWindowKey, ClaudeWindow>> | undefined;
   if (!limits || typeof limits !== "object") return [];
   const definitions = [
     ["five_hour", "Session (5h)"],

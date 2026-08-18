@@ -92,6 +92,9 @@ test("Windows ships an MSI rather than an NSIS installer", async () => {
   const bundle = JSON.parse(await read("src-tauri/tauri.conf.json")).bundle;
   expect(bundle.targets).toContain("msi");
   expect(bundle.targets).not.toContain("nsis");
+  // Both Linux families, because a release with only a deb tells half of Linux to
+  // build from source. The rpm is verified against Fedora itself in CI.
+  expect(bundle.targets).toEqual(expect.arrayContaining(["deb", "rpm"]));
   expect(bundle.windows.webviewInstallMode.type).toBe("embedBootstrapper");
 });
 
@@ -104,6 +107,55 @@ test("Windows ships an MSI rather than an NSIS installer", async () => {
  * The endpoint is pinned to `releases/latest/download` rather than a tag, because the
  * app asks the same URL forever and the release is what moves.
  */
+/**
+ * The dashboard is a remote page — the sidecar serves it over loopback — and a remote
+ * page reaches no Tauri API at all unless a capability names its origin. The update
+ * notice needs exactly one channel through, so this pins how far that opening goes: the
+ * loopback origins the shell itself started, the event permission the notice listens on,
+ * and nothing that would let a page reach the sidecar, the tray or autostart.
+ */
+test("the page is granted the update channel and nothing else", async () => {
+  const config = JSON.parse(await read("src-tauri/tauri.conf.json"));
+  expect(config.app.withGlobalTauri).toBe(true);
+  expect(config.app.security.capabilities).toEqual(["default", "update-notice"]);
+
+  const capability = JSON.parse(await read("src-tauri/capabilities/update-notice.json"));
+  expect(capability.windows).toEqual(["main"]);
+  expect(capability.remote.urls).toEqual(["http://localhost:*", "http://127.0.0.1:*"]);
+  // Application commands are allowed for a local window by default and refused for a
+  // remote one, so each is declared in build.rs and granted here by name. Without them
+  // the notice draws itself and then answers "not allowed by ACL" when pressed.
+  expect(capability.permissions).toEqual([
+    "core:event:default",
+    "allow-pending-update",
+    "allow-install-update",
+    "allow-open-release-page",
+  ]);
+
+  const build = await read("src-tauri/build.rs");
+  for (const command of ["pending_update", "install_update", "open_release_page"]) {
+    expect(build, `${command} is granted but never declared`).toContain(`"${command}"`);
+  }
+
+  // The three commands behind it are the app's own, and every one is about an update.
+  const shell = await read("src-tauri/src/lib.rs");
+  expect(shell).toContain("tauri::generate_handler![pending_update, install_update, open_release_page]");
+});
+
+/**
+ * `restart` does not run the `RunEvent::Exit` handler that kills the sidecar, and a
+ * server that outlives the update keeps port 4747. The next launch then falls back to
+ * an ephemeral port while the widget, the wezterm strip and the CLI keep reading the
+ * version the update replaced — stale numbers, presented as current.
+ */
+test("the update kills the server it is replacing before restarting", async () => {
+  const shell = await read("src-tauri/src/lib.rs");
+  const install = shell.slice(shell.indexOf("async fn install_update"), shell.indexOf("fn open_release_page"));
+
+  expect(install).toContain("child.kill()");
+  expect(install.indexOf("child.kill()")).toBeLessThan(install.indexOf("app.restart()"));
+});
+
 test("the updater has artifacts, a public key and somewhere to look", async () => {
   const config = JSON.parse(await read("src-tauri/tauri.conf.json"));
 

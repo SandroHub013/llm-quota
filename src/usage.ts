@@ -6,7 +6,15 @@ import { createInterface } from "node:readline";
 
 import { reasonOf, warn, warnOnce } from "./log.js";
 
-export type UsageSourceId = "codex" | "claude" | "opencode" | "kimi" | "pi" | "prime" | "nikcli";
+export type UsageSourceId =
+  | "codex"
+  | "claude"
+  | "opencode"
+  | "kimi"
+  | "pi"
+  | "prime"
+  | "nikcli"
+  | "antigravity";
 export type AgentKind = "main" | "subagent";
 
 export interface TokenUsage {
@@ -94,6 +102,112 @@ export interface RawUsageRow {
   recordedAt?: string;
 }
 
+/**
+ * The shapes these logs carry, as far as this file reads them.
+ *
+ * Every field is optional and every leaf is `unknown`, which is the honest description:
+ * the formats belong to other people's CLIs and can change without telling anyone. The
+ * readers below coerce (`number`, `isoTimestamp`, `String`), so a field that changes
+ * type costs one row rather than the scan. These are documentation the compiler checks
+ * the reading side of, not validation of the writing side.
+ */
+interface CodexTokenUsage {
+  input_tokens?: unknown;
+  cached_input_tokens?: unknown;
+  cache_write_input_tokens?: unknown;
+  output_tokens?: unknown;
+  reasoning_output_tokens?: unknown;
+}
+
+interface CodexPayload {
+  type?: unknown;
+  session_id?: unknown;
+  id?: unknown;
+  model?: unknown;
+  effort?: unknown;
+  thread_source?: unknown;
+  source?: { subagent?: unknown };
+  info?: { total_token_usage?: CodexTokenUsage };
+}
+
+interface CodexRecord extends TimestampedRecord {
+  type?: unknown;
+  payload?: CodexPayload;
+}
+
+interface ClaudeUsage {
+  input_tokens?: unknown;
+  cache_read_input_tokens?: unknown;
+  cache_creation_input_tokens?: unknown;
+  cache_creation?: { ephemeral_5m_input_tokens?: unknown; ephemeral_1h_input_tokens?: unknown };
+  output_tokens?: unknown;
+  reasoning_tokens?: unknown;
+  thinking_tokens?: unknown;
+  speed?: unknown;
+}
+
+interface ClaudeRecord extends TimestampedRecord {
+  type?: unknown;
+  effort?: unknown;
+  isSidechain?: unknown;
+  agentId?: unknown;
+  message?: { id?: unknown; model?: unknown; usage?: ClaudeUsage };
+}
+
+interface KimiUsage {
+  input?: unknown;
+  inputOther?: unknown;
+  inputCacheRead?: unknown;
+  inputCacheCreation?: unknown;
+  output?: unknown;
+  outputReasoning?: unknown;
+  reasoning?: unknown;
+}
+
+interface KimiRecord extends TimestampedRecord {
+  type?: unknown;
+  model?: unknown;
+  modelAlias?: unknown;
+  thinkingEffort?: unknown;
+  usage?: KimiUsage;
+}
+
+interface PiUsage {
+  input?: unknown;
+  cacheRead?: unknown;
+  cacheWrite?: unknown;
+  output?: unknown;
+  reasoning?: unknown;
+  cost?: { total?: unknown };
+}
+
+interface PiRecord extends TimestampedRecord {
+  type?: unknown;
+  parentSession?: unknown;
+  rlmDepth?: unknown;
+  modelId?: unknown;
+  thinkingLevel?: unknown;
+  message?: { role?: unknown; model?: unknown; usage?: PiUsage };
+}
+
+interface NikcliInfo {
+  modelID?: unknown;
+  cost?: unknown;
+  time?: { created?: unknown };
+  tokens?: {
+    input?: unknown;
+    output?: unknown;
+    reasoning?: unknown;
+    cache?: { read?: unknown; write?: unknown };
+  };
+}
+
+/** OpenCode keeps the model id and its variant as JSON inside one column. */
+interface OpenCodeModel {
+  id?: unknown;
+  variant?: unknown;
+}
+
 interface ClaudeMessage {
   id: string;
   row: RawUsageRow;
@@ -115,6 +229,13 @@ interface Price {
 interface FileCacheEntry<T> {
   size: number;
   mtimeMs: number;
+  /**
+   * Stat of a sidecar whose change means the file's content changed even though the file
+   * itself did not: SQLite in WAL mode leaves the database untouched until a checkpoint,
+   * so a scan keyed on the database alone would serve a stale ledger for as long as the
+   * CLI keeps writing.
+   */
+  sidecar?: string;
   value: T;
 }
 
@@ -129,6 +250,7 @@ export interface UsagePaths {
   /** Prime keeps delegated subagent transcripts outside its session directory. */
   primeArtifacts?: string;
   nikcliDb: string;
+  antigravity: string;
 }
 
 const SOURCE_NAMES: Record<UsageSourceId, string> = {
@@ -139,6 +261,7 @@ const SOURCE_NAMES: Record<UsageSourceId, string> = {
   pi: "pi",
   prime: "Prime Agent",
   nikcli: "NikCLI",
+  antigravity: "Antigravity",
 };
 
 /** Every ledger source, so the shared view filter cannot drift from the scanner. */
@@ -146,12 +269,13 @@ export const USAGE_SOURCE_IDS = Object.keys(SOURCE_NAMES) as UsageSourceId[];
 
 // Public API list prices in USD per million tokens, checked 2026-08-02.
 // Sources: developers.openai.com/api/docs/models, platform.claude.com/docs/en/about-claude/pricing,
-// docs.z.ai/guides/overview/pricing, and platform.kimi.ai/docs/pricing/chat.
+// docs.z.ai/guides/overview/pricing, platform.kimi.ai/docs/pricing/chat and
+// ai.google.dev/gemini-api/docs/pricing.
 // Reasoning tokens are included in output tokens by every supported log format.
 const PRICES: Record<string, Price> = {
   "gpt-5.6-sol": { input: 5, cacheRead: 0.5, cacheWrite: 6.25, output: 30 },
-  "gpt-5.6-terra": { input: 2.5, cacheRead: 0.25, cacheWrite: 3.125, output: 15 },
-  "gpt-5.6-luna": { input: 1, cacheRead: 0.1, cacheWrite: 1.25, output: 6 },
+  "gpt-5.6-terra": { input: 2, cacheRead: 0.2, cacheWrite: 2.5, output: 12 },
+  "gpt-5.6-luna": { input: 0.2, cacheRead: 0.02, cacheWrite: 0.25, output: 1.2 },
   "gpt-5.5": { input: 5, cacheRead: 0.5, cacheWrite: 5, output: 30 },
 
   "claude-fable-5": { input: 10, cacheRead: 1, cacheWrite: 12.5, cacheWrite1h: 20, output: 50 },
@@ -161,6 +285,7 @@ const PRICES: Record<string, Price> = {
   // Introductory price through 2026-08-31.
   "claude-sonnet-5": { input: 2, cacheRead: 0.2, cacheWrite: 2.5, cacheWrite1h: 4, output: 10 },
   "claude-sonnet-4-6": { input: 3, cacheRead: 0.3, cacheWrite: 3.75, cacheWrite1h: 6, output: 15 },
+  "claude-opus-4-6": { input: 5, cacheRead: 0.5, cacheWrite: 6.25, cacheWrite1h: 10, output: 25 },
   "claude-sonnet-4-5": { input: 3, cacheRead: 0.3, cacheWrite: 3.75, cacheWrite1h: 6, output: 15 },
   "claude-haiku-4-5": { input: 1, cacheRead: 0.1, cacheWrite: 1.25, cacheWrite1h: 2, output: 5 },
 
@@ -171,13 +296,45 @@ const PRICES: Record<string, Price> = {
   "glm-4.7": { input: 0.6, cacheRead: 0.11, cacheWrite: 0.6, output: 2.2 },
   "glm-4.5-air": { input: 0.2, cacheRead: 0.03, cacheWrite: 0.2, output: 1.1 },
 
+  // Google bills no per-token cache write: implicit caching is free and explicit caching
+  // is charged by storage time, so the cache write column stays at the input price and
+  // the Antigravity records never fill it. Flash 3.6 and 3.7 are on the promotional
+  // rate that runs to 2026-12-31.
+  "gemini-3.7-flash": { input: 0.75, cacheRead: 0.075, cacheWrite: 0.75, output: 3.75 },
+  "gemini-3.6-flash": { input: 0.75, cacheRead: 0.075, cacheWrite: 0.75, output: 3.75 },
+  "gemini-3.5-flash": { input: 1.5, cacheRead: 0.15, cacheWrite: 1.5, output: 9 },
+  // The tier for prompts up to 200k tokens. Above it Google doubles every rate, and the
+  // local record carries no per-request context size, so long prompts price low here.
+  "gemini-3.1-pro": { input: 2, cacheRead: 0.2, cacheWrite: 2, output: 12 },
+
+  // MiniMax bills the API by token even where the Coding Plan covers the same models, so
+  // these are what that spend would have cost through the API — which is what this ledger
+  // reports. Highspeed is the same model on a faster tier at twice the rate.
+  "minimax-m2.7": { input: 0.3, cacheRead: 0.06, cacheWrite: 0.375, output: 1.2 },
+  "minimax-m2.7-highspeed": { input: 0.6, cacheRead: 0.06, cacheWrite: 0.375, output: 2.4 },
+  "minimax-m2.5": { input: 0.3, cacheRead: 0.03, cacheWrite: 0.375, output: 1.2 },
+  "minimax-m2.5-highspeed": { input: 0.6, cacheRead: 0.06, cacheWrite: 0.375, output: 2.4 },
+  "minimax-m2.1": { input: 0.3, cacheRead: 0.03, cacheWrite: 0.375, output: 1.2 },
+  // M2 and M3 have no published cached-input rate, so cache reads are priced at the input
+  // rate: an undocumented discount invented here would quietly understate the total.
+  "minimax-m2": { input: 0.3, cacheRead: 0.3, cacheWrite: 0.3, output: 1.2 },
+  // The tier below 200k tokens of context; above it MiniMax doubles every rate.
+  "minimax-m3": { input: 0.3, cacheRead: 0.06, cacheWrite: 0.3, output: 1.2 },
+
   "kimi-k3": { input: 3, cacheRead: 0.3, cacheWrite: 3, output: 15 },
   "kimi-k2.7-code": { input: 0.95, cacheRead: 0.19, cacheWrite: 0.95, output: 4 },
   "kimi-k2.7-code-highspeed": { input: 1.9, cacheRead: 0.38, cacheWrite: 1.9, output: 8 },
 };
 
+/**
+ * Exported for `scripts/prices-check.ts`, which holds this list against models.dev and
+ * reports what disagrees. Nothing in the shipped app reads a third-party catalogue: the
+ * check is a development-time second opinion, and the vendor's own page decides.
+ */
+export const PRICES_FOR_AUDIT: Record<string, Price> = PRICES;
+
 const USD_PER_EUR = 1.1485;
-const PRICING_AS_OF = "2026-08-02";
+export const PRICING_AS_OF = "2026-08-02";
 const FX_AS_OF = "2026-07-31";
 
 const codexCache = new Map<string, FileCacheEntry<CodexFileUsage>>();
@@ -185,6 +342,7 @@ const claudeCache = new Map<string, FileCacheEntry<ClaudeMessage[]>>();
 const kimiCache = new Map<string, FileCacheEntry<RawUsageRow[]>>();
 const piCache = new Map<string, FileCacheEntry<RawUsageRow[]>>();
 const primeCache = new Map<string, FileCacheEntry<RawUsageRow[]>>();
+const antigravityCache = new Map<string, FileCacheEntry<RawUsageRow[]>>();
 
 const emptyTokens = (): TokenUsage => ({
   input: 0,
@@ -214,7 +372,15 @@ const isoTimestamp = (value: unknown): string | undefined => {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 };
 
-const recordTimestamp = (record: any): string | undefined =>
+/** The four names these logs give the same field. */
+interface TimestampedRecord {
+  timestamp?: unknown;
+  time?: unknown;
+  created_at?: unknown;
+  createdAt?: unknown;
+}
+
+const recordTimestamp = (record: TimestampedRecord | undefined): string | undefined =>
   isoTimestamp(record?.timestamp ?? record?.time ?? record?.created_at ?? record?.createdAt);
 
 const totalOf = (row: Pick<RawUsageRow, "input" | "cacheRead" | "cacheWrite" | "output">) =>
@@ -283,6 +449,7 @@ const displayModel = (model: string): string => {
     "claude-opus-4-7": "Claude Opus 4.7",
     "claude-sonnet-5": "Claude Sonnet 5",
     "claude-sonnet-4-6": "Claude Sonnet 4.6",
+    "claude-opus-4-6": "Claude Opus 4.6",
     "claude-sonnet-4-5": "Claude Sonnet 4.5",
     "claude-haiku-4-5": "Claude Haiku 4.5",
     "glm-5.2": "GLM-5.2",
@@ -291,6 +458,17 @@ const displayModel = (model: string): string => {
     "glm-5-turbo": "GLM-5 Turbo",
     "glm-4.7": "GLM-4.7",
     "glm-4.5-air": "GLM-4.5 Air",
+    "gemini-3.7-flash": "Gemini 3.7 Flash",
+    "gemini-3.6-flash": "Gemini 3.6 Flash",
+    "gemini-3.5-flash": "Gemini 3.5 Flash",
+    "gemini-3.1-pro": "Gemini 3.1 Pro",
+    "minimax-m3": "MiniMax M3",
+    "minimax-m2.7": "MiniMax M2.7",
+    "minimax-m2.7-highspeed": "MiniMax M2.7 Highspeed",
+    "minimax-m2.5": "MiniMax M2.5",
+    "minimax-m2.5-highspeed": "MiniMax M2.5 Highspeed",
+    "minimax-m2.1": "MiniMax M2.1",
+    "minimax-m2": "MiniMax M2",
     "kimi-k3": "Kimi K3",
     "kimi-k2.7-code": "Kimi K2.7 Code",
     "kimi-k2.7-code-highspeed": "Kimi K2.7 Code Highspeed",
@@ -374,6 +552,7 @@ async function cachedFile<T>(
   cache: Map<string, FileCacheEntry<T>>,
   path: string,
   read: () => Promise<T>,
+  sidecar?: string,
 ): Promise<T | undefined> {
   let info: Awaited<ReturnType<typeof stat>>;
   try {
@@ -383,8 +562,18 @@ async function cachedFile<T>(
     if (vanished(error)) return undefined;
     throw new Error(`unreadable_history_file: ${path}`, { cause: error });
   }
+  // A sidecar that is absent is a state of its own: it is there while the CLI writes and
+  // gone once the database has absorbed it, and both must invalidate what was cached.
+  const stamp = sidecar
+    ? await stat(sidecar).then((info) => `${info.size}:${info.mtimeMs}`).catch(() => "none")
+    : undefined;
   const cached = cache.get(path);
-  if (cached && cached.size === info.size && cached.mtimeMs === info.mtimeMs) return cached.value;
+  if (
+    cached && cached.size === info.size && cached.mtimeMs === info.mtimeMs &&
+    cached.sidecar === stamp
+  ) {
+    return cached.value;
+  }
   let value: T;
   try {
     value = await read();
@@ -393,7 +582,7 @@ async function cachedFile<T>(
     if (vanished(error)) return undefined;
     throw new Error(`unreadable_history_file: ${path}`, { cause: error });
   }
-  cache.set(path, { size: info.size, mtimeMs: info.mtimeMs, value });
+  cache.set(path, { size: info.size, mtimeMs: info.mtimeMs, sidecar: stamp, value });
   return value;
 }
 
@@ -427,7 +616,7 @@ const rawRow = (
   reasoning: 0,
 });
 
-function codexAgent(payload: any): AgentKind {
+function codexAgent(payload: CodexPayload | undefined): AgentKind {
   return payload?.thread_source === "subagent" || payload?.source?.subagent ? "subagent" : "main";
 }
 
@@ -443,9 +632,9 @@ export function parseCodexRecords(records: string[], fallbackId = "session"): Co
     if (!line.includes('"session_meta"') && !line.includes('"turn_context"') && !line.includes('"token_count"')) {
       continue;
     }
-    let record: any;
+    let record: CodexRecord;
     try {
-      record = JSON.parse(line);
+      record = JSON.parse(line) as CodexRecord;
     } catch (error) {
       // Deliberate: a session log is appended to while it is being read, so its last
       // line is routinely half-written. Dropping the whole file over one truncated
@@ -512,9 +701,9 @@ export function parseClaudeRecords(records: string[], subagentFile = false): Cla
   const messages = new Map<string, RawUsageRow>();
   for (const line of records) {
     if (!line.includes('"assistant"') || !line.includes('"usage"')) continue;
-    let record: any;
+    let record: ClaudeRecord;
     try {
-      record = JSON.parse(line);
+      record = JSON.parse(line) as ClaudeRecord;
     } catch (error) {
       // Deliberate: a session log is appended to while it is being read, so its last
       // line is routinely half-written. Dropping the whole file over one truncated
@@ -567,9 +756,9 @@ export function parseKimiRecords(records: string[], agent: AgentKind = "main"): 
   const rows: RawUsageRow[] = [];
   for (const line of records) {
     if (!line.includes('"llm.request"') && !line.includes('"usage.record"')) continue;
-    let record: any;
+    let record: KimiRecord;
     try {
-      record = JSON.parse(line);
+      record = JSON.parse(line) as KimiRecord;
     } catch (error) {
       // Deliberate: a session log is appended to while it is being read, so its last
       // line is routinely half-written. Dropping the whole file over one truncated
@@ -623,9 +812,9 @@ export function parsePiRecords(
   let kind = agent;
   const rows: RawUsageRow[] = [];
   for (const line of records) {
-    let record: any;
+    let record: PiRecord;
     try {
-      record = JSON.parse(line);
+      record = JSON.parse(line) as PiRecord;
     } catch (error) {
       // Deliberate: a session log is appended to while it is being read, so its last
       // line is routinely half-written. Dropping the whole file over one truncated
@@ -699,9 +888,9 @@ async function scanNikcli(path: string): Promise<RawUsageRow[]> {
 
     const rows: RawUsageRow[] = [];
     for (const message of messages) {
-      let info: any;
+      let info: NikcliInfo;
       try {
-        info = JSON.parse(String(message.info ?? "{}"));
+        info = JSON.parse(String(message.info ?? "{}")) as NikcliInfo;
       } catch (error) {
         // Deliberate: one unparseable `info` blob costs one message, not the database.
         warnOnce("parse:nikcli", "skipping a NikCLI message with an unreadable info blob", error);
@@ -732,6 +921,171 @@ async function scanNikcli(path: string): Promise<RawUsageRow[]> {
   }
 }
 
+/**
+ * Antigravity — the CLI launched as `agy` — writes one SQLite file per conversation and
+ * keeps the per-request record as a schemaless protobuf blob. No `.proto` ships with the
+ * CLI, so the reader below walks wire types alone and reads the fields that were stable
+ * across every conversation on disk: the model id, the display label carrying the effort,
+ * the token counters and the request timestamp. An unknown field is skipped, and
+ * a blob that stops making sense ends that record rather than the scan.
+ */
+interface ProtoField {
+  field: number;
+  varint?: number;
+  bytes?: Uint8Array;
+}
+
+/** Returns the value and the offset just past it, or undefined on a truncated varint. */
+function readVarint(buffer: Uint8Array, at: number): { value: number; next: number } | undefined {
+  let value = 0;
+  let shift = 1;
+  for (let index = at; index < buffer.length && index - at < 10; index += 1) {
+    const byte = buffer[index]!;
+    // Multiplied rather than shifted: a 10-byte varint overflows a 32-bit shift.
+    value += (byte & 0x7f) * shift;
+    if ((byte & 0x80) === 0) return { value, next: index + 1 };
+    shift *= 128;
+  }
+  return undefined;
+}
+
+function* protoFields(buffer: Uint8Array): Generator<ProtoField> {
+  let at = 0;
+  while (at < buffer.length) {
+    const key = readVarint(buffer, at);
+    if (!key) return;
+    at = key.next;
+    const field = Math.floor(key.value / 8);
+    switch (key.value % 8) {
+      case 0: {
+        const value = readVarint(buffer, at);
+        if (!value) return;
+        at = value.next;
+        yield { field, varint: value.value };
+        break;
+      }
+      case 1:
+        at += 8;
+        break;
+      case 2: {
+        const length = readVarint(buffer, at);
+        if (!length) return;
+        const end = length.next + length.value;
+        if (end > buffer.length) return;
+        yield { field, bytes: buffer.subarray(length.next, end) };
+        at = end;
+        break;
+      }
+      case 5:
+        at += 4;
+        break;
+      default:
+        return;
+    }
+  }
+}
+
+/** First occurrence only: the records repeat their counters, they never split them. */
+const protoBytes = (buffer: Uint8Array, field: number): Uint8Array | undefined => {
+  for (const entry of protoFields(buffer)) {
+    if (entry.field === field && entry.bytes) return entry.bytes;
+  }
+  return undefined;
+};
+
+const protoVarint = (buffer: Uint8Array, field: number): number => {
+  for (const entry of protoFields(buffer)) {
+    if (entry.field === field && entry.varint != null) return entry.varint;
+  }
+  return 0;
+};
+
+const protoText = (buffer: Uint8Array, field: number): string => {
+  const bytes = protoBytes(buffer, field);
+  return bytes ? new TextDecoder().decode(bytes) : "";
+};
+
+/**
+ * Antigravity routes several internal ids at one published model: the A/B aliases of
+ * Gemini 3.5 Flash, and a `-low` and a `-default` entry for Gemini 3.1 Pro that differ
+ * only in effort, which the label already carries.
+ */
+const ANTIGRAVITY_MODELS: Record<string, string> = {
+  "gemini-3-flash-a": "gemini-3.5-flash",
+  "gemini-3-flash-e": "gemini-3.5-flash",
+  "gemini-pro-default": "gemini-3.1-pro",
+  "gemini-3.1-pro-low": "gemini-3.1-pro",
+  "claude-opus-4-6-thinking": "claude-opus-4-6",
+};
+
+const antigravityModel = (id: string, label: string): string => {
+  const known = ANTIGRAVITY_MODELS[id];
+  if (known) return known;
+  if (id) return id;
+  // A handful of records lose the model id but keep the label they were shown under.
+  const name = label.replace(/\s*\([^)]*\)\s*$/, "").trim().toLowerCase().replace(/\s+/g, "-");
+  return name.startsWith("claude-") ? name.replace(/\./g, "-") : name;
+};
+
+/** `Gemini 3.7 Flash (Medium)` — the parenthesis is the effort the request ran at. */
+const antigravityEffort = (label: string): string =>
+  label.match(/\(([^)]+)\)\s*$/)?.[1]?.toLowerCase() ?? "default";
+
+/** bun:sqlite hands a blob back as bytes or as a buffer depending on how it was stored. */
+function asBytes(value: unknown): Uint8Array | undefined {
+  if (value instanceof Uint8Array) return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  return undefined;
+}
+
+async function scanAntigravity(path: string): Promise<RawUsageRow[]> {
+  if (typeof Bun === "undefined") return [];
+  const { Database } = await import("bun:sqlite");
+  const db = new Database(path, { readonly: true });
+  try {
+    const present = db.query(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'gen_metadata'",
+    ).get();
+    // A conversation the CLI created but never sent a request through has no such table.
+    if (!present) return [];
+
+    const rows: RawUsageRow[] = [];
+    for (const record of db.query("SELECT data FROM gen_metadata").all() as { data: unknown }[]) {
+      const blob = asBytes(record.data);
+      if (!blob?.length) continue;
+      const generation = protoBytes(blob, 1);
+      const usage = generation && protoBytes(generation, 4);
+      if (!generation || !usage) continue;
+
+      const label = protoText(generation, 21);
+      const row = rawRow(
+        "antigravity",
+        antigravityModel(protoText(generation, 19), label),
+        antigravityEffort(label),
+        "main",
+      );
+      row.calls = 1;
+      row.input = number(protoVarint(usage, 2));
+      row.output = number(protoVarint(usage, 3));
+      row.cacheRead = number(protoVarint(usage, 5));
+      // Fields 9 and 10 split the output into its thinking and its visible half and sum
+      // back to field 3, so reasoning stays the subset of output it is everywhere else.
+      row.reasoning = number(protoVarint(usage, 9));
+      // A cancelled request still leaves a record behind, with every counter at zero.
+      if (totalOf(row) === 0) continue;
+
+      const request = protoBytes(generation, 9);
+      const stamp = request && protoBytes(request, 4);
+      const recordedAt = stamp && isoTimestamp(protoVarint(stamp, 1));
+      if (recordedAt) row.recordedAt = recordedAt;
+      rows.push(row);
+    }
+    return rows;
+  } finally {
+    db.close();
+  }
+}
+
 async function scanOpenCode(path: string): Promise<RawUsageRow[]> {
   if (!existsSync(path) || typeof Bun === "undefined") return [];
   const { Database } = await import("bun:sqlite");
@@ -743,9 +1097,9 @@ async function scanOpenCode(path: string): Promise<RawUsageRow[]> {
       FROM session
     `).all() as Record<string, unknown>[];
     return sessions.map((session) => {
-      let metadata: any = {};
+      let metadata: OpenCodeModel = {};
       try {
-        metadata = JSON.parse(String(session.model ?? "{}"));
+        metadata = JSON.parse(String(session.model ?? "{}")) as OpenCodeModel;
       } catch (error) {
         // Deliberate: only the model name and variant live in this column. Losing them
         // costs the row its label and its list price, while the token counts — which
@@ -841,7 +1195,10 @@ function summarizeDailyUsage(raw: RawUsageRow[]): DailyUsage[] {
     pricingCoveragePct: day.tokens.total
       ? Math.round(day.pricedTokens / day.tokens.total * 1000) / 10
       : 0,
-    sources: [...day.sources].sort(),
+    // Both of these lists are read by a person — a day's sources in the calendar
+    // tooltip, the unpriced models under the total — so they are ordered the way names
+    // are ordered rather than by code point, which puts every capital first.
+    sources: [...day.sources].sort((a, b) => a.localeCompare(b)),
   }));
 }
 
@@ -913,7 +1270,7 @@ export function summarizeUsageRows(
     rows,
     daily: summarizeDailyUsage(raw),
     sources,
-    unpricedModels: [...unpriced].sort(),
+    unpricedModels: [...unpriced].sort((a, b) => a.localeCompare(b)),
     generatedAt: new Date().toISOString(),
     pricing: {
       kind: "api_equivalent",
@@ -940,6 +1297,8 @@ const defaultPaths = (): UsagePaths => {
     nikcliDb: process.env.LOCALAPPDATA
       ? join(process.env.LOCALAPPDATA, "nikcli", "nikcli.db")
       : join(home, ".local", "share", "nikcli", "nikcli.db"),
+    // Antigravity ships as `agy` but stores its conversations under the Gemini dotfile.
+    antigravity: join(home, ".gemini", "antigravity-cli", "conversations"),
   };
 };
 
@@ -1099,11 +1458,29 @@ export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<
     sources.push(failedSource("nikcli", error));
   }
 
+  try {
+    const files = await walk(paths.antigravity, ".db");
+    pruneCache(antigravityCache, files);
+    for (const file of files) {
+      const rows = await cachedFile(antigravityCache, file, () => scanAntigravity(file), `${file}-wal`);
+      raw.push(...(rows ?? []));
+    }
+    sources.push({
+      id: "antigravity",
+      name: SOURCE_NAMES.antigravity,
+      status: files.length ? "ok" : "missing",
+      files: files.length,
+    });
+  } catch (error) {
+    sources.push(failedSource("antigravity", error));
+  }
+
   sources.push({
     id: "gemini",
     name: "Gemini",
     status: "unsupported",
-    message: "The local CLI history does not expose reliable token counters.",
+    message: "The Gemini CLI history does not expose reliable token counters. Its Antigravity "
+      + "successor keeps its own record and is counted.",
   });
   // Hermes is a desktop app whose profile directory holds only Chromium state: no
   // transcript, no token counter. Its spend stays server side, out of this ledger.

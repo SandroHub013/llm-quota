@@ -1,0 +1,33 @@
+# Categories for the notes GitHub generates on a release. Sections appear in this
+# order, and a pull request lands in the first one whose label it carries.
+#
+# The vocabulary is deliberately the one already on this repository — bug,
+# enhancement, documentation — rather than the commit-message types. Two vocabularies
+# for the same idea is how a label set stops being applied.
+changelog:
+  exclude:
+    labels:
+      # A version bump is the release; listing it inside its own notes says nothing.
+      - release
+      - duplicate
+      - invalid
+      - wontfix
+      - question
+
+  categories:
+    - title: Fixed
+      labels: [bug]
+    - title: Added
+      labels: [enhancement]
+    - title: Security
+      labels: [security]
+    - title: Documentation
+      labels: [documentation]
+    - title: Build and CI
+      labels: [ci]
+    - title: Dependencies
+      labels: [dependencies]
+    # Anything unlabelled still appears, because a change nobody categorised is
+    # exactly the one a reader should not have to find in the commit log.
+    - title: Other changes
+      labels: ["*"]

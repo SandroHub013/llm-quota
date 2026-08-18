@@ -1,11 +1,16 @@
 import { installOfficialBridge, loadQuota, loadUsage, loadUsageView, removeOfficialBridge, saveProviderKey, storeUsageView } from "./api.js";
 import { dataSignature, escapeHtml } from "./ui.js";
 import { mountGitHubContributionPrototype } from "./github-contributions.prototype.js";
+import { mountUpdateNotice, tauriBridge } from "./update.js";
 
 const grid = document.getElementById("grid");
 const cards = new Map(); // id -> element
 const latest = new Map(); // id -> QuotaResult, the horizon reads from here
 const providerSignatures = new Map();
+
+// Only the desktop shell has an update to offer; in a browser tab this is null and the
+// notice never mounts.
+mountUpdateNotice(document.getElementById("updateNotice"), tauriBridge(window));
 
 const usageDialog = document.getElementById("usageDialog");
 const usageBody = document.getElementById("usageBody");
@@ -339,9 +344,13 @@ function usageHeadlineTotal(summary) {
 
 function usageSortHead(key, label, cls = "") {
   const active = usageView.sortKey === key;
-  const arrow = active ? (usageView.sortDir === "asc" ? "▲" : "▼") : "";
-  const next = active && usageView.sortDir === "desc" ? "ascending" : "descending";
-  return `<th class="${cls}" aria-sort="${active ? (usageView.sortDir === "asc" ? "ascending" : "descending") : "none"}">
+  const ascending = usageView.sortDir === "asc";
+  const arrow = active ? (ascending ? "▲" : "▼") : "";
+  const next = active && !ascending ? "ascending" : "descending";
+  // Read by a screen reader, so it says the direction this column is sorted in rather
+  // than the one clicking it would apply.
+  const sorted = active ? (ascending ? "ascending" : "descending") : "none";
+  return `<th class="${cls}" aria-sort="${sorted}">
     <button type="button" class="usage-sort${active ? " is-active" : ""}" data-sort="${key}"
       title="Sort by ${escapeHtml(label)}, ${next}">${escapeHtml(label)}<span aria-hidden="true">${arrow}</span></button>
   </th>`;
@@ -581,19 +590,27 @@ function usedPct(m) {
 // two by DOM position instead would drift: a metric carrying a resetAt does not always
 // render a .reset node (see expiredUnused below), so a gap would shift every later row
 // onto the wrong metric.
+/**
+ * What the right-hand side of a metric row says, in the order the sources can answer.
+ *
+ * A provider that reports what is left says it outright; one that reports a percentage
+ * used has the remainder computed for it; one that reports only a raw count shows the
+ * count. Nothing left to say is an empty string rather than a zero, which would read as
+ * a quota that is gone.
+ */
+function metricValueLabel(m, remainingPct) {
+  if (m.remaining != null) return fmt(m.remaining, m.unit) + " left";
+  if (remainingPct != null) return remainingPct + "% left";
+  if (m.used != null) return fmt(m.used, m.unit);
+  return "";
+}
+
 function metricHtml(m, index) {
   const used = usedPct(m);
   const remainingPct = used == null ? null : Math.max(0, 100 - used);
   const cls = used == null ? "" : used >= 90 ? "crit" : used >= 70 ? "hot" : "";
   // Say what the number means. "0% / 100%" told the user nothing.
-  const right =
-    m.remaining != null
-      ? fmt(m.remaining, m.unit) + " left"
-      : remainingPct != null
-        ? remainingPct + "% left"
-        : m.used != null
-          ? fmt(m.used, m.unit)
-          : "";
+  const right = metricValueLabel(m, remainingPct);
   const expiredUnused = remainingPct === 100 && m.resetAt && new Date(m.resetAt).getTime() <= Date.now();
   const reset = m.resetAt && !expiredUnused
     ? `<div class="reset" data-reset="${index}">${resetText(m.resetAt)}</div>`

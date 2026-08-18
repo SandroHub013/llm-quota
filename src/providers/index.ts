@@ -37,6 +37,17 @@ import { gemini } from "./gemini.js";
 // high risk (docs/research/provider-terms-assessment.md). Re-register this adapter
 // only together with a decision on that route, or once Z.ai publishes a field the
 // bridge can read.
+// `minimax` is not registered yet, and for the one reason that is not a judgement call:
+// the endpoint its own documentation describes — GET /v1/token_plan/remains with a bearer
+// key — answers `1004: cookie is missing, log in again` and asks for a browser session
+// instead (MiniMax-AI/MiniMax-M2#88, open since March 2026). Lifting a session cookie is
+// the conduct this project removed for Antigravity and refused for Z.ai.
+//
+// Unlike Kimi and Z.ai, nothing about this is a policy problem: MiniMax publishes plan
+// windows, documents bearer auth for them, and simply does not honour it. The adapter is
+// written, tested against the documented payload and ready; registering it is one line
+// the day a real key returns counters. Meanwhile MiniMax token spend is priced in the
+// local ledger like any other model (src/usage.ts).
 export const providers: Provider[] = [claude, codex, gemini];
 
 export function getProvider(id: string): Provider | undefined {
