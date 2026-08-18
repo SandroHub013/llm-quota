@@ -122,7 +122,20 @@ test("the page is granted the update channel and nothing else", async () => {
   const capability = JSON.parse(await read("src-tauri/capabilities/update-notice.json"));
   expect(capability.windows).toEqual(["main"]);
   expect(capability.remote.urls).toEqual(["http://localhost:*", "http://127.0.0.1:*"]);
-  expect(capability.permissions).toEqual(["core:event:default"]);
+  // Application commands are allowed for a local window by default and refused for a
+  // remote one, so each is declared in build.rs and granted here by name. Without them
+  // the notice draws itself and then answers "not allowed by ACL" when pressed.
+  expect(capability.permissions).toEqual([
+    "core:event:default",
+    "allow-pending-update",
+    "allow-install-update",
+    "allow-open-release-page",
+  ]);
+
+  const build = await read("src-tauri/build.rs");
+  for (const command of ["pending_update", "install_update", "open_release_page"]) {
+    expect(build, `${command} is granted but never declared`).toContain(`"${command}"`);
+  }
 
   // The three commands behind it are the app's own, and every one is about an update.
   const shell = await read("src-tauri/src/lib.rs");
