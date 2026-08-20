@@ -6,6 +6,7 @@ export interface WidgetButton {
   addEventListener(type: string, listener: (event: { currentTarget: WidgetButton }) => void): void;
   disabled: boolean;
   textContent: string;
+  title: string;
 }
 
 export interface WidgetWindow {
