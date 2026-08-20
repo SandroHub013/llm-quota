@@ -33,3 +33,13 @@ test("the desktop widget button invokes the shell without navigating the dashboa
   expect(location.href).toBe("http://localhost:4747/");
   expect(calls).toEqual(["open_widget"]);
 });
+
+test("the browser widget button still delegates the registered protocol", () => {
+  const button = new FakeButton();
+  const location = { origin: "http://localhost:4747", href: "http://localhost:4747/" };
+
+  mountWidgetButton(button, null, { location });
+  button.click();
+
+  expect(location.href).toBe("llmquota://widget?server=http%3A%2F%2Flocalhost%3A4747");
+});

@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, LogicalSize, Manager, RunEvent, State, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, RunEvent, State, Url, WebviewWindow, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
@@ -334,8 +334,8 @@ fn open_widget(app: AppHandle) -> Result<(), String> {
         .map_err(|error| error.to_string())?
         .clone()
         .ok_or_else(|| "the local server is not ready".to_owned())?;
-    let encoded_origin = origin.replace(':', "%3A").replace('/', "%2F");
-    let widget_url = format!("llmquota://widget?server={encoded_origin}");
+    let mut widget_url = Url::parse("llmquota://widget").map_err(|error| error.to_string())?;
+    widget_url.query_pairs_mut().append_pair("server", &origin);
     app.opener().open_url(widget_url.as_str(), None::<&str>).map_err(|error| error.to_string())
 }
 
