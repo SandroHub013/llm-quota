@@ -116,9 +116,6 @@ fn design_size(monitor: Option<(f64, f64)>) -> (f64, f64) {
 /// window on Windows and the next launch finds its port taken by its own ghost.
 struct Sidecar(Mutex<Option<CommandChild>>);
 
-/// The shell's own loopback origin, handed to the widget instead of trusting the page.
-struct ServerOrigin(Mutex<Option<String>>);
-
 /// Picks the port to run the server on: the documented one when it is free, otherwise
 /// whatever the OS hands out.
 ///
@@ -183,7 +180,6 @@ fn show_dashboard(app: &AppHandle) {
 /// Starts the server and points the window at it once it answers.
 fn start_server(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let port = claim_port(PORT_WAIT);
-    let origin = format!("http://localhost:{port}");
     let (mut events, child) = app
         .shell()
         .sidecar("llm-quota-server")?
@@ -195,7 +191,6 @@ fn start_server(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .env("LLM_QUOTA_PARENT_PID", std::process::id().to_string())
         .spawn()?;
 
-    app.state::<ServerOrigin>().0.lock().unwrap().replace(origin.clone());
     app.state::<Sidecar>().0.lock().unwrap().replace(child);
 
     // The sidecar's output has to be drained even though nothing consumes it: an
@@ -218,7 +213,7 @@ fn start_server(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         }
         // Loopback by name rather than by address: the server's Host allowlist accepts
         // both, and `localhost` is what every screenshot, bookmark and doc already says.
-        let Ok(url) = format!("{origin}/").parse() else { return };
+        let Ok(url) = format!("http://localhost:{port}/").parse() else { return };
         if let Some(window) = handle.get_webview_window("main") {
             let _ = window.navigate(url);
         }
@@ -325,15 +320,14 @@ fn open_release_page(app: AppHandle) -> Result<(), String> {
     app.opener().open_url(RELEASES_URL, None::<&str>).map_err(|error| error.to_string())
 }
 
+/// Hands the widget launch to the desktop.
+///
+/// The address comes from the window the click arrived on, not from the page: the
+/// dashboard is served over loopback and never gets to say where the widget should
+/// point. Nothing is stored for it — the window is already sitting on that origin.
 #[tauri::command]
-fn open_widget(app: AppHandle) -> Result<(), String> {
-    let origin = app
-        .state::<ServerOrigin>()
-        .0
-        .lock()
-        .map_err(|error| error.to_string())?
-        .clone()
-        .ok_or_else(|| "the local server is not ready".to_owned())?;
+fn open_widget(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    let origin = window.url().map_err(|error| error.to_string())?.origin().ascii_serialization();
     let mut widget_url = Url::parse("llmquota://widget").map_err(|error| error.to_string())?;
     widget_url.query_pairs_mut().append_pair("server", &origin);
     app.opener().open_url(widget_url.as_str(), None::<&str>).map_err(|error| error.to_string())
@@ -493,7 +487,6 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .manage(Sidecar(Mutex::new(None)))
-        .manage(ServerOrigin(Mutex::new(None)))
         .manage(PendingUpdate(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![pending_update, install_update, open_release_page, open_widget])
         .setup(|app| {
