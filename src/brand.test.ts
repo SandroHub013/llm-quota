@@ -25,14 +25,17 @@ test("product surfaces use LLM Quota as the primary identity", async () => {
 });
 
 test("widget button delegates GUI launch to the registered Windows protocol", async () => {
-  const [app, server, widget] = await Promise.all([
+  const [app, widgetButton, server, widget] = await Promise.all([
     read("public/app.js"),
+    read("public/widget.js"),
     read("src/server.ts"),
     read("widget.py"),
   ]);
 
-  expect(app).toContain('new URL("llmquota://widget")');
-  expect(app).toContain('widgetUrl.searchParams.set("server", location.origin)');
+  expect(app).toContain("mountWidgetButton(document.getElementById(\"openWidget\"), desktopBridge, window)");
+  expect(widgetButton).toContain('new URL("llmquota://widget")');
+  expect(widgetButton).toContain('bridge.openWidget()');
+  expect(widgetButton).toContain('widgetUrl.searchParams.set("server", win.location.origin)');
   expect(app).not.toContain('/api/widget');
   expect(server).not.toContain('app.post("/api/widget"');
   expect(widget).toContain("def register_protocol");

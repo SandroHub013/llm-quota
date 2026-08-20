@@ -14,6 +14,7 @@ fn main() {
                 "pending_update",
                 "install_update",
                 "open_release_page",
+                "open_widget",
             ]),
         ),
     )

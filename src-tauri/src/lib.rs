@@ -116,6 +116,9 @@ fn design_size(monitor: Option<(f64, f64)>) -> (f64, f64) {
 /// window on Windows and the next launch finds its port taken by its own ghost.
 struct Sidecar(Mutex<Option<CommandChild>>);
 
+/// The shell's own loopback origin, handed to the widget instead of trusting the page.
+struct ServerOrigin(Mutex<Option<String>>);
+
 /// Picks the port to run the server on: the documented one when it is free, otherwise
 /// whatever the OS hands out.
 ///
@@ -180,6 +183,7 @@ fn show_dashboard(app: &AppHandle) {
 /// Starts the server and points the window at it once it answers.
 fn start_server(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let port = claim_port(PORT_WAIT);
+    let origin = format!("http://localhost:{port}");
     let (mut events, child) = app
         .shell()
         .sidecar("llm-quota-server")?
@@ -191,6 +195,7 @@ fn start_server(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .env("LLM_QUOTA_PARENT_PID", std::process::id().to_string())
         .spawn()?;
 
+    app.state::<ServerOrigin>().0.lock().unwrap().replace(origin.clone());
     app.state::<Sidecar>().0.lock().unwrap().replace(child);
 
     // The sidecar's output has to be drained even though nothing consumes it: an
@@ -213,7 +218,7 @@ fn start_server(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         }
         // Loopback by name rather than by address: the server's Host allowlist accepts
         // both, and `localhost` is what every screenshot, bookmark and doc already says.
-        let Ok(url) = format!("http://localhost:{port}/").parse() else { return };
+        let Ok(url) = format!("{origin}/").parse() else { return };
         if let Some(window) = handle.get_webview_window("main") {
             let _ = window.navigate(url);
         }
@@ -318,6 +323,20 @@ async fn install_update(app: AppHandle, state: State<'_, PendingUpdate>) -> Resu
 #[tauri::command]
 fn open_release_page(app: AppHandle) -> Result<(), String> {
     app.opener().open_url(RELEASES_URL, None::<&str>).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn open_widget(app: AppHandle) -> Result<(), String> {
+    let origin = app
+        .state::<ServerOrigin>()
+        .0
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone()
+        .ok_or_else(|| "the local server is not ready".to_owned())?;
+    let encoded_origin = origin.replace(':', "%3A").replace('/', "%2F");
+    let widget_url = format!("llmquota://widget?server={encoded_origin}");
+    app.opener().open_url(widget_url.as_str(), None::<&str>).map_err(|error| error.to_string())
 }
 
 /// The version this run has already put in front of the user.
@@ -474,8 +493,9 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .manage(Sidecar(Mutex::new(None)))
+        .manage(ServerOrigin(Mutex::new(None)))
         .manage(PendingUpdate(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![pending_update, install_update, open_release_page])
+        .invoke_handler(tauri::generate_handler![pending_update, install_update, open_release_page, open_widget])
         .setup(|app| {
             let handle = app.handle();
 

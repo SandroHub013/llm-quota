@@ -7,6 +7,7 @@ export interface UpdateBridge {
   pending(): Promise<UpdateOffer | null>;
   install(): Promise<void>;
   openRelease(): Promise<void>;
+  openWidget(): Promise<void>;
   onOffer(handler: (offer: UpdateOffer | null) => void): Promise<unknown>;
 }
 

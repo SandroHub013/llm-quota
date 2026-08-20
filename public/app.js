@@ -2,6 +2,7 @@ import { installOfficialBridge, loadQuota, loadUsage, loadUsageView, removeOffic
 import { dataSignature, escapeHtml } from "./ui.js";
 import { mountGitHubContributionPrototype } from "./github-contributions.prototype.js";
 import { mountUpdateNotice, tauriBridge } from "./update.js";
+import { mountWidgetButton } from "./widget.js";
 
 const grid = document.getElementById("grid");
 const cards = new Map(); // id -> element
@@ -10,7 +11,8 @@ const providerSignatures = new Map();
 
 // Only the desktop shell has an update to offer; in a browser tab this is null and the
 // notice never mounts.
-mountUpdateNotice(document.getElementById("updateNotice"), tauriBridge(window));
+const desktopBridge = tauriBridge(window);
+mountUpdateNotice(document.getElementById("updateNotice"), desktopBridge);
 
 const usageDialog = document.getElementById("usageDialog");
 const usageBody = document.getElementById("usageBody");
@@ -1091,19 +1093,9 @@ document.addEventListener("visibilitychange", () => {
 addEventListener("focus", () => refreshDueData());
 addEventListener("online", () => refreshDueData(true));
 
-// Let the browser/Windows shell launch Tk on the interactive desktop.
-document.getElementById("openWidget").addEventListener("click", (e) => {
-  const b = e.currentTarget;
-  b.disabled = true;
-  b.textContent = "Opening…";
-  const widgetUrl = new URL("llmquota://widget");
-  widgetUrl.searchParams.set("server", location.origin);
-  window.location.href = widgetUrl.toString();
-  setTimeout(() => {
-    b.disabled = false;
-    b.textContent = "▣ Widget";
-  }, 2500);
-});
+// The browser delegates the protocol to the desktop; the embedded webview uses the
+// shell bridge so it does not replace the dashboard with its own URI error page.
+mountWidgetButton(document.getElementById("openWidget"), desktopBridge, window);
 
 /* ---------------------------------------------------------------- chrome ---- */
 

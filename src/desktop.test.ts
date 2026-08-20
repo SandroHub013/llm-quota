@@ -130,16 +130,17 @@ test("the page is granted the update channel and nothing else", async () => {
     "allow-pending-update",
     "allow-install-update",
     "allow-open-release-page",
+    "allow-open-widget",
   ]);
 
   const build = await read("src-tauri/build.rs");
-  for (const command of ["pending_update", "install_update", "open_release_page"]) {
+  for (const command of ["pending_update", "install_update", "open_release_page", "open_widget"]) {
     expect(build, `${command} is granted but never declared`).toContain(`"${command}"`);
   }
 
-  // The three commands behind it are the app's own, and every one is about an update.
+  // The four commands behind it are the app's own, and the widget launch stays narrow.
   const shell = await read("src-tauri/src/lib.rs");
-  expect(shell).toContain("tauri::generate_handler![pending_update, install_update, open_release_page]");
+  expect(shell).toContain("tauri::generate_handler![pending_update, install_update, open_release_page, open_widget]");
 });
 
 /**

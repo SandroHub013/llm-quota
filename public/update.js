@@ -8,7 +8,8 @@
  *
  * The page is served over loopback by the sidecar, so it reaches the shell through the
  * one narrow bridge the capability grants it: listen for the offer, ask to install it,
- * open the release page. Everything else stays on the Rust side.
+ * open the release page, and hand the widget launch to the desktop. Everything else
+ * stays on the Rust side.
  */
 import { escapeHtml } from "./ui.js";
 
@@ -27,6 +28,7 @@ export function tauriBridge(win) {
     pending: () => api.core.invoke("pending_update"),
     install: () => api.core.invoke("install_update"),
     openRelease: () => api.core.invoke("open_release_page"),
+    openWidget: () => api.core.invoke("open_widget"),
     onOffer: (handler) => {
       if (!api.event || typeof api.event.listen !== "function") return Promise.resolve(() => {});
       return api.event.listen("update-available", (event) => handler(event && event.payload));
