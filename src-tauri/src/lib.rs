@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Emitter, LogicalSize, Manager, RunEvent, State, WebviewWindow, WindowEvent};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, RunEvent, State, Url, WebviewWindow, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
@@ -320,6 +320,19 @@ fn open_release_page(app: AppHandle) -> Result<(), String> {
     app.opener().open_url(RELEASES_URL, None::<&str>).map_err(|error| error.to_string())
 }
 
+/// Hands the widget launch to the desktop.
+///
+/// The address comes from the window the click arrived on, not from the page: the
+/// dashboard is served over loopback and never gets to say where the widget should
+/// point. Nothing is stored for it — the window is already sitting on that origin.
+#[tauri::command]
+fn open_widget(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    let origin = window.url().map_err(|error| error.to_string())?.origin().ascii_serialization();
+    let mut widget_url = Url::parse("llmquota://widget").map_err(|error| error.to_string())?;
+    widget_url.query_pairs_mut().append_pair("server", &origin);
+    app.opener().open_url(widget_url.as_str(), None::<&str>).map_err(|error| error.to_string())
+}
+
 /// The version this run has already put in front of the user.
 ///
 /// Without it the recurring check turns "Not now" into the same dialog every six hours,
@@ -475,7 +488,7 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .manage(Sidecar(Mutex::new(None)))
         .manage(PendingUpdate(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![pending_update, install_update, open_release_page])
+        .invoke_handler(tauri::generate_handler![pending_update, install_update, open_release_page, open_widget])
         .setup(|app| {
             let handle = app.handle();
 

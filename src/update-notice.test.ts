@@ -17,7 +17,7 @@ test("a browser tab gets no bridge, and neither does a half-injected one", () =>
   expect(tauriBridge({ __TAURI__: { core: {} } })).toBeNull();
 });
 
-test("the bridge calls the three commands the capability is scoped to", async () => {
+test("the bridge calls the four commands the capability is scoped to", async () => {
   const calls: string[] = [];
   const listened: string[] = [];
   const bridge = tauriBridge({
@@ -27,10 +27,10 @@ test("the bridge calls the three commands the capability is scoped to", async ()
     },
   })!;
 
-  await Promise.all([bridge.pending(), bridge.install(), bridge.openRelease()]);
+  await Promise.all([bridge.pending(), bridge.install(), bridge.openRelease(), bridge.openWidget()]);
   await bridge.onOffer(() => {});
 
-  expect(calls).toEqual(["pending_update", "install_update", "open_release_page"]);
+  expect(calls).toEqual(["pending_update", "install_update", "open_release_page", "open_widget"]);
   expect(listened).toEqual(["update-available"]);
 });
 
