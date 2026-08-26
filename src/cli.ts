@@ -75,31 +75,39 @@ export async function fetchProjectStats(request: Request = fetch): Promise<strin
   return `NPM Downloads (last 30d): ${npmDownloads}\nGitHub Release Downloads: ${githubDownloads}`;
 }
 
+const COMMANDS = ["status", "provider", "doctor", "stats"];
+const USAGE = "usage: llm-quota --help";
+
+/**
+ * Every way the argument list can be wrong, in one place: the reply to send instead of
+ * running, or `undefined` when the arguments are usable. Kept out of `run` because the
+ * shape of a valid command line is worth reading on its own.
+ */
+function rejectArguments(args: string[], operands: string[], command: string, jsonFlags: number): RunResult | undefined {
+  const unknownFlags = args.filter((arg) => arg.startsWith("-") && arg !== "--json");
+  if (jsonFlags > 1 || unknownFlags.length) return { output: USAGE, code: 3 };
+  if (!COMMANDS.includes(command)) return { output: USAGE, code: 3 };
+  if (command === "status" && operands.length > 1) return { output: USAGE, code: 3 };
+  if (command === "provider" && operands.length !== 2) {
+    return { output: "usage: llm-quota provider <id>", code: 3 };
+  }
+  if ((command === "doctor" || command === "stats") && (operands.length !== 1 || jsonFlags)) {
+    return { output: USAGE, code: 3 };
+  }
+  return undefined;
+}
+
 export async function run(args: string[], request: Request = fetch): Promise<RunResult> {
   if (args.includes("--help") || args.includes("-h") || args[0] === "help") {
     return { output: HELP, code: 0 };
   }
   const jsonFlags = args.filter((arg) => arg === "--json");
-  const unknownFlags = args.filter((arg) => arg.startsWith("-") && arg !== "--json");
-  if (jsonFlags.length > 1 || unknownFlags.length) {
-    return { output: "usage: llm-quota --help", code: 3 };
-  }
-
   // Operands only: `provider --json codex` must read "codex", not the flag between them.
   const operands = args.filter((arg) => arg !== "--json");
   const command = operands[0] ?? "status";
-  if (!["status", "provider", "doctor", "stats"].includes(command)) {
-    return { output: "usage: llm-quota --help", code: 3 };
-  }
-  if (command === "status" && operands.length > 1) {
-    return { output: "usage: llm-quota --help", code: 3 };
-  }
-  if (command === "provider" && operands.length !== 2) {
-    return { output: "usage: llm-quota provider <id>", code: 3 };
-  }
-  if ((command === "doctor" || command === "stats") && (operands.length !== 1 || jsonFlags.length)) {
-    return { output: "usage: llm-quota --help", code: 3 };
-  }
+  const rejection = rejectArguments(args, operands, command, jsonFlags.length);
+  if (rejection) return rejection;
+
   if (command === "stats") {
     const statsOutput = await fetchProjectStats(request);
     return { output: statsOutput, code: 0 };

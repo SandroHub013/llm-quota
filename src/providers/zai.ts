@@ -4,9 +4,11 @@ import {
   readOfficialBridgeSnapshot,
   type OfficialBridgeSnapshot,
 } from "../official-bridge.js";
-import { nowIso } from "./util.js";
+import { bridgeStatus, nowIso } from "./util.js";
 
 const CONSOLE = "https://z.ai/manage-apikey/apikey-list";
+const BRIDGE_URL = "/api/official-bridge/zai";
+const PLUGIN_LABEL = "Z.ai Usage Query plugin";
 const FRESH_MS = 15 * 60_000;
 
 /**
@@ -31,17 +33,14 @@ export function parseZaiBridgeUsage(snapshot?: OfficialBridgeSnapshot): QuotaMet
 
   // Never fall back to rateLimits: that field is Claude's own quota, not GLM's.
   const glm = (data.glmQuota ?? data.zaiQuota) as ZaiQuota | undefined;
-  if (glm && typeof glm === "object") {
-    if (typeof glm.used_percentage === "number") {
-      const resets = glm.resets_at;
-      metrics.push({
-        label: "GLM Coding Plan",
-        used: Math.min(100, Math.max(0, Math.round(glm.used_percentage))),
-        limit: 100,
-        unit: "percent",
-        resetAt: resetIso(resets),
-      });
-    }
+  if (glm && typeof glm === "object" && typeof glm.used_percentage === "number") {
+    metrics.push({
+      label: "GLM Coding Plan",
+      used: Math.min(100, Math.max(0, Math.round(glm.used_percentage))),
+      limit: 100,
+      unit: "percent",
+      resetAt: resetIso(glm.resets_at),
+    });
   }
   return metrics;
 }
@@ -83,13 +82,13 @@ export const zai: Provider = {
       const exhausted = metrics.some((metric) => (metric.used ?? 0) >= 100);
       return {
         ...base,
-        status: exhausted ? "rate_limited" : stale ? "partial" : "ok",
+        status: bridgeStatus(exhausted, stale),
         sourceKind: "official_client",
-        sourceLabel: "Z.ai Usage Query plugin",
+        sourceLabel: PLUGIN_LABEL,
         authSource: "official status-line bridge",
         sourceUpdatedAt: snapshot.capturedAt,
         metrics,
-        teardownUrl: installed ? "/api/official-bridge/zai" : undefined,
+        teardownUrl: installed ? BRIDGE_URL : undefined,
         teardownLabel: installed ? "Disable bridge" : undefined,
         message: bridgeMessage(exhausted, stale),
       };
@@ -98,10 +97,10 @@ export const zai: Provider = {
     return {
       ...base,
       sourceKind: installed ? "official_client" : "unavailable",
-      sourceLabel: installed ? "Z.ai Usage Query plugin" : "official plugin / console",
-      setupUrl: installed ? undefined : "/api/official-bridge/zai",
+      sourceLabel: installed ? PLUGIN_LABEL : "official plugin / console",
+      setupUrl: installed ? undefined : BRIDGE_URL,
       setupLabel: installed ? undefined : "Enable official bridge",
-      teardownUrl: installed ? "/api/official-bridge/zai" : undefined,
+      teardownUrl: installed ? BRIDGE_URL : undefined,
       teardownLabel: installed ? "Disable bridge" : undefined,
       message: installed
         ? "Official Z.ai bridge active. Run Z.ai usage query plugin to populate quota."

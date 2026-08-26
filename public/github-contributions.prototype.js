@@ -14,6 +14,9 @@ const integers = new Intl.NumberFormat("en");
 const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 const euro = new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
 const CONTRIBUTION_REFRESH_MS = 10 * 60_000;
+// What the card says when GitHub answered with anything other than a calendar: shown as
+// the account line, and again in place of each heatmap the variants would have drawn.
+const GITHUB_UNAVAILABLE = "GitHub activity unavailable";
 let contributionData;
 let contributionSignature;
 let contributionLoad;
@@ -32,7 +35,8 @@ function stat(label, value, green = false) {
 }
 
 function statText(label, value, green = false, title = "") {
-  return `<div class="gh-stat${green ? " is-green" : ""}"><span>${escapeHtml(label)}</span><b${title ? ` title="${escapeHtml(title)}"` : ""}>${escapeHtml(value)}</b></div>`;
+  const hover = title ? ` title="${escapeHtml(title)}"` : "";
+  return `<div class="gh-stat${green ? " is-green" : ""}"><span>${escapeHtml(label)}</span><b${hover}>${escapeHtml(value)}</b></div>`;
 }
 
 function fmtEur(value) {
@@ -104,7 +108,8 @@ function buildUsageCalendar(summary) {
 function dayCell(day) {
   const count = Number(day.count) || 0;
   const noun = count === 1 ? "contribution" : "contributions";
-  return `<span class="gh-day l${Math.max(0, Math.min(4, Number(day.level) || 0))}" title="${escapeHtml(`${day.date} · ${count} ${noun}`)}"></span>`;
+  const title = escapeHtml(`${day.date} · ${count} ${noun}`);
+  return `<span class="gh-day l${Math.max(0, Math.min(4, Number(day.level) || 0))}" title="${title}"></span>`;
 }
 
 function monthLabels(data) {
@@ -120,13 +125,24 @@ function monthLabels(data) {
   }).join("");
 }
 
+/** The five heat swatches both legends are drawn from; `extra` picks the palette. */
+function swatches(extra = "") {
+  return [0, 1, 2, 3, 4].map((level) => `<i class="gh-day${extra} l${level}"></i>`).join("");
+}
+
 function legend() {
-  return `<div class="gh-legend"><span>Less</span>${[0, 1, 2, 3, 4].map((level) => `<i class="gh-day l${level}"></i>`).join("")}<span>More</span></div>`;
+  return `<div class="gh-legend"><span>Less</span>${swatches()}<span>More</span></div>`;
+}
+
+/** One week column of a heatmap, `cell` deciding which of the two kinds of day it holds. */
+function weekColumns(weeks, cell) {
+  return weeks.map((week) => `<div class="gh-week">${week.days.map(cell).join("")}</div>`).join("");
 }
 
 function heatmap(data, showLegend = true) {
-  const weeks = data.weeks.map((week) => `<div class="gh-week">${week.days.map((day) => dayCell(day)).join("")}</div>`).join("");
-  return `<div class="gh-heatmap-scroll" role="img" aria-label="${escapeHtml(`${data.total} GitHub contributions in the last year`)}">
+  const weeks = weekColumns(data.weeks, dayCell);
+  const label = escapeHtml(`${data.total} GitHub contributions in the last year`);
+  return `<div class="gh-heatmap-scroll" role="img" aria-label="${label}">
     <div class="gh-heatmap" style="--week-count:${data.weeks.length}">
       <div class="gh-month-labels">${monthLabels(data)}</div>
       <div class="gh-weeks">${weeks}</div>
@@ -161,12 +177,15 @@ function usageDayCell(day) {
 }
 
 function usageLegend() {
-  return `<div class="gh-legend usage-legend"><span>Tokens</span>${[0, 1, 2, 3, 4].map((level) => `<i class="gh-day usage-day l${level}"></i>`).join("")}</div>`;
+  return `<div class="gh-legend usage-legend"><span>Tokens</span>${swatches(" usage-day")}</div>`;
 }
 
 function usageHeatmap(calendar, showLegend = true) {
-  const weeks = calendar.weeks.map((week) => `<div class="gh-week">${week.days.map(usageDayCell).join("")}</div>`).join("");
-  return `<div class="gh-heatmap-scroll" role="img" aria-label="${escapeHtml(`${integers.format(calendar.totalTokens)} locally recorded tokens over ${calendar.activeDays} active days`)}">
+  const weeks = weekColumns(calendar.weeks, usageDayCell);
+  const label = escapeHtml(
+    `${integers.format(calendar.totalTokens)} locally recorded tokens over ${calendar.activeDays} active days`,
+  );
+  return `<div class="gh-heatmap-scroll" role="img" aria-label="${label}">
     <div class="gh-heatmap usage-heatmap" style="--week-count:${calendar.weeks.length}">
       <div class="gh-month-labels">${usageMonthLabels(calendar)}</div>
       <div class="gh-weeks">${weeks}</div>
@@ -190,11 +209,20 @@ function usageHeader(title, summary, kicker = "Local token ledger") {
   </div>`;
 }
 
+/** What stands in for a heatmap when GitHub had nothing to draw: its reason, or ours. */
+function unavailableBlock(data) {
+  return `<div class="gh-inline-unavailable">${escapeHtml(data?.message || GITHUB_UNAVAILABLE)}</div>`;
+}
+
 function githubToggleHeader(data) {
-  const account = data?.status === "ok" ? `${data.name || data.login} · @${data.login}` : "GitHub activity unavailable";
+  const available = data?.status === "ok";
+  const account = available ? `${data.name || data.login} · @${data.login}` : GITHUB_UNAVAILABLE;
+  const profile = available
+    ? `<a class="gh-profile" href="${escapeHtml(data.profileUrl)}" target="_blank" rel="noreferrer">Profile ↗</a>`
+    : "";
   return `<div class="gh-head">
     <div><span class="gh-kicker">GitHub · authenticated viewer</span><h2 class="gh-title">Contribution calendar</h2><span class="gh-account">${escapeHtml(account)}</span></div>
-    <div class="gh-head-actions">${data?.status === "ok" ? `<a class="gh-profile" href="${escapeHtml(data.profileUrl)}" target="_blank" rel="noreferrer">Profile ↗</a>` : ""}<button class="gh-view-toggle" type="button" data-activity-view="usage">Token spend</button></div>
+    <div class="gh-head-actions">${profile}<button class="gh-view-toggle" type="button" data-activity-view="usage">Token spend</button></div>
   </div>`;
 }
 
@@ -208,14 +236,20 @@ function dualHeader(data) {
   </div>`;
 }
 
+/** One figure of a breakdown line: a rounded number, with the exact one on hover. */
+function breakdownItem([value, label]) {
+  const exact = escapeHtml(`${integers.format(value)} tokens`);
+  return `<span><b title="${exact}">${escapeHtml(compact.format(value || 0))}</b> ${label}</span>`;
+}
+
 function usageBreakdown(calendar) {
   const items = [
     [calendar.totals.input, "input"],
     [calendar.totals.cacheRead, "cache"],
     [calendar.totals.output, "output"],
     [calendar.totals.reasoning, "reasoning"],
-  ];
-  return `<p class="gh-breakdown usage-breakdown" aria-label="Token breakdown">${items.map(([value, label]) => `<span><b title="${escapeHtml(`${integers.format(value)} tokens`)}">${escapeHtml(compact.format(value || 0))}</b> ${label}</span>`).join("")}</p>`;
+  ].map(breakdownItem).join("");
+  return `<p class="gh-breakdown usage-breakdown" aria-label="Token breakdown">${items}</p>`;
 }
 
 function breakdownLine(data) {
@@ -224,20 +258,22 @@ function breakdownLine(data) {
     [data.breakdown.pullRequests, "PRs"],
     [data.breakdown.issues, "issues"],
     [data.breakdown.reviews, "reviews"],
-  ];
-  return `<p class="gh-breakdown" aria-label="Contribution breakdown">${items.map(([value, label]) => `<span><b>${escapeHtml(integers.format(value || 0))}</b> ${label}</span>`).join("")}</p>`;
+  ].map(([value, label]) => `<span><b>${escapeHtml(integers.format(value || 0))}</b> ${label}</span>`).join("");
+  return `<p class="gh-breakdown" aria-label="Contribution breakdown">${items}</p>`;
 }
 
 function variantAGithub(data) {
-  const available = data?.status === "ok";
-  return `<article class="gh-card gh-card-a" data-github-variant="A" data-activity-view="github">
-    ${githubToggleHeader(data)}
-    ${available ? `<div class="gh-a-summary">
+  const body = data?.status === "ok"
+    ? `<div class="gh-a-summary">
       <div class="gh-total-number">${escapeHtml(integers.format(data.total))}<small>contributions in the last year</small></div>
       ${heatmap(data)}
     </div>
     <div class="gh-stat-grid">${stat("Active days", data.activeDays, true)}${stat("Longest streak", data.longestStreak, true)}${stat("Current streak", data.currentStreak)}${stat("Private marks", data.breakdown.restricted)}</div>
-    ${breakdownLine(data)}` : `<div class="gh-inline-unavailable">${escapeHtml(data?.message || "GitHub activity unavailable")}</div>`}
+    ${breakdownLine(data)}`
+    : unavailableBlock(data);
+  return `<article class="gh-card gh-card-a" data-github-variant="A" data-activity-view="github">
+    ${githubToggleHeader(data)}
+    ${body}
     <p class="gh-source">Authenticated GitHub GraphQL · contribution counts follow profile visibility</p>
   </article>`;
 }
@@ -252,15 +288,22 @@ function variantA(data, usage) {
       <div class="gh-total-number usage-total-number">${escapeHtml(fmtEur(calendar.costEur))}<small>API equivalent · ${escapeHtml(compact.format(calendar.totalTokens))} tokens</small></div>
       ${usageHeatmap(calendar)}
     </div>
-    <div class="gh-stat-grid">${stat("Active days", calendar.activeDays, true)}${statText("Busiest day", compact.format(busiest), true, calendar.busiest?.date || "")}${statText("Cache reuse", calendar.contextReusePct == null ? "—" : `${calendar.contextReusePct}%`)}${statText("Priced", `${calendar.pricingCoveragePct}%`)}</div>
+    <div class="gh-stat-grid">${stat("Active days", calendar.activeDays, true)}${statText("Busiest day", compact.format(busiest), true, calendar.busiest?.date || "")}${statText("Cache reuse", reusePct(calendar))}${statText("Priced", `${calendar.pricingCoveragePct}%`)}</div>
     ${usageBreakdown(calendar)}
     <p class="gh-source">Daily timestamps from local CLI logs · API-equivalent estimate</p>
   </article>`;
 }
 
+/** A percentage that is only there once a day with cache reads has been recorded. */
+function reusePct(calendar) {
+  return calendar.contextReusePct == null ? "—" : `${calendar.contextReusePct}%`;
+}
+
 function variantB(data, usage) {
   const calendar = buildUsageCalendar(usage);
   const githubOk = data?.status === "ok";
+  const githubDays = githubOk ? `${data.activeDays} active days` : "unavailable";
+  const githubCalendar = githubOk ? heatmap(data, false) : unavailableBlock(data);
   return `<article class="gh-card gh-card-b" data-github-variant="B">
     ${dualHeader(data)}
     <section class="activity-half usage-half">
@@ -268,10 +311,10 @@ function variantB(data, usage) {
       ${usageHeatmap(calendar, false)}
     </section>
     <section class="activity-half github-half">
-      <div class="activity-label"><span>GitHub contributions</span><b>${escapeHtml(integers.format(githubOk ? data.total : 0))}<small>${githubOk ? `${data.activeDays} active days` : "unavailable"}</small></b></div>
-      ${githubOk ? heatmap(data, false) : `<div class="gh-inline-unavailable">${escapeHtml(data?.message || "GitHub activity unavailable")}</div>`}
+      <div class="activity-label"><span>GitHub contributions</span><b>${escapeHtml(integers.format(githubOk ? data.total : 0))}<small>${githubDays}</small></b></div>
+      ${githubCalendar}
     </section>
-    <p class="gh-breakdown dual-breakdown"><span><b>${calendar.activeDays}</b> token days</span><span><b>${calendar.contextReusePct == null ? "—" : `${calendar.contextReusePct}%`}</b> cache reuse</span><span><b>${githubOk ? data.longestStreak : 0}</b> GitHub streak</span></p>
+    <p class="gh-breakdown dual-breakdown"><span><b>${calendar.activeDays}</b> token days</span><span><b>${reusePct(calendar)}</b> cache reuse</span><span><b>${githubOk ? data.longestStreak : 0}</b> GitHub streak</span></p>
     <p class="gh-source">Local CLI logs + authenticated GitHub GraphQL · hover any day for detail</p>
   </article>`;
 }
@@ -310,12 +353,16 @@ function variantC(data, usage) {
     ${dualHeader(data)}
     <div class="gh-c-summary">
       <div class="gh-total-number usage-total-number">${escapeHtml(fmtEur(calendar.costEur))}<small>${escapeHtml(compact.format(calendar.totalTokens))} tokens · ${escapeHtml(integers.format(githubOk ? data.total : 0))} GitHub</small></div>
-      <div class="gh-stat-grid">${stat("Token days", calendar.activeDays, true)}${stat("GitHub days", githubOk ? data.activeDays : 0, true)}${statText("Cache reuse", calendar.contextReusePct == null ? "—" : `${calendar.contextReusePct}%`)}${statText("Priced", `${calendar.pricingCoveragePct}%`)}</div>
+      <div class="gh-stat-grid">${stat("Token days", calendar.activeDays, true)}${stat("GitHub days", githubOk ? data.activeDays : 0, true)}${statText("Cache reuse", reusePct(calendar))}${statText("Priced", `${calendar.pricingCoveragePct}%`)}</div>
     </div>
     <div class="gh-month-cards correlation-months">${correlationMonthCards(data, calendar)}</div>
     <p class="gh-source">Monthly token cost and GitHub activity in the same cells · hover for exact totals</p>
   </article>`;
 }
+
+// Keyed by the same letters `variants` announces, so adding a fourth design is one
+// entry here and one there rather than another arm of a ternary.
+const RENDERERS = { A: variantA, B: variantB, C: variantC };
 
 function switcher(current) {
   if (!new URLSearchParams(location.search).has("variant")) return "";
@@ -338,7 +385,7 @@ function render(data = contributionData, usage = usageData) {
   document.querySelector(".gh-prototype-switcher")?.remove();
   host.setAttribute("aria-busy", "false");
   const key = currentVariant();
-  const renderer = key === "B" ? variantB : key === "C" ? variantC : variantA;
+  const renderer = RENDERERS[key] ?? variantA;
   host.innerHTML = renderer(contributionData, usageData);
   document.body.insertAdjacentHTML("beforeend", switcher(key));
 }

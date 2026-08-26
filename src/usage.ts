@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { createInterface } from "node:readline";
 
+import { text } from "./coerce.js";
 import { reasonOf, warn, warnOnce } from "./log.js";
 
 export type UsageSourceId =
@@ -517,16 +518,27 @@ async function walk(root: string, name: string): Promise<string[]> {
 
     for (const entry of entries) {
       const path = join(dir, entry.name);
-      if (entry.isDirectory()) pending.push(path);
-      else if (entry.isFile() && entry.name.endsWith(name)) found.push(path);
-      else if (entry.isSymbolicLink()) {
-        const target = await stat(path).catch(() => undefined);
-        if (target?.isDirectory()) pending.push(path);
-        else if (target?.isFile() && entry.name.endsWith(name)) found.push(path);
-      }
+      const kind = await classify(path, entry, name);
+      if (kind === "dir") pending.push(path);
+      else if (kind === "file") found.push(path);
     }
   }
   return found;
+}
+
+/**
+ * Where one directory entry goes: a subtree to descend into, a history file to collect,
+ * or neither. A symlink costs an extra `stat` because `withFileTypes` reports it as
+ * neither file nor directory, and a target that cannot be stat'ed is simply skipped —
+ * a dangling link is not history this process failed to read.
+ */
+async function classify(path: string, entry: Dirent, name: string): Promise<"dir" | "file" | undefined> {
+  if (entry.isDirectory()) return "dir";
+  if (entry.isFile()) return entry.name.endsWith(name) ? "file" : undefined;
+  if (!entry.isSymbolicLink()) return undefined;
+  const target = await stat(path).catch(() => undefined);
+  if (target?.isDirectory()) return "dir";
+  return target?.isFile() && entry.name.endsWith(name) ? "file" : undefined;
 }
 
 /** True for the errors a file the CLIs are actively rotating legitimately produces. */
@@ -620,71 +632,117 @@ function codexAgent(payload: CodexPayload | undefined): AgentKind {
   return payload?.thread_source === "subagent" || payload?.source?.subagent ? "subagent" : "main";
 }
 
+/** What the records read so far say the next set of tokens belongs to. */
+interface CodexContext {
+  sessionId: string;
+  model: string;
+  effort: string;
+  agent: AgentKind;
+}
+
+/**
+ * One line of a Codex session log, or undefined for a line with nothing to read.
+ *
+ * A session log is appended to while it is being read, so its last line is routinely
+ * half-written. Dropping the whole file over one truncated record would zero out a real
+ * day of spend, so a malformed line is skipped — reported once per run, not per line.
+ */
+function parseCodexLine(line: string): CodexRecord | undefined {
+  if (!line.includes('"session_meta"') && !line.includes('"turn_context"') && !line.includes('"token_count"')) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(line) as CodexRecord;
+  } catch (error) {
+    warnOnce("parse:codex", "skipping a malformed record in a Codex session log", error);
+    return undefined;
+  }
+}
+
+/**
+ * The metadata records carry no tokens of their own; they change what the records after
+ * them are attributed to. True when this was one of them and nothing else should read it.
+ */
+function applyCodexMeta(record: CodexRecord, context: CodexContext): boolean {
+  if (record.type === "session_meta") {
+    context.sessionId = text(record.payload?.session_id ?? record.payload?.id, context.sessionId);
+    context.agent = codexAgent(record.payload);
+    return true;
+  }
+  if (record.type === "turn_context") {
+    context.model = text(record.payload?.model, context.model);
+    context.effort = text(record.payload?.effort, context.effort);
+    return true;
+  }
+  return false;
+}
+
+function codexTotals(usage: CodexTokenUsage): Record<string, number> {
+  return {
+    input_tokens: number(usage.input_tokens),
+    cached_input_tokens: number(usage.cached_input_tokens),
+    cache_write_input_tokens: number(usage.cache_write_input_tokens),
+    output_tokens: number(usage.output_tokens),
+    reasoning_output_tokens: number(usage.reasoning_output_tokens),
+  };
+}
+
+/**
+ * Codex writes running totals, so a record is worth the difference from the one before
+ * it. A counter that went backwards means the session restarted its own accounting, and
+ * the new totals are then the delta rather than an impossible negative.
+ */
+function codexDelta(current: Record<string, number>, previous?: Record<string, number>): Record<string, number> {
+  const reset = previous && Object.keys(current).some((key) => current[key] < number(previous[key]));
+  const base = reset ? undefined : previous;
+  return Object.fromEntries(
+    Object.entries(current).map(([key, value]) => [key, Math.max(0, value - number(base?.[key]))]),
+  );
+}
+
 export function parseCodexRecords(records: string[], fallbackId = "session"): CodexFileUsage {
-  let sessionId = fallbackId;
-  let model = "unknown";
-  let effort = "default";
-  let agent: AgentKind = "main";
-  let previous: Record<string, number> | undefined;
+  const context: CodexContext = { sessionId: fallbackId, model: "unknown", effort: "default", agent: "main" };
   const grouped = new Map<string, RawUsageRow>();
+  let previous: Record<string, number> | undefined;
 
   for (const line of records) {
-    if (!line.includes('"session_meta"') && !line.includes('"turn_context"') && !line.includes('"token_count"')) {
-      continue;
-    }
-    let record: CodexRecord;
-    try {
-      record = JSON.parse(line) as CodexRecord;
-    } catch (error) {
-      // Deliberate: a session log is appended to while it is being read, so its last
-      // line is routinely half-written. Dropping the whole file over one truncated
-      // record would zero out a real day of spend. Reported once per run, not per line.
-      warnOnce("parse:codex", "skipping a malformed record in a Codex session log", error);
-      continue;
-    }
-    if (record.type === "session_meta") {
-      sessionId = String(record.payload?.session_id ?? record.payload?.id ?? sessionId);
-      agent = codexAgent(record.payload);
-      continue;
-    }
-    if (record.type === "turn_context") {
-      model = String(record.payload?.model ?? model);
-      effort = String(record.payload?.effort ?? effort);
-      continue;
-    }
+    const record = parseCodexLine(line);
+    if (!record) continue;
+    if (applyCodexMeta(record, context)) continue;
     if (record.type !== "event_msg" || record.payload?.type !== "token_count") continue;
 
     const usage = record.payload?.info?.total_token_usage;
     if (!usage) continue;
-    const current: Record<string, number> = {
-      input_tokens: number(usage.input_tokens),
-      cached_input_tokens: number(usage.cached_input_tokens),
-      cache_write_input_tokens: number(usage.cache_write_input_tokens),
-      output_tokens: number(usage.output_tokens),
-      reasoning_output_tokens: number(usage.reasoning_output_tokens),
-    };
-    const reset = previous && Object.keys(current).some((key) => current[key]! < number(previous?.[key]));
-    const delta = Object.fromEntries(
-      Object.entries(current).map(([key, value]) => [key, Math.max(0, value - (reset ? 0 : number(previous?.[key])))]),
-    );
+    const current = codexTotals(usage);
+    const delta = codexDelta(current, previous);
     previous = current;
     if (Object.values(delta).every((value) => value === 0)) continue;
 
-    const recordedAt = recordTimestamp(record);
-    const key = `${model}\u0000${effort}\u0000${agent}\u0000${recordedAt?.slice(0, 10) ?? "undated"}`;
-    const row = grouped.get(key) ?? rawRow("codex", model, effort, agent);
-    if (recordedAt && !row.recordedAt) row.recordedAt = recordedAt;
-    const cacheRead = number(delta.cached_input_tokens);
-    const cacheWrite = number(delta.cache_write_input_tokens);
-    row.calls += 1;
-    row.cacheRead += cacheRead;
-    row.cacheWrite += cacheWrite;
-    row.input += Math.max(0, number(delta.input_tokens) - cacheRead - cacheWrite);
-    row.output += number(delta.output_tokens);
-    row.reasoning += number(delta.reasoning_output_tokens);
-    grouped.set(key, row);
+    addCodexTokens(grouped, context, recordTimestamp(record), delta);
   }
-  return { sessionId, rows: [...grouped.values()] };
+  return { sessionId: context.sessionId, rows: [...grouped.values()] };
+}
+
+/** One record's tokens, folded into the row for its model, effort, agent and day. */
+function addCodexTokens(
+  grouped: Map<string, RawUsageRow>,
+  context: CodexContext,
+  recordedAt: string | undefined,
+  delta: Record<string, number>,
+): void {
+  const { model, effort, agent } = context;
+  const key = `${model}\u0000${effort}\u0000${agent}\u0000${recordedAt?.slice(0, 10) ?? "undated"}`;
+  const row = grouped.get(key) ?? rawRow("codex", model, effort, agent);
+  if (recordedAt && !row.recordedAt) row.recordedAt = recordedAt;
+  const cacheRead = number(delta.cached_input_tokens);
+  const cacheWrite = number(delta.cache_write_input_tokens);
+  row.calls += 1;
+  row.cacheRead += cacheRead;
+  row.cacheWrite += cacheWrite;
+  row.input += Math.max(0, number(delta.input_tokens) - cacheRead - cacheWrite);
+  row.output += number(delta.output_tokens);
+  row.reasoning += number(delta.reasoning_output_tokens);
+  grouped.set(key, row);
 }
 
 async function scanCodex(path: string): Promise<CodexFileUsage> {
@@ -712,7 +770,10 @@ export function parseClaudeRecords(records: string[], subagentFile = false): Cla
       continue;
     }
     const usage = record.message?.usage;
-    const id = record.message?.id;
+    // Coerced before the guard, not at the two Map calls below: an id that is not a
+    // primitive has no usable key, and skipping that record beats merging every one
+    // of them under the same "[object Object]".
+    const id = text(record.message?.id, "");
     if (record.type !== "assistant" || !usage || !id) continue;
 
     const cache5m = number(usage.cache_creation?.ephemeral_5m_input_tokens);
@@ -721,8 +782,8 @@ export function parseClaudeRecords(records: string[], subagentFile = false): Cla
     const speed = usage.speed === "fast" ? " · fast" : "";
     const row = rawRow(
       "claude",
-      String(record.message?.model ?? "unknown"),
-      String(record.effort ?? "default") + speed,
+      text(record.message?.model, "unknown"),
+      text(record.effort, "default") + speed,
       record.isSidechain || record.agentId || subagentFile ? "subagent" : "main",
     );
     row.calls = 1;
@@ -736,8 +797,8 @@ export function parseClaudeRecords(records: string[], subagentFile = false): Cla
     const recordedAt = recordTimestamp(record);
     if (recordedAt) row.recordedAt = recordedAt;
 
-    const old = messages.get(String(id));
-    if (!old || totalOf(row) >= totalOf(old)) messages.set(String(id), row);
+    const old = messages.get(id);
+    if (!old || totalOf(row) >= totalOf(old)) messages.set(id, row);
   }
   return [...messages].map(([id, row]) => ({ id, row }));
 }
@@ -767,13 +828,13 @@ export function parseKimiRecords(records: string[], agent: AgentKind = "main"): 
       continue;
     }
     if (record.type === "llm.request") {
-      model = String(record.modelAlias ?? record.model ?? model);
-      effort = String(record.thinkingEffort ?? effort);
+      model = text(record.modelAlias ?? record.model, model);
+      effort = text(record.thinkingEffort, effort);
       continue;
     }
     if (record.type !== "usage.record" || !record.usage) continue;
     const usage = record.usage;
-    const row = rawRow("kimi", String(record.model ?? model), effort, agent);
+    const row = rawRow("kimi", text(record.model, model), effort, agent);
     row.calls = 1;
     row.input = number(usage.inputOther ?? usage.input);
     row.cacheRead = number(usage.inputCacheRead);
@@ -802,45 +863,67 @@ async function scanKimi(path: string): Promise<RawUsageRow[]> {
  * one, then one `message` record per turn carrying the assistant usage. `input` excludes
  * both cache counters and `reasoning` is a subset of `output`, matching the other sources.
  */
+/** What the records read so far say the next message belongs to. */
+interface PiContext {
+  model: string;
+  effort: string;
+  kind: AgentKind;
+}
+
+/**
+ * One line of a pi/Prime session log, or undefined for a line that cannot be read.
+ *
+ * A session log is appended to while it is being read, so its last line is routinely
+ * half-written. Dropping the whole file over one truncated record would zero out a real
+ * day of spend, so a malformed line is skipped — reported once per run, not per line.
+ */
+function parsePiLine(line: string): PiRecord | undefined {
+  try {
+    return JSON.parse(line) as PiRecord;
+  } catch (error) {
+    warnOnce("parse:pi", "skipping a malformed record in a pi/Prime session log", error);
+    return undefined;
+  }
+}
+
+/**
+ * The header and the `*_change` records carry no usage; they stay in force until the
+ * next one. True when this was one of them and the message reader should skip it.
+ */
+function applyPiMeta(record: PiRecord, context: PiContext): boolean {
+  if (record.type === "session") {
+    // A delegated run names the transcript that spawned it and sits below its depth.
+    if (record.parentSession || number(record.rlmDepth) > 0) context.kind = "subagent";
+    return true;
+  }
+  if (record.type === "model_change") {
+    context.model = text(record.modelId, context.model);
+    return true;
+  }
+  if (record.type === "thinking_level_change") {
+    context.effort = text(record.thinkingLevel, context.effort);
+    return true;
+  }
+  return false;
+}
+
 export function parsePiRecords(
   records: string[],
   source: "pi" | "prime",
   agent: AgentKind = "main",
 ): RawUsageRow[] {
-  let model = "unknown";
-  let effort = "default";
-  let kind = agent;
+  const context: PiContext = { model: "unknown", effort: "default", kind: agent };
   const rows: RawUsageRow[] = [];
   for (const line of records) {
-    let record: PiRecord;
-    try {
-      record = JSON.parse(line) as PiRecord;
-    } catch (error) {
-      // Deliberate: a session log is appended to while it is being read, so its last
-      // line is routinely half-written. Dropping the whole file over one truncated
-      // record would zero out a real day of spend. Reported once per run, not per line.
-      warnOnce("parse:pi", "skipping a malformed record in a pi/Prime session log", error);
-      continue;
-    }
-    if (record.type === "session") {
-      // A delegated run names the transcript that spawned it and sits below its depth.
-      if (record.parentSession || number(record.rlmDepth) > 0) kind = "subagent";
-      continue;
-    }
-    if (record.type === "model_change") {
-      model = String(record.modelId ?? model);
-      continue;
-    }
-    if (record.type === "thinking_level_change") {
-      effort = String(record.thinkingLevel ?? effort);
-      continue;
-    }
+    const record = parsePiLine(line);
+    if (!record) continue;
+    if (applyPiMeta(record, context)) continue;
     if (record.type !== "message") continue;
     const message = record.message;
     const usage = message?.usage;
     if (message?.role !== "assistant" || !usage) continue;
 
-    const row = rawRow(source, String(message.model ?? model), effort, kind);
+    const row = rawRow(source, text(message.model, context.model), context.effort, context.kind);
     row.calls = 1;
     row.input = number(usage.input);
     row.cacheRead = number(usage.cacheRead);
@@ -890,7 +973,7 @@ async function scanNikcli(path: string): Promise<RawUsageRow[]> {
     for (const message of messages) {
       let info: NikcliInfo;
       try {
-        info = JSON.parse(String(message.info ?? "{}")) as NikcliInfo;
+        info = JSON.parse(text(message.info, "{}")) as NikcliInfo;
       } catch (error) {
         // Deliberate: one unparseable `info` blob costs one message, not the database.
         warnOnce("parse:nikcli", "skipping a NikCLI message with an unreadable info blob", error);
@@ -900,7 +983,7 @@ async function scanNikcli(path: string): Promise<RawUsageRow[]> {
       if (!tokens) continue;
       const row = rawRow(
         "nikcli",
-        String(info.modelID ?? "unknown"),
+        text(info.modelID, "unknown"),
         "default",
         message.parent_id ? "subagent" : "main",
       );
@@ -940,7 +1023,7 @@ function readVarint(buffer: Uint8Array, at: number): { value: number; next: numb
   let value = 0;
   let shift = 1;
   for (let index = at; index < buffer.length && index - at < 10; index += 1) {
-    const byte = buffer[index]!;
+    const byte = buffer[index];
     // Multiplied rather than shifted: a 10-byte varint overflows a 32-bit shift.
     value += (byte & 0x7f) * shift;
     if ((byte & 0x80) === 0) return { value, next: index + 1 };
@@ -1099,7 +1182,7 @@ async function scanOpenCode(path: string): Promise<RawUsageRow[]> {
     return sessions.map((session) => {
       let metadata: OpenCodeModel = {};
       try {
-        metadata = JSON.parse(String(session.model ?? "{}")) as OpenCodeModel;
+        metadata = JSON.parse(text(session.model, "{}")) as OpenCodeModel;
       } catch (error) {
         // Deliberate: only the model name and variant live in this column. Losing them
         // costs the row its label and its list price, while the token counts — which
@@ -1108,8 +1191,8 @@ async function scanOpenCode(path: string): Promise<RawUsageRow[]> {
       }
       const row = rawRow(
         "opencode",
-        String(metadata.id ?? "unknown"),
-        String(metadata.variant ?? "default"),
+        text(metadata.id, "unknown"),
+        text(metadata.variant, "default"),
         session.parent_id ? "subagent" : "main",
       );
       row.calls = 1;
@@ -1312,7 +1395,9 @@ const defaultPaths = (): UsagePaths => {
  */
 function failedSource(id: UsageSourceId, error: unknown): UsageSourceStatus {
   const chain: string[] = [];
-  for (let current: unknown = error; current != null && chain.length < 4; current = (current as Error).cause) {
+  // No cast on `current.cause`: the `instanceof` guard that closes the body has
+  // already narrowed it to an Error by the time the incrementor runs.
+  for (let current: unknown = error; current != null && chain.length < 4; current = current.cause) {
     const reason = reasonOf(current);
     if (reason && chain.at(-1) !== reason) chain.push(reason);
     if (!(current instanceof Error)) break;
@@ -1327,153 +1412,121 @@ function failedSource(id: UsageSourceId, error: unknown): UsageSourceStatus {
   };
 }
 
+/**
+ * One ledger source, collected without letting it take the others down.
+ *
+ * `scan` appends whatever it read to the shared row list and answers with the number of
+ * files behind it; a source that throws instead becomes a visible error row, and every
+ * other source keeps its tokens. Rows a failing source had already appended stay: they
+ * were really read, and dropping them would understate a day of spend twice over.
+ */
+async function collectSource(
+  id: UsageSourceId,
+  sources: UsageSourceStatus[],
+  scan: () => Promise<number>,
+): Promise<void> {
+  try {
+    const files = await scan();
+    sources.push({ id, name: SOURCE_NAMES[id], status: files ? "ok" : "missing", files });
+  } catch (error) {
+    sources.push(failedSource(id, error));
+  }
+}
+
+/**
+ * The shape kimi, pi, Prime and Antigravity share: walk one or more trees, forget the
+ * cache entries whose files are gone, then read what is left.
+ */
+async function collectTree(
+  raw: RawUsageRow[],
+  roots: string[],
+  suffix: string,
+  cache: Map<string, FileCacheEntry<RawUsageRow[]>>,
+  read: (file: string) => Promise<RawUsageRow[]>,
+  sidecar?: (file: string) => string,
+): Promise<number> {
+  const files: string[] = [];
+  for (const root of roots) files.push(...await walk(root, suffix));
+  pruneCache(cache, files);
+  for (const file of files) {
+    raw.push(...(await cachedFile(cache, file, () => read(file), sidecar?.(file)) ?? []));
+  }
+  return files.length;
+}
+
+/** A single-file source: one database, scanned whole, present or not. */
+async function collectDatabase(
+  raw: RawUsageRow[],
+  path: string,
+  scan: (path: string) => Promise<RawUsageRow[]>,
+): Promise<number> {
+  raw.push(...await scan(path));
+  return existsSync(path) ? 1 : 0;
+}
+
+/**
+ * Codex writes running totals, and a resumed thread is a second file for the same
+ * session: only the fuller of the two is real, so keeping both would double its tokens.
+ */
+async function collectCodex(raw: RawUsageRow[], paths: UsagePaths): Promise<number> {
+  const files = [
+    ...await walk(paths.codex, ".jsonl"),
+    ...(paths.codexArchived ? await walk(paths.codexArchived, ".jsonl") : []),
+  ];
+  pruneCache(codexCache, files);
+  const sessions = new Map<string, CodexFileUsage>();
+  for (const file of files) {
+    const usage = await cachedFile(codexCache, file, () => scanCodex(file));
+    if (!usage) continue;
+    const current = sessions.get(usage.sessionId);
+    const tokens = usage.rows.reduce((sum, row) => sum + totalOf(row), 0);
+    const currentTokens = current?.rows.reduce((sum, row) => sum + totalOf(row), 0) ?? -1;
+    if (!current || tokens >= currentTokens) sessions.set(usage.sessionId, usage);
+  }
+  for (const session of sessions.values()) raw.push(...session.rows);
+  return files.length;
+}
+
+/**
+ * Claude Code repeats one assistant message across transcripts, so a message id is kept
+ * once: the copy with the most tokens, and on a tie the subagent copy, which is the one
+ * that names where the work actually happened.
+ */
+async function collectClaude(raw: RawUsageRow[], paths: UsagePaths): Promise<number> {
+  const files = await walk(paths.claude, ".jsonl");
+  pruneCache(claudeCache, files);
+  const messages = new Map<string, RawUsageRow>();
+  for (const file of files) {
+    const records = await cachedFile(claudeCache, file, () => scanClaude(file));
+    for (const { id, row } of records ?? []) {
+      const current = messages.get(id);
+      const hasMoreTokens = !current || totalOf(row) > totalOf(current);
+      const isCanonicalSubagent = current && totalOf(row) === totalOf(current) &&
+        current.agent === "main" && row.agent === "subagent";
+      if (hasMoreTokens || isCanonicalSubagent) messages.set(id, row);
+    }
+  }
+  raw.push(...messages.values());
+  return files.length;
+}
+
 export async function collectUsage(paths: UsagePaths = defaultPaths()): Promise<UsageSummary> {
   const raw: RawUsageRow[] = [];
   const sources: UsageSourceStatus[] = [];
+  // Prime keeps delegated subagent transcripts outside its session directory.
+  const primeRoots = paths.primeArtifacts ? [paths.prime, paths.primeArtifacts] : [paths.prime];
 
-  try {
-    const files = [
-      ...await walk(paths.codex, ".jsonl"),
-      ...(paths.codexArchived ? await walk(paths.codexArchived, ".jsonl") : []),
-    ];
-    pruneCache(codexCache, files);
-    const sessions = new Map<string, CodexFileUsage>();
-    for (const file of files) {
-      const usage = await cachedFile(codexCache, file, () => scanCodex(file));
-      if (!usage) continue;
-      const current = sessions.get(usage.sessionId);
-      const tokens = usage.rows.reduce((sum, row) => sum + totalOf(row), 0);
-      const currentTokens = current?.rows.reduce((sum, row) => sum + totalOf(row), 0) ?? -1;
-      if (!current || tokens >= currentTokens) sessions.set(usage.sessionId, usage);
-    }
-    for (const session of sessions.values()) raw.push(...session.rows);
-    sources.push({
-      id: "codex",
-      name: SOURCE_NAMES.codex,
-      status: files.length ? "ok" : "missing",
-      files: files.length,
-    });
-  } catch (error) {
-    sources.push(failedSource("codex", error));
-  }
-
-  try {
-    const files = await walk(paths.claude, ".jsonl");
-    pruneCache(claudeCache, files);
-    const messages = new Map<string, RawUsageRow>();
-    for (const file of files) {
-      const records = await cachedFile(claudeCache, file, () => scanClaude(file));
-      for (const { id, row } of records ?? []) {
-        const current = messages.get(id);
-        const hasMoreTokens = !current || totalOf(row) > totalOf(current);
-        const isCanonicalSubagent = current && totalOf(row) === totalOf(current) &&
-          current.agent === "main" && row.agent === "subagent";
-        if (hasMoreTokens || isCanonicalSubagent) messages.set(id, row);
-      }
-    }
-    raw.push(...messages.values());
-    sources.push({
-      id: "claude",
-      name: SOURCE_NAMES.claude,
-      status: files.length ? "ok" : "missing",
-      files: files.length,
-    });
-  } catch (error) {
-    sources.push(failedSource("claude", error));
-  }
-
-  try {
-    const files = await walk(paths.kimi, "wire.jsonl");
-    pruneCache(kimiCache, files);
-    for (const file of files) {
-      raw.push(...(await cachedFile(kimiCache, file, () => scanKimi(file)) ?? []));
-    }
-    sources.push({
-      id: "kimi",
-      name: SOURCE_NAMES.kimi,
-      status: files.length ? "ok" : "missing",
-      files: files.length,
-    });
-  } catch (error) {
-    sources.push(failedSource("kimi", error));
-  }
-
-  try {
-    const rows = await scanOpenCode(paths.opencodeDb);
-    raw.push(...rows);
-    sources.push({
-      id: "opencode",
-      name: SOURCE_NAMES.opencode,
-      status: existsSync(paths.opencodeDb) ? "ok" : "missing",
-      files: existsSync(paths.opencodeDb) ? 1 : 0,
-    });
-  } catch (error) {
-    sources.push(failedSource("opencode", error));
-  }
-
-  try {
-    const files = await walk(paths.pi, ".jsonl");
-    pruneCache(piCache, files);
-    for (const file of files) {
-      raw.push(...(await cachedFile(piCache, file, () => scanPi(file, "pi")) ?? []));
-    }
-    sources.push({
-      id: "pi",
-      name: SOURCE_NAMES.pi,
-      status: files.length ? "ok" : "missing",
-      files: files.length,
-    });
-  } catch (error) {
-    sources.push(failedSource("pi", error));
-  }
-
-  try {
-    const files = [
-      ...await walk(paths.prime, ".jsonl"),
-      ...(paths.primeArtifacts ? await walk(paths.primeArtifacts, ".jsonl") : []),
-    ];
-    pruneCache(primeCache, files);
-    for (const file of files) {
-      raw.push(...(await cachedFile(primeCache, file, () => scanPi(file, "prime")) ?? []));
-    }
-    sources.push({
-      id: "prime",
-      name: SOURCE_NAMES.prime,
-      status: files.length ? "ok" : "missing",
-      files: files.length,
-    });
-  } catch (error) {
-    sources.push(failedSource("prime", error));
-  }
-
-  try {
-    raw.push(...await scanNikcli(paths.nikcliDb));
-    sources.push({
-      id: "nikcli",
-      name: SOURCE_NAMES.nikcli,
-      status: existsSync(paths.nikcliDb) ? "ok" : "missing",
-      files: existsSync(paths.nikcliDb) ? 1 : 0,
-    });
-  } catch (error) {
-    sources.push(failedSource("nikcli", error));
-  }
-
-  try {
-    const files = await walk(paths.antigravity, ".db");
-    pruneCache(antigravityCache, files);
-    for (const file of files) {
-      const rows = await cachedFile(antigravityCache, file, () => scanAntigravity(file), `${file}-wal`);
-      raw.push(...(rows ?? []));
-    }
-    sources.push({
-      id: "antigravity",
-      name: SOURCE_NAMES.antigravity,
-      status: files.length ? "ok" : "missing",
-      files: files.length,
-    });
-  } catch (error) {
-    sources.push(failedSource("antigravity", error));
-  }
+  await collectSource("codex", sources, () => collectCodex(raw, paths));
+  await collectSource("claude", sources, () => collectClaude(raw, paths));
+  await collectSource("kimi", sources, () => collectTree(raw, [paths.kimi], "wire.jsonl", kimiCache, scanKimi));
+  await collectSource("opencode", sources, () => collectDatabase(raw, paths.opencodeDb, scanOpenCode));
+  await collectSource("pi", sources, () =>
+    collectTree(raw, [paths.pi], ".jsonl", piCache, (file) => scanPi(file, "pi")));
+  await collectSource("prime", sources, () =>
+    collectTree(raw, primeRoots, ".jsonl", primeCache, (file) => scanPi(file, "prime")));
+  await collectSource("nikcli", sources, () => collectDatabase(raw, paths.nikcliDb, scanNikcli));
+  await collectSource("antigravity", sources, () =>
+    collectTree(raw, [paths.antigravity], ".db", antigravityCache, scanAntigravity, (file) => `${file}-wal`));
 
   sources.push({
     id: "gemini",

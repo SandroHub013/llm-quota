@@ -36,3 +36,19 @@ export async function fetchJson<T = unknown>(
 export function nowIso(): string {
   return new Date().toISOString();
 }
+
+/**
+ * The status a card takes while its official bridge is live.
+ *
+ * Exhausted outranks stale: a window at 100% is the more urgent of the two, and it is
+ * also the one that repairs itself, so it must not be hidden behind an age warning.
+ */
+export function bridgeStatus(exhausted: boolean, stale: boolean): "rate_limited" | "partial" | "ok" {
+  if (exhausted) return "rate_limited";
+  return stale ? "partial" : "ok";
+}
+
+/** A snapshot field a bridge writes only sometimes, and only sometimes as a string. */
+export function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}

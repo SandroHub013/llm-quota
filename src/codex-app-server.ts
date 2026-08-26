@@ -3,6 +3,8 @@ import { existsSync } from "node:fs";
 import { delimiter, join } from "node:path";
 import { createInterface } from "node:readline";
 
+import { text } from "./coerce.js";
+
 export interface CodexAppServerResult {
   /** Whatever Codex answered with. `providers/codex.ts` is what reads its shape. */
   rateLimits: unknown;
@@ -135,7 +137,7 @@ export function readCodexRateLimits(timeoutMs = 8_000): Promise<CodexAppServerRe
 
       if (message.id === 0) {
         if (message.error) {
-          finish(new Error(`codex_initialize_failed: ${String(message.error.message ?? "unknown")}`));
+          finish(new Error(`codex_initialize_failed: ${text(message.error.message, "unknown")}`));
           return;
         }
         send({ method: "initialized", params: {} });
@@ -145,7 +147,7 @@ export function readCodexRateLimits(timeoutMs = 8_000): Promise<CodexAppServerRe
 
       if (message.id === 1) {
         if (message.error) {
-          finish(new Error(`codex_rate_limits_failed: ${String(message.error.message ?? "unknown")}`));
+          finish(new Error(`codex_rate_limits_failed: ${text(message.error.message, "unknown")}`));
           return;
         }
         finish(undefined, { rateLimits: message.result });
@@ -154,7 +156,8 @@ export function readCodexRateLimits(timeoutMs = 8_000): Promise<CodexAppServerRe
 
     const timer = setTimeout(() => {
       const detail = cleanStderr(stderr);
-      finish(new Error(`codex_app_server_timeout${detail ? `: ${detail}` : ""}`));
+      const reason = detail ? `: ${detail}` : "";
+      finish(new Error(`codex_app_server_timeout${reason}`));
     }, timeoutMs);
 
     send({

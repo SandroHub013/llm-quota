@@ -5,7 +5,7 @@ import { PUBLIC_ASSETS } from "./public-assets.generated.js";
 import { INDEX, mimeFor } from "./public-mime.js";
 import type { QuotaResult } from "./providers/types.js";
 import { JsonFileUnreadableError, readConfig, updateConfig } from "./credentials.js";
-import { installOfficialBridge, removeOfficialBridge, type OfficialBridgeProvider } from "./official-bridge.js";
+import { installOfficialBridge, removeOfficialBridge } from "./official-bridge.js";
 import { collectUsage } from "./usage.js";
 import { normalizeUsageView, usageFiltersActive, usageHeadlineCosts } from "./usage-view.js";
 import { collectGitHubContributions } from "./github-contributions.prototype.js";
@@ -32,7 +32,7 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
 function hostAllowed(host: string): boolean {
   if (!host) return false;
-  const name = host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : host.split(":")[0]!;
+  const name = host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : host.split(":")[0];
   return LOOPBACK_HOSTS.has(name.toLowerCase());
 }
 
@@ -218,7 +218,7 @@ app.post("/api/official-bridge/:id", async (context) => {
     return context.json({ error: "unsupported bridge" }, 404);
   }
   try {
-    await installOfficialBridge(id as OfficialBridgeProvider);
+    await installOfficialBridge(id);
     quotaCache = undefined;
     return context.json(await fetchOne(id), 200, { "Cache-Control": "no-store" });
   } catch (error) {
@@ -234,7 +234,7 @@ app.delete("/api/official-bridge/:id", async (context) => {
     return context.json({ error: "unsupported bridge" }, 404);
   }
   try {
-    await removeOfficialBridge(id as OfficialBridgeProvider);
+    await removeOfficialBridge(id);
     quotaCache = undefined;
     return context.json(await fetchOne(id), 200, { "Cache-Control": "no-store" });
   } catch (error) {
@@ -243,7 +243,7 @@ app.delete("/api/official-bridge/:id", async (context) => {
 });
 
 app.get("/", async (context) => {
-  return context.html(await Bun.file(PUBLIC_ASSETS[INDEX]!).text());
+  return context.html(await Bun.file(PUBLIC_ASSETS[INDEX]).text());
 });
 
 app.get("/:a{.+}", async (context) => {
