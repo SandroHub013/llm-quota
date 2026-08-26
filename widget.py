@@ -430,6 +430,8 @@ def protocol_command(python_executable, script_path, base_url=None):
 
 
 SCHEME_MIME = "x-scheme-handler/llmquota"
+# The freedesktop section that maps a MIME type to the .desktop file that opens it.
+DEFAULT_APPLICATIONS = "Default Applications"
 MACOS_BUNDLE_ID = "app.llmquota.widget"
 LSREGISTER = (
     "/System/Library/Frameworks/CoreServices.framework/Frameworks"
@@ -440,6 +442,15 @@ LSREGISTER = (
 def macos_bundle_path():
     """Where the launcher bundle lives: per-user, so no administrator is involved."""
     return os.path.join(os.path.expanduser("~"), "Applications", "LLM Quota Widget.app")
+
+
+def applescript_shell_word(value):
+    """One argument of the shell command below, quoted for both languages at once.
+
+    `applescript_quote` makes it a safe AppleScript literal; `quoted form of` makes what
+    that literal evaluates to a safe shell word. Neither alone is enough.
+    """
+    return f"quoted form of {applescript_quote(value)}"
 
 
 def macos_launcher_source(script_path, base_url=None):
@@ -456,14 +467,14 @@ def macos_launcher_source(script_path, base_url=None):
     # and `quoted form of` is what keeps the shell from reading a space as an argument
     # break. Both layers matter — one quotes for AppleScript, the other for sh.
     parts = [
-        f"quoted form of {applescript_quote(sys.executable)}",
+        applescript_shell_word(sys.executable),
         '" "',
-        f"quoted form of {applescript_quote(script_path)}",
+        applescript_shell_word(script_path),
     ]
     if base_url is not None:
         parts += [
             '" --server-url "',
-            f"quoted form of {applescript_quote(normalize_base_url(base_url))}",
+            applescript_shell_word(normalize_base_url(base_url)),
         ]
     command = " & ".join(parts)
 
@@ -565,9 +576,9 @@ def associate_scheme(desktop_file, path=None):
         log_handled(f"could not read {path}; the scheme association was not written", error)
         return False
 
-    if not parser.has_section("Default Applications"):
-        parser.add_section("Default Applications")
-    parser.set("Default Applications", SCHEME_MIME, desktop_file)
+    if not parser.has_section(DEFAULT_APPLICATIONS):
+        parser.add_section(DEFAULT_APPLICATIONS)
+    parser.set(DEFAULT_APPLICATIONS, SCHEME_MIME, desktop_file)
 
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -598,7 +609,7 @@ def query_scheme_handler():
     parser.optionxform = str
     try:
         parser.read(mimeapps_path(), encoding="utf-8")
-        return parser.get("Default Applications", SCHEME_MIME, fallback=None)
+        return parser.get(DEFAULT_APPLICATIONS, SCHEME_MIME, fallback=None)
     except (OSError, configparser.Error):
         return None
 
@@ -816,7 +827,7 @@ def quota_signature(data):
             provider.get("name"),
             provider.get("status"),
             provider.get("remaining"),
-            re.sub(r"\s+\(resets in [^)]+\)", "", str(provider.get("details_str") or "")),
+            re.sub(r"\s+\(resets in [^)]+\)", "", str(provider.get(DETAILS_STR) or "")),
             tuple(
                 (reset.get("label"), reset.get("used_pct"), reset.get("reset_at"))
                 for reset in provider.get("resets", [])
@@ -833,10 +844,19 @@ BRAND = {
     "gemini": ("#4285f4", "G"),
     "moonshot": ("#0ea5e9", "K"),
 }
+# Tk's name for a left mouse click, bound on nearly every control the widget draws.
+LEFT_CLICK = "<Button-1>"
+# The mini bar's two layouts, as `bar_orientation` stores them.
+HORIZONTAL, VERTICAL = "horizontal", "vertical"
+# The one provider status this file keeps asking about by name: it drives the amber dot,
+# the "STALE"/"RETRY" line and the notification that a window has just run out.
+RATE_LIMITED = "rate_limited"
+# The per-provider hover text, as it is named in the rows the dashboard hands over.
+DETAILS_STR = "details_str"
 STATUS_LABEL = {
     "ok": "active",
     "partial": "partial",
-    "rate_limited": "rate limited",
+    RATE_LIMITED: "rate limited",
     "unauthenticated": "not signed in",
     "no_endpoint": "no API quota",
     "error": "error",
@@ -844,7 +864,7 @@ STATUS_LABEL = {
 STATUS_DOT = {
     "ok": "#3fb950",
     "partial": "#d29922",
-    "rate_limited": "#d29922",
+    RATE_LIMITED: "#d29922",
     "unauthenticated": "#6e7681",
     "no_endpoint": "#6e7681",
     "error": "#f85149",
@@ -972,6 +992,82 @@ def fetch_usage_cost():
         return None
 
 
+def metric_detail(m, lbl, rem, r_str):
+    """One line of a provider's hover text: what is left here, and when it comes back.
+
+    Four ways of saying "what is left", in order of how much the server told us: a
+    percentage, a used/limit pair, a bare remaining figure with its unit, and — when the
+    window carries no numbers at all — just its name.
+    """
+    used, limit = m.get("used"), m.get("limit")
+    if rem is not None:
+        detail = f"{lbl}: {rem}% left"
+    elif used is not None and limit:
+        detail = f"{lbl}: {used}/{limit}"
+    elif m.get("remaining") is not None:
+        detail = f"{lbl}: {m['remaining']} {m.get('unit', '')}".strip()
+    else:
+        detail = lbl
+    return f"{detail} (resets in {r_str})" if r_str else detail
+
+
+def read_metric(m):
+    """One quota window, as the three things the widget makes of it.
+
+    The percentage/countdown pair the card summary is computed from, the reset entry —
+    `None` for a window with no clock — and the line it adds to the hover text.
+    """
+    used, limit = m.get("used"), m.get("limit")
+    reset_at = m.get("resetAt")
+    sec = parse_reset_sec(reset_at)
+    rem = 100 - round(100 * used / limit) if used is not None and limit else None
+    lbl = m.get("label", "Quota")
+    reset = None
+    if sec is not None:
+        reset = {
+            "label": lbl,
+            "sec": sec,
+            "reset_at": reset_at,
+            "used_pct": max(0, min(100, 100 - rem)) if rem is not None else 0,
+        }
+    return {"rem": rem, "sec": sec}, reset, metric_detail(m, lbl, rem, format_reset(sec))
+
+
+def provider_row(d):
+    """One provider flattened into the row both display modes read.
+
+    The countdown shown is the one from the window closest to running out, not the one
+    that expires first: a weekly limit with 2% left matters more than a session window
+    resetting in ten minutes.
+    """
+    metric_info, resets, details_list = [], [], []
+    for m in d.get("metrics", []):
+        info, reset, detail = read_metric(m)
+        metric_info.append(info)
+        if reset is not None:
+            resets.append(reset)
+        details_list.append(detail)
+
+    rems = [m["rem"] for m in metric_info if m["rem"] is not None]
+    timed = sorted(
+        (m for m in metric_info if m["sec"] is not None),
+        key=lambda x: (x["rem"] if x["rem"] is not None else 999, x["sec"]),
+    )
+    reset_sec = timed[0]["sec"] if timed else None
+    fallback = d.get("message", STATUS_LABEL.get(d.get("status"), "No detail"))
+
+    return {
+        "id": d["id"],
+        "name": d["name"],
+        "status": d.get("status", "error"),
+        "remaining": max(0, min(100, min(rems))) if rems else None,
+        "reset_sec": reset_sec,
+        "reset_str": format_reset(reset_sec),
+        "resets": resets,
+        DETAILS_STR: " • ".join(details_list) if details_list else fallback,
+    }
+
+
 def fetch_all():
     """Return [{id, name, status, remaining, reset_str, details_str}]"""
     try:
@@ -981,67 +1077,10 @@ def fetch_all():
         log_handled("could not read the quota from the server", error)
         return None
     try:
-        out = []
-        for d in providers:
-            if d.get("id") in WIDGET_HIDDEN_PROVIDER_IDS:
-                continue
-            metrics = d.get("metrics", [])
-            metric_info = []
-            details_list = []
-            resets = []
-            for m in metrics:
-                used = m.get("used")
-                limit = m.get("limit")
-                reset_at = m.get("resetAt")
-                sec = parse_reset_sec(reset_at)
-                r_str = format_reset(sec)
-                rem = 100 - round(100 * used / limit) if used is not None and limit else None
-                lbl = m.get("label", "Quota")
-                metric_info.append({"rem": rem, "sec": sec})
-                if sec is not None:
-                    resets.append({
-                        "label": lbl,
-                        "sec": sec,
-                        "reset_at": reset_at,
-                        "used_pct": max(0, min(100, 100 - rem)) if rem is not None else 0,
-                    })
-
-                if rem is not None:
-                    d_item = f"{lbl}: {rem}% left"
-                elif used is not None and limit:
-                    d_item = f"{lbl}: {used}/{limit}"
-                elif m.get("remaining") is not None:
-                    d_item = f"{lbl}: {m['remaining']} {m.get('unit', '')}".strip()
-                else:
-                    d_item = lbl
-
-                if r_str:
-                    d_item += f" (resets in {r_str})"
-                details_list.append(d_item)
-
-            rems = [m["rem"] for m in metric_info if m["rem"] is not None]
-            remaining = max(0, min(100, min(rems))) if rems else None
-
-            reset_sec = None
-            valid_resets = [m for m in metric_info if m["sec"] is not None]
-            if valid_resets:
-                valid_resets.sort(key=lambda x: (x["rem"] if x["rem"] is not None else 999, x["sec"]))
-                reset_sec = valid_resets[0]["sec"]
-
-            reset_str = format_reset(reset_sec)
-            details_str = " • ".join(details_list) if details_list else d.get("message", STATUS_LABEL.get(d.get("status"), "No detail"))
-
-            out.append({
-                "id": d["id"],
-                "name": d["name"],
-                "status": d.get("status", "error"),
-                "remaining": remaining,
-                "reset_sec": reset_sec,
-                "reset_str": reset_str,
-                "resets": resets,
-                "details_str": details_str,
-            })
-        return out
+        return [
+            provider_row(d) for d in providers
+            if d.get("id") not in WIDGET_HIDDEN_PROVIDER_IDS
+        ]
     except (AttributeError, KeyError, TypeError, ValueError) as error:
         # A payload shaped differently from what this widget expects is a real defect
         # somewhere, so it must not read as a plain network hiccup.
@@ -1096,7 +1135,7 @@ class Widget(tk.Tk):
         self.footer_frame = None
         self.horizon_frame = None
         self.minibar_frame = None
-        self.bar_orientation = "horizontal"
+        self.bar_orientation = HORIZONTAL
         self._drag_origin = None
         self._user_positioned = False
         self._refresh_job = None
@@ -1140,7 +1179,7 @@ class Widget(tk.Tk):
         self.logo.pack(padx=2, pady=2)
         self.header.pack(anchor="e")
         for w in (self.header, self.logo):
-            w.bind("<Button-1>", self.toggle)
+            w.bind(LEFT_CLICK, self.toggle)
         self._draw_logo(None)
 
         self.panel = tk.Frame(self.surface, bg=BG,
@@ -1233,27 +1272,37 @@ class Widget(tk.Tk):
                 # Missing/unsupported local marks reveal the deterministic initials.
                 pass
 
+    @staticmethod
+    def _is_stroke(img, x, y):
+        """Whether this pixel is part of a dark mark rather than the space around it."""
+        # Transparent pixels report black through PhotoImage.get;
+        # do not turn the whole transparent canvas into white.
+        try:
+            if img.transparency_get(x, y):
+                return False
+        except tk.TclError:
+            pass
+        r, g, b = img.get(x, y)
+        return r < 120 and g < 120 and b < 120
+
+    @classmethod
+    def _whiten(cls, img):
+        """A copy of a dark logo with its strokes in white, and nothing else drawn."""
+        w, h = img.width(), img.height()
+        white = tk.PhotoImage(width=w, height=h)
+        for x in range(w):
+            for y in range(h):
+                if cls._is_stroke(img, x, y):
+                    white.put("#ffffff", (x, y))
+        return white
+
     def _set_icon(self, pid, raw):
         try:
             img = tk.PhotoImage(data=raw).subsample(2, 2)
             if pid in {"codex", "claude"}:
                 # OpenAI's and Anthropic's marks are dark; convert their strokes to
                 # bright white for the widget's dark panel.
-                w, h = img.width(), img.height()
-                new_img = tk.PhotoImage(width=w, height=h)
-                for x in range(w):
-                    for y in range(h):
-                        # Transparent pixels report black through PhotoImage.get;
-                        # do not turn the whole transparent canvas into white.
-                        try:
-                            if img.transparency_get(x, y):
-                                continue
-                        except tk.TclError:
-                            pass
-                        r, g, b = img.get(x, y)
-                        if r < 120 and g < 120 and b < 120:
-                            new_img.put("#ffffff", (x, y))
-                img = new_img
+                img = self._whiten(img)
             self.icons[pid] = img
             if self.last_data:
                 self._render(self.last_data)
@@ -1410,7 +1459,7 @@ class Widget(tk.Tk):
             self.after_idle(self._apply_window_effects)
 
     def toggle_bar_orientation(self):
-        self.bar_orientation = "vertical" if self.bar_orientation == "horizontal" else "horizontal"
+        self.bar_orientation = VERTICAL if self.bar_orientation == HORIZONTAL else HORIZONTAL
         if self.last_data:
             self._render_minibar(self.last_data)
             self._place_bottom_right()
@@ -1541,9 +1590,9 @@ class Widget(tk.Tk):
         if self.__dict__.get("_quota_online", False) and not self.__dict__.get("_quota_stale", False):
             text, color = "● LIVE", STATUS_DOT["ok"]
         elif self.__dict__.get("_quota_stale", False):
-            text, color = "● STALE", STATUS_DOT["rate_limited"]
+            text, color = "● STALE", STATUS_DOT[RATE_LIMITED]
         else:
-            text, color = "● RETRY", STATUS_DOT["rate_limited"]
+            text, color = "● RETRY", STATUS_DOT[RATE_LIMITED]
         for label in self._live_labels:
             try:
                 label.config(text=text, fg=color)
@@ -1556,24 +1605,24 @@ class Widget(tk.Tk):
     def _provider(self, provider_id):
         return next((provider for provider in (self.last_data or []) if provider["id"] == provider_id), None)
 
+    def _refresh_reset_labels(self, labels, elapsed):
+        """Rewrite one set of countdown labels in place, without redrawing the view."""
+        for provider_id, label in labels.items():
+            provider = self._provider(provider_id)
+            reset = format_reset((provider.get("reset_sec") or 0) - elapsed) if provider else None
+            try:
+                label.config(text=f"({reset})" if reset else "")
+            except tk.TclError:
+                # The label belonged to a view that has since been torn down; whatever
+                # replaced it is being ticked through the other dictionary.
+                pass
+
     def _update_live_values(self):
         if not self.last_data:
             return
         elapsed = self._elapsed_since_load()
-        for provider_id, label in self._row_reset_labels.items():
-            provider = self._provider(provider_id)
-            reset = format_reset((provider.get("reset_sec") or 0) - elapsed) if provider else None
-            try:
-                label.config(text=f"({reset})" if reset else "")
-            except tk.TclError:
-                pass
-        for provider_id, label in self._minibar_reset_labels.items():
-            provider = self._provider(provider_id)
-            reset = format_reset((provider.get("reset_sec") or 0) - elapsed) if provider else None
-            try:
-                label.config(text=f"({reset})" if reset else "")
-            except tk.TclError:
-                pass
+        self._refresh_reset_labels(self._row_reset_labels, elapsed)
+        self._refresh_reset_labels(self._minibar_reset_labels, elapsed)
         self._update_horizon_values(elapsed)
 
     def _update_horizon_values(self, elapsed=None):
@@ -1668,11 +1717,11 @@ class Widget(tk.Tk):
         dot.pack(side="left", padx=(2, 8))
 
         # Tooltip con dettagli finestre
-        Tooltip(row, lambda provider_id=d["id"]: (self._provider(provider_id) or d).get("details_str"))
+        Tooltip(row, lambda provider_id=d["id"]: (self._provider(provider_id) or d).get(DETAILS_STR))
 
         row.pack(fill="x")
         for w in (row, *row.winfo_children()):
-            w.bind("<Button-1>", self.toggle)
+            w.bind(LEFT_CLICK, self.toggle)
         row.bind("<Enter>", lambda e, r=row: self._hover(r, True))
         row.bind("<Leave>", lambda e, r=row: self._hover(r, False))
         return row
@@ -1726,6 +1775,43 @@ class Widget(tk.Tk):
         canvas.pack(fill="x", padx=4)
         self.horizon_frame.pack(fill="x")
 
+    def _minibar_item(self, d, vertical):
+        """One provider's cell of the mini bar: mark, figure, countdown and tooltip."""
+        color, initial = BRAND.get(d["id"], (ACCENT, d["name"][0]))
+        rem = d["remaining"]
+        reset_str = d.get("reset_str")
+
+        item = tk.Frame(self.minibar_frame, bg=PANEL)
+        img = self.icons.get(d["id"])
+        if img:
+            lbl_icon = tk.Label(item, image=img, bg=PANEL)
+            lbl_icon.image = img
+            lbl_icon.pack(side="left", padx=(3, 1), pady=2)
+        else:
+            tk.Label(item, text=initial, bg=color, fg="#fff", font=ui(8, "bold"), width=2).pack(side="left", padx=(3, 1), pady=2)
+
+        txt = f"{rem}%" if rem is not None else STATUS_LABEL.get(d["status"], d["status"])
+        lbl_txt = tk.Label(item, text=txt, bg=PANEL, fg=quota_color(rem) if rem is not None else MUT, font=mono(9))
+        lbl_txt.pack(side="left", padx=1)
+
+        if reset_str:
+            reset_label = tk.Label(item, text=f"({reset_str})", bg=PANEL, fg=MUT, font=mono(9))
+            reset_label.pack(side="left", padx=(0, 2))
+            self._minibar_reset_labels[d["id"]] = reset_label
+
+        # Both bound as defaults, not captured. The id already was; `d` was not, so
+        # when a provider left the payload the fallback reached for whichever row
+        # the loop happened to end on and the tooltip described the wrong service.
+        Tooltip(
+            item,
+            lambda provider_id=d["id"], row=d: (self._provider(provider_id) or row).get(DETAILS_STR),
+        )
+
+        if vertical:
+            item.pack(fill="x", padx=3, pady=1)
+        else:
+            item.pack(side="left", padx=2)
+
     def _render_minibar(self, data):
         if self.minibar_frame:
             self.minibar_frame.destroy()
@@ -1734,43 +1820,10 @@ class Widget(tk.Tk):
         self._live_labels = []
         self._spend_labels = []
         self.minibar_frame = tk.Frame(self.surface, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
-        vertical = self.bar_orientation == "vertical"
+        vertical = self.bar_orientation == VERTICAL
 
         for d in data:
-            color, initial = BRAND.get(d["id"], (ACCENT, d["name"][0]))
-            rem = d["remaining"]
-            reset_str = d.get("reset_str")
-
-            item = tk.Frame(self.minibar_frame, bg=PANEL)
-            img = self.icons.get(d["id"])
-            if img:
-                lbl_icon = tk.Label(item, image=img, bg=PANEL)
-                lbl_icon.image = img
-                lbl_icon.pack(side="left", padx=(3, 1), pady=2)
-            else:
-                tk.Label(item, text=initial, bg=color, fg="#fff", font=ui(8, "bold"), width=2).pack(side="left", padx=(3, 1), pady=2)
-
-            txt = f"{rem}%" if rem is not None else STATUS_LABEL.get(d["status"], d["status"])
-            lbl_txt = tk.Label(item, text=txt, bg=PANEL, fg=quota_color(rem) if rem is not None else MUT, font=mono(9))
-            lbl_txt.pack(side="left", padx=1)
-
-            if reset_str:
-                reset_label = tk.Label(item, text=f"({reset_str})", bg=PANEL, fg=MUT, font=mono(9))
-                reset_label.pack(side="left", padx=(0, 2))
-                self._minibar_reset_labels[d["id"]] = reset_label
-
-            # Both bound as defaults, not captured. The id already was; `d` was not, so
-            # when a provider left the payload the fallback reached for whichever row
-            # the loop happened to end on and the tooltip described the wrong service.
-            Tooltip(
-                item,
-                lambda provider_id=d["id"], row=d: (self._provider(provider_id) or row).get("details_str"),
-            )
-
-            if vertical:
-                item.pack(fill="x", padx=3, pady=1)
-            else:
-                item.pack(side="left", padx=2)
+            self._minibar_item(d, vertical)
 
         controls = tk.Frame(self.minibar_frame, bg=PANEL)
         spend = tk.Label(controls, text="€ …", bg=PANEL, fg="#b8f1c0", font=mono(9))
@@ -1788,13 +1841,13 @@ class Widget(tk.Tk):
         btn_orientation = tk.Label(controls, text=orientation_text, bg=PANEL, fg=VIOLET,
                                    font=ui(9), cursor="hand2")
         btn_orientation.pack(side="left", padx=(4, 2), pady=2)
-        btn_orientation.bind("<Button-1>", lambda e: self.toggle_bar_orientation())
+        btn_orientation.bind(LEFT_CLICK, lambda e: self.toggle_bar_orientation())
         Tooltip(btn_orientation, orientation_tip)
 
         btn_switch = tk.Label(controls, text="[ Q Logo ]", bg=PANEL, fg=ACCENT,
                               font=ui(9), cursor="hand2")
         btn_switch.pack(side="left", padx=(2, 6), pady=2)
-        btn_switch.bind("<Button-1>", lambda e: self.switch_view_mode())
+        btn_switch.bind(LEFT_CLICK, lambda e: self.switch_view_mode())
         Tooltip(btn_switch, "Switch to Q logo")
 
         if vertical:
@@ -1818,7 +1871,7 @@ class Widget(tk.Tk):
 
             if p_rem is not None and p_rem > 15 and n_rem is not None and n_rem <= 15:
                 send_win_notification("LLM Quota — Low Quota Warning", f"{d['name']} is down to {n_rem}%.")
-            if p_status != "rate_limited" and n_status == "rate_limited":
+            if p_status != RATE_LIMITED and n_status == RATE_LIMITED:
                 send_win_notification("LLM Quota — Rate Limit", f"{d['name']} has hit its rate limit.")
             if p_rem is not None and p_rem < 50 and n_rem == 100:
                 send_win_notification("LLM Quota — Quota Reset", f"{d['name']} is back to 100%.")
@@ -1836,7 +1889,7 @@ class Widget(tk.Tk):
 
         worst = [d["remaining"] for d in data if d["remaining"] is not None]
         mn = min(worst) if worst else None
-        critical = (mn is not None and mn <= 15) or any(d.get("status") == "rate_limited" for d in data)
+        critical = (mn is not None and mn <= 15) or any(d.get("status") == RATE_LIMITED for d in data)
         self._draw_logo(mn, critical=critical)
 
         if self.view_mode == "bar":
@@ -1860,11 +1913,11 @@ class Widget(tk.Tk):
         self.footer_frame = tk.Frame(self.panel, bg=BG)
         dash_btn = tk.Label(self.footer_frame, text="Dashboard ↗", bg=BG, fg=ACCENT, font=ui(9), cursor="hand2")
         dash_btn.pack(side="left", padx=(8, 0), pady=(4, 6))
-        dash_btn.bind("<Button-1>", lambda e: webbrowser.open(BASE))
+        dash_btn.bind(LEFT_CLICK, lambda e: webbrowser.open(BASE))
 
         switch_btn = tk.Label(self.footer_frame, text="⇄ Mini Bar", bg=BG, fg=VIOLET, font=ui(9), cursor="hand2")
         switch_btn.pack(side="left", padx=(10, 0), pady=(4, 6))
-        switch_btn.bind("<Button-1>", lambda e: self.switch_view_mode())
+        switch_btn.bind(LEFT_CLICK, lambda e: self.switch_view_mode())
 
         live = tk.Label(self.footer_frame, text="● LIVE", bg=BG, fg=STATUS_DOT["ok"],
                         font=mono(8))

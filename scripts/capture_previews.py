@@ -34,6 +34,18 @@ DOCS = ROOT / "docs"
 NOW = datetime.now(timezone.utc)
 TARGET_COST_EUR = 186.42
 
+# Field names of the two API payloads this file fakes, spelled once each: a typo in a
+# fixture key produces a preview image that is quietly missing a number.
+COST_EUR = "estimatedCostEur"
+REUSE_PCT = "contextReusePct"
+CACHE_WRITE = "cacheWrite"
+GENERATED_AT = "generatedAt"
+SOURCE_LABEL = "sourceLabel"
+SOURCE_NAME = "sourceName"
+CONSOLE_URL = "consoleUrl"
+PUBLIC_LIST = "public_list"
+CLAUDE_CODE = "Claude Code"
+
 
 class QuietHandler(SimpleHTTPRequestHandler):
     def log_message(self, *_args) -> None:
@@ -67,7 +79,7 @@ def token_totals(seed: int) -> dict[str, int]:
     return {
         "input": input_tokens,
         "cacheRead": cache_read,
-        "cacheWrite": cache_write,
+        CACHE_WRITE: cache_write,
         "output": output,
         "reasoning": reasoning,
         "total": input_tokens + cache_read + cache_write + output,
@@ -78,11 +90,11 @@ def quota_fixture() -> dict:
     providers = [
         {
             "id": "claude",
-            "name": "Claude Code",
+            "name": CLAUDE_CODE,
             "status": "ok",
             "plan": "max",
-            "sourceLabel": "Claude Code status line",
-            "consoleUrl": "https://claude.ai/settings/usage",
+            SOURCE_LABEL: "Claude Code status line",
+            CONSOLE_URL: "https://claude.ai/settings/usage",
             "updatedAt": NOW.isoformat(),
             "metrics": [
                 {"label": "Session (5h)", "used": 38, "limit": 100, "unit": "percent", "resetAt": iso_after(hours=3, minutes=42)},
@@ -94,8 +106,8 @@ def quota_fixture() -> dict:
             "name": "Codex (ChatGPT)",
             "status": "ok",
             "plan": "plus",
-            "sourceLabel": "Codex app-server",
-            "consoleUrl": "https://chatgpt.com",
+            SOURCE_LABEL: "Codex app-server",
+            CONSOLE_URL: "https://chatgpt.com",
             "updatedAt": NOW.isoformat(),
             "metrics": [
                 {"label": "Weekly (7d)", "used": 42, "limit": 100, "unit": "percent", "resetAt": iso_after(days=5, hours=9)},
@@ -105,8 +117,8 @@ def quota_fixture() -> dict:
             "id": "zai",
             "name": "z.ai",
             "status": "no_endpoint",
-            "sourceLabel": "official plugin / console",
-            "consoleUrl": "https://z.ai/manage-apikey/apikey-list",
+            SOURCE_LABEL: "official plugin / console",
+            CONSOLE_URL: "https://z.ai/manage-apikey/apikey-list",
             "updatedAt": NOW.isoformat(),
             "metrics": [],
             "message": "Quota available through the official Usage Query plugin; no public dashboard API.",
@@ -116,8 +128,8 @@ def quota_fixture() -> dict:
             "name": "Gemini",
             "status": "ok",
             "plan": "Google AI Pro",
-            "sourceLabel": "Antigravity status line",
-            "consoleUrl": "https://antigravity.google/",
+            SOURCE_LABEL: "Antigravity status line",
+            CONSOLE_URL: "https://antigravity.google/",
             "updatedAt": NOW.isoformat(),
             "metrics": [
                 {"label": "Gemini models \u00b7 Weekly (7d)", "used": 29, "limit": 100, "unit": "percent", "resetAt": iso_after(days=2, hours=8)},
@@ -130,15 +142,15 @@ def quota_fixture() -> dict:
             "id": "moonshot",
             "name": "Kimi / Moonshot",
             "status": "ok",
-            "sourceLabel": "Moonshot Open Platform balance API",
-            "consoleUrl": "https://platform.moonshot.ai/console/account",
+            SOURCE_LABEL: "Moonshot Open Platform balance API",
+            CONSOLE_URL: "https://platform.moonshot.ai/console/account",
             "updatedAt": NOW.isoformat(),
             "metrics": [
                 {"label": "Available API credit", "remaining": 46.2, "unit": "cny"},
             ],
         },
     ]
-    return {"providers": providers, "generatedAt": NOW.isoformat()}
+    return {"providers": providers, GENERATED_AT: NOW.isoformat()}
 
 
 def usage_fixture() -> dict:
@@ -153,57 +165,57 @@ def usage_fixture() -> dict:
                 "date": (today - timedelta(days=offset)).isoformat(),
                 "calls": 8 + offset % 13,
                 "tokens": totals,
-                "contextReusePct": round(
+                REUSE_PCT: round(
                     totals["cacheRead"]
-                    / (totals["input"] + totals["cacheRead"] + totals["cacheWrite"])
+                    / (totals["input"] + totals["cacheRead"] + totals[CACHE_WRITE])
                     * 100,
                     1,
                 ),
-                "estimatedCostEur": 1.25 + (offset % 17) * 0.31,
+                COST_EUR: 1.25 + (offset % 17) * 0.31,
                 "pricingCoveragePct": 96.4,
                 "sources": ["codex", "claude"] if offset % 2 == 0 else ["opencode", "kimi"],
             }
         )
 
-    raw_cost = sum(day["estimatedCostEur"] for day in daily)
+    raw_cost = sum(day[COST_EUR] for day in daily)
     for day in daily:
-        day["estimatedCostEur"] = round(day["estimatedCostEur"] * TARGET_COST_EUR / raw_cost, 2)
-    daily[0]["estimatedCostEur"] = round(
-        daily[0]["estimatedCostEur"] + TARGET_COST_EUR - sum(day["estimatedCostEur"] for day in daily),
+        day[COST_EUR] = round(day[COST_EUR] * TARGET_COST_EUR / raw_cost, 2)
+    daily[0][COST_EUR] = round(
+        daily[0][COST_EUR] + TARGET_COST_EUR - sum(day[COST_EUR] for day in daily),
         2,
     )
 
     totals = {
         key: sum(day["tokens"][key] for day in daily)
-        for key in ("input", "cacheRead", "cacheWrite", "output", "reasoning", "total")
+        for key in ("input", "cacheRead", CACHE_WRITE, "output", "reasoning", "total")
     }
-    context = totals["input"] + totals["cacheRead"] + totals["cacheWrite"]
+    context = totals["input"] + totals["cacheRead"] + totals[CACHE_WRITE]
     context_reuse = round(totals["cacheRead"] / context * 100, 1)
 
     return {
-        "estimatedCostEur": TARGET_COST_EUR,
+        COST_EUR: TARGET_COST_EUR,
         "estimatedCostUsd": round(TARGET_COST_EUR * 1.1485, 2),
         "currency": "EUR",
         "tokens": totals,
-        "contextReusePct": context_reuse,
+        REUSE_PCT: context_reuse,
         "pricedTokens": round(totals["total"] * 0.964),
         "pricingCoveragePct": 96.4,
         "rows": [
-            {"source": "codex", "sourceName": "Codex", "model": "gpt-5.6-sol", "effort": "high", "agent": "main", "calls": 128, **token_totals(7), "contextReusePct": 74.3, "costUsd": 92.10, "costEur": 80.19, "costBasis": "public_list"},
-            {"source": "claude", "sourceName": "Claude Code", "model": "claude-fable-5", "effort": "high", "agent": "main", "calls": 86, **token_totals(5), "contextReusePct": 69.8, "costUsd": 71.20, "costEur": 61.99, "costBasis": "public_list"},
-            {"source": "opencode", "sourceName": "OpenCode", "model": "glm-4.7", "effort": "medium", "agent": "subagent", "calls": 64, **token_totals(3), "contextReusePct": 77.1, "costUsd": 31.80, "costEur": 27.69, "costBasis": "public_list"},
-            {"source": "kimi", "sourceName": "Kimi Code", "model": "kimi-k2.7-code", "effort": "high", "agent": "main", "calls": 41, **token_totals(2), "contextReusePct": 65.4, "costUsd": 19.00, "costEur": 16.55, "costBasis": "public_list"},
+            {"source": "codex", SOURCE_NAME: "Codex", "model": "gpt-5.6-sol", "effort": "high", "agent": "main", "calls": 128, **token_totals(7), REUSE_PCT: 74.3, "costUsd": 92.10, "costEur": 80.19, "costBasis": PUBLIC_LIST},
+            {"source": "claude", SOURCE_NAME: CLAUDE_CODE, "model": "claude-fable-5", "effort": "high", "agent": "main", "calls": 86, **token_totals(5), REUSE_PCT: 69.8, "costUsd": 71.20, "costEur": 61.99, "costBasis": PUBLIC_LIST},
+            {"source": "opencode", SOURCE_NAME: "OpenCode", "model": "glm-4.7", "effort": "medium", "agent": "subagent", "calls": 64, **token_totals(3), REUSE_PCT: 77.1, "costUsd": 31.80, "costEur": 27.69, "costBasis": PUBLIC_LIST},
+            {"source": "kimi", SOURCE_NAME: "Kimi Code", "model": "kimi-k2.7-code", "effort": "high", "agent": "main", "calls": 41, **token_totals(2), REUSE_PCT: 65.4, "costUsd": 19.00, "costEur": 16.55, "costBasis": PUBLIC_LIST},
         ],
         "daily": daily,
         "sources": [
             {"id": "codex", "name": "Codex", "status": "ok", "files": 24},
-            {"id": "claude", "name": "Claude Code", "status": "ok", "files": 18},
+            {"id": "claude", "name": CLAUDE_CODE, "status": "ok", "files": 18},
             {"id": "opencode", "name": "OpenCode", "status": "ok", "files": 11},
             {"id": "kimi", "name": "Kimi Code", "status": "ok", "files": 9},
             {"id": "gemini", "name": "Gemini", "status": "unsupported", "message": "No local token log format is available."},
         ],
         "unpricedModels": [],
-        "generatedAt": NOW.isoformat(),
+        GENERATED_AT: NOW.isoformat(),
         "pricing": {
             "kind": "api_equivalent",
             "asOf": "2026-08-02",
@@ -225,7 +237,7 @@ def api_handler(route: Route, quota: dict, usage: dict) -> None:
             json={
                 "status": "unavailable",
                 "message": "Optional GitHub view — authenticate with the GitHub CLI to show your account.",
-                "generatedAt": NOW.isoformat(),
+                GENERATED_AT: NOW.isoformat(),
             }
         )
     else:

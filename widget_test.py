@@ -220,7 +220,9 @@ class ProtocolRegistrationTest(unittest.TestCase):
             self.assertTrue(relative.startswith("public"))
             self.assertTrue(relative.endswith(".png"))
             self.assertTrue(os.path.exists(os.path.join(os.path.dirname(widget.__file__), relative)))
-        self.assertIn("transparency_get", inspect.getsource(widget.Widget._set_icon))
+        # The recolouring moved into _is_stroke; the guarantee it guards is the same one,
+        # that a transparent pixel is never mistaken for part of a dark mark.
+        self.assertIn("transparency_get", inspect.getsource(widget.Widget._is_stroke))
 
     def test_currency_uses_english_number_formatting(self):
         self.assertEqual(widget.format_eur(2721.62), "€2,721.62")

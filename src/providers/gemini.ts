@@ -7,9 +7,10 @@ import {
   type OfficialBridgeSnapshot,
 } from "../official-bridge.js";
 import { reasonOf } from "../log.js";
-import { nowIso } from "./util.js";
+import { bridgeStatus, nowIso, optionalString } from "./util.js";
 
 const CONSOLE = "https://antigravity.google/";
+const BRIDGE_URL = "/api/official-bridge/gemini";
 const FRESH_MS = 15 * 60_000;
 
 /**
@@ -68,12 +69,12 @@ export async function fetchGeminiQuota(home = homedir()): Promise<QuotaResult> {
     const exhausted = metrics.some((metric) => (metric.used ?? 0) >= 100);
     return {
       ...base,
-      status: exhausted ? "rate_limited" : stale ? "partial" : "ok",
-      plan: typeof snapshot.data.planTier === "string" ? snapshot.data.planTier : undefined,
+      status: bridgeStatus(exhausted, stale),
+      plan: optionalString(snapshot.data.planTier),
       authSource: "official status-line bridge",
       sourceUpdatedAt: snapshot.capturedAt,
       metrics,
-      teardownUrl: installed ? "/api/official-bridge/gemini" : undefined,
+      teardownUrl: installed ? BRIDGE_URL : undefined,
       teardownLabel: installed ? "Disable bridge" : undefined,
       message: bridgeMessage(exhausted, stale),
     };
@@ -81,9 +82,9 @@ export async function fetchGeminiQuota(home = homedir()): Promise<QuotaResult> {
 
   return {
     ...base,
-    setupUrl: installed ? undefined : "/api/official-bridge/gemini",
+    setupUrl: installed ? undefined : BRIDGE_URL,
     setupLabel: installed ? undefined : "Enable official bridge",
-    teardownUrl: installed ? "/api/official-bridge/gemini" : undefined,
+    teardownUrl: installed ? BRIDGE_URL : undefined,
     teardownLabel: installed ? "Disable bridge" : undefined,
     message: installed
       ? "Bridge installed. Now send one message in Antigravity — launching it is not enough, because the status line publishes the quota along with a reply."

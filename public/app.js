@@ -30,6 +30,10 @@ let usageAmountFrame;
 let lastQuotaAttemptAt = 0;
 let lastUsageAttemptAt = 0;
 
+// Three controls carry a spoken name that the visible text does not give: the cost
+// button, a horizon marker, and a truncated title.
+const ARIA_LABEL = "aria-label";
+
 // How the usage dialog is being looked at, kept out of the DOM because the poll
 // re-renders the whole body every time the underlying figures change.
 // source/agent are server-side state shared with the desktop widget; the
@@ -100,7 +104,8 @@ function setLiveResult(source, error) {
   const connected = liveSources.size > 0;
   liveStatus.classList.toggle("is-live", connected && !failing.length);
   liveStatus.classList.toggle("has-error", failing.length > 0);
-  liveStatusText.textContent = failing.length ? "Retrying…" : connected ? "Live" : "Connecting…";
+  const reached = connected ? "Live" : "Connecting…";
+  liveStatusText.textContent = failing.length ? "Retrying…" : reached;
   liveStatus.title = failing.length
     ? `Automatic updates are retrying: ${failing.join(", ")}`
     : "Live updates · usage every 5 seconds · quotas every minute";
@@ -177,8 +182,9 @@ const glyph = (id) => GLYPH[id] ?? `<circle cx="12" cy="12" r="7" ${S}/>`;
 function markHtml(id, cls) {
   const b = brand(id);
   const logo = LOGO[id];
+  const ink = logo?.foreground ? `;color:${logo.foreground}` : "";
   const plate = logo?.plate
-    ? `background:${logo.plate}${logo.foreground ? `;color:${logo.foreground}` : ""}`
+    ? `background:${logo.plate}${ink}`
     : `--b1:${b.b1};--b2:${b.b2}`;
   const classes = [cls, logo?.fill ? "is-full" : "", logo ? "has-logo" : ""]
     .filter(Boolean)
@@ -198,30 +204,35 @@ const LINEUP = ["claude", "codex", "gemini"];
 const VISIBLE_PROVIDERS = new Set(LINEUP);
 const orderOf = (id) => Math.max(0, LINEUP.indexOf(id));
 
+// The effort ladders several models share, named once so a catalogue update is one edit.
+const EFF_TO_MAX = "low · medium · high · xhigh · max";
+const EFF_TO_XHIGH = "low · medium · high · xhigh";
+const EFF_REASONING = "reasoning · no effort levels";
+
 // Provider lineup: name, context, effort. Values from the provider/CLI catalogues.
 const MODELS = {
   claude: [
-    { n: "Claude Fable 5", ctx: "1M", eff: "low · medium · high · xhigh · max" },
-    { n: "Claude Opus 5", ctx: "1M", eff: "low · medium · high · xhigh · max" },
-    { n: "Claude Opus 4.8", ctx: "1M", eff: "low · medium · high · xhigh · max" },
-    { n: "Claude Sonnet 5", ctx: "1M", eff: "low · medium · high · xhigh · max" },
+    { n: "Claude Fable 5", ctx: "1M", eff: EFF_TO_MAX },
+    { n: "Claude Opus 5", ctx: "1M", eff: EFF_TO_MAX },
+    { n: "Claude Opus 4.8", ctx: "1M", eff: EFF_TO_MAX },
+    { n: "Claude Sonnet 5", ctx: "1M", eff: EFF_TO_MAX },
     { n: "Claude Haiku 4.5", ctx: "200K", eff: "extended thinking · no effort" },
   ],
   codex: [
-    { n: "GPT-5.6-Sol", ctx: "272K", eff: "low · medium · high · xhigh · max · ultra" },
-    { n: "GPT-5.6-Terra", ctx: "272K", eff: "low · medium · high · xhigh · max · ultra" },
-    { n: "GPT-5.6-Luna", ctx: "272K", eff: "low · medium · high · xhigh · max" },
-    { n: "GPT-5.5", ctx: "272K", eff: "low · medium · high · xhigh" },
-    { n: "GPT-5.4", ctx: "272K", eff: "low · medium · high · xhigh" },
-    { n: "GPT-5.4-Mini", ctx: "272K", eff: "low · medium · high · xhigh" },
+    { n: "GPT-5.6-Sol", ctx: "272K", eff: `${EFF_TO_MAX} · ultra` },
+    { n: "GPT-5.6-Terra", ctx: "272K", eff: `${EFF_TO_MAX} · ultra` },
+    { n: "GPT-5.6-Luna", ctx: "272K", eff: EFF_TO_MAX },
+    { n: "GPT-5.5", ctx: "272K", eff: EFF_TO_XHIGH },
+    { n: "GPT-5.4", ctx: "272K", eff: EFF_TO_XHIGH },
+    { n: "GPT-5.4-Mini", ctx: "272K", eff: EFF_TO_XHIGH },
   ],
   zai: [
     { n: "GLM-5.2", ctx: "1M", eff: "high · max" },
-    { n: "GLM-5.1", ctx: "200K", eff: "reasoning · no effort levels" },
-    { n: "GLM-5-Turbo", ctx: "200K", eff: "reasoning · no effort levels" },
-    { n: "GLM-5V-Turbo", ctx: "200K", eff: "reasoning · no effort levels" },
-    { n: "GLM-4.7", ctx: "204.8K", eff: "reasoning · no effort levels" },
-    { n: "GLM-4.5-Air", ctx: "131K", eff: "reasoning · no effort levels" },
+    { n: "GLM-5.1", ctx: "200K", eff: EFF_REASONING },
+    { n: "GLM-5-Turbo", ctx: "200K", eff: EFF_REASONING },
+    { n: "GLM-5V-Turbo", ctx: "200K", eff: EFF_REASONING },
+    { n: "GLM-4.7", ctx: "204.8K", eff: EFF_REASONING },
+    { n: "GLM-4.5-Air", ctx: "131K", eff: EFF_REASONING },
   ],
   gemini: [
     { n: "Gemini 3.6 Flash", ctx: "1,048,576", eff: "dynamic thinking" },
@@ -347,11 +358,13 @@ function usageHeadlineTotal(summary) {
 function usageSortHead(key, label, cls = "") {
   const active = usageView.sortKey === key;
   const ascending = usageView.sortDir === "asc";
-  const arrow = active ? (ascending ? "▲" : "▼") : "";
+  const direction = ascending ? "ascending" : "descending";
+  const glyph = ascending ? "▲" : "▼";
+  const arrow = active ? glyph : "";
   const next = active && !ascending ? "ascending" : "descending";
   // Read by a screen reader, so it says the direction this column is sorted in rather
   // than the one clicking it would apply.
-  const sorted = active ? (ascending ? "ascending" : "descending") : "none";
+  const sorted = active ? direction : "none";
   return `<th class="${cls}" aria-sort="${sorted}">
     <button type="button" class="usage-sort${active ? " is-active" : ""}" data-sort="${key}"
       title="Sort by ${escapeHtml(label)}, ${next}">${escapeHtml(label)}<span aria-hidden="true">${arrow}</span></button>
@@ -370,7 +383,7 @@ function animateUsageAmount(value) {
     displayedUsageCost = target;
     usageAmount.textContent = usageAmountText(target);
     usageAmount.setAttribute("aria-live", "polite");
-    usageButton.setAttribute("aria-label", `Open local token usage, estimated ${fmtMoney(target)}`);
+    usageButton.setAttribute(ARIA_LABEL, `Open local token usage, estimated ${fmtMoney(target)}`);
   };
 
   if (reduced.matches || usageAmountText(startValue) === usageAmountText(target)) {
@@ -410,7 +423,9 @@ function renderUsage(summary) {
   const previousScroll = usageShell?.scrollTop ?? 0;
   const coverage = `${summary.pricingCoveragePct.toLocaleString("en-US", { maximumFractionDigits: 1 })}% priced`;
   const sourceChips = (summary.sources || []).map((source) => {
-    const detail = source.message || (source.files != null ? `${source.files} local file${source.files === 1 ? "" : "s"}` : source.status);
+    const plural = source.files === 1 ? "" : "s";
+    const counted = source.files != null ? `${source.files} local file${plural}` : source.status;
+    const detail = source.message || counted;
     return `<span class="source-chip is-${escapeHtml(source.status)}" title="${escapeHtml(detail)}">
       ${escapeHtml(source.name)}
     </span>`;
@@ -429,9 +444,10 @@ function renderUsage(summary) {
     const efficiency = row.contextReusePct == null
       ? `<span title="No input context recorded">—</span>`
       : `<span title="${escapeHtml(efficiencyFormula)}">${escapeHtml(fmtPct(row.contextReusePct))}</span>`;
+    const basis = row.costBasis === "recorded" ? "Recorded by the CLI" : "Public API list price";
     const cost = rowCost(row) == null
       ? `<span title="No public price found">—</span>`
-      : `<span title="${escapeHtml(row.costBasis === "recorded" ? "Recorded by the CLI" : "Public API list price")}">${escapeHtml(fmtMoney(rowCost(row)))}</span>`;
+      : `<span title="${escapeHtml(basis)}">${escapeHtml(fmtMoney(rowCost(row)))}</span>`;
     return `<tr>
       <td class="usage-model"><strong title="${escapeHtml(row.model)}">${escapeHtml(row.model)}</strong><span>${escapeHtml(row.sourceName)}</span></td>
       <td class="usage-mode"><span>${escapeHtml(row.effort)}</span><br /><span class="agent-pill${row.agent === "subagent" ? " is-subagent" : ""}">${escapeHtml(row.agent)}</span></td>
@@ -607,10 +623,20 @@ function metricValueLabel(m, remainingPct) {
   return "";
 }
 
+/**
+ * How alarming a used percentage looks. Nothing below 70% is worth colouring: the bar is
+ * already telling that story by its length.
+ */
+function heatClass(used) {
+  if (used == null) return "";
+  if (used >= 90) return "crit";
+  return used >= 70 ? "hot" : "";
+}
+
 function metricHtml(m, index) {
   const used = usedPct(m);
   const remainingPct = used == null ? null : Math.max(0, 100 - used);
-  const cls = used == null ? "" : used >= 90 ? "crit" : used >= 70 ? "hot" : "";
+  const cls = heatClass(used);
   // Say what the number means. "0% / 100%" told the user nothing.
   const right = metricValueLabel(m, remainingPct);
   const expiredUnused = remainingPct === 100 && m.resetAt && new Date(m.resetAt).getTime() <= Date.now();
@@ -621,11 +647,12 @@ function metricHtml(m, index) {
   if (remainingPct != null) {
     return `<div class="metric">${donutHtml(remainingPct)}<div class="metric-body">${head}${reset}</div></div>`;
   }
+  const bar = m.used != null ? `<div class="bar ${cls}"><i data-w="0"></i></div>` : "";
   // No percentage to plot (a currency balance, say). Hold the donut column open anyway
   // so every label in the card starts on the same vertical line.
   return `<div class="metric"><div class="donut-gap" aria-hidden="true"></div>
     <div class="metric-body">${head}
-    ${m.used != null ? `<div class="bar ${cls}"><i data-w="0"></i></div>` : ""}${reset}</div></div>`;
+    ${bar}${reset}</div></div>`;
 }
 
 function cardHtml(p) {
@@ -637,20 +664,34 @@ function cardHtml(p) {
     .join("");
   const source = p.sourceLabel || p.authSource;
   const context = [p.plan ? `plan: ${p.plan}` : "", source ? `via ${source}` : ""].filter(Boolean).join(" · ");
+  // Hoisted out of the markup below: an attribute that is only sometimes there, inside a
+  // line that is only sometimes there, is three levels of punctuation to read past.
+  const sourceTitle = p.sourceUpdatedAt ? ` title="Official source updated ${escapeHtml(p.sourceUpdatedAt)}"` : "";
+  const plan = context ? `<div class="plan"${sourceTitle}>${escapeHtml(context)}</div>` : "";
+  const modelList = models
+    ? `<details class="models"><summary>Models · context · effort</summary>${models}<div class="mnote">indicative values</div></details>`
+    : "";
+  const message = p.message ? `<div class="msg">${escapeHtml(p.message)}</div>` : "";
+  const setup = p.setupUrl
+    ? `<button class="integration-btn" data-setup="${escapeHtml(p.setupUrl)}" data-provider="${id}">${escapeHtml(p.setupLabel || "Enable official integration")}</button>`
+    : "";
+  const keyRow = p.needsKey
+    ? `<div class="keyrow"><input type="password" placeholder="Paste API key…" aria-label="API key ${escapeHtml(p.name)}" data-key="${id}" /><button data-save="${id}">Save</button></div>`
+    : "";
   return `
     <div class="card-top">
       ${markHtml(p.id, "avatar")}
       <div class="titles">
         <h2 class="name">${escapeHtml(p.name)}</h2>
-        ${context ? `<div class="plan"${p.sourceUpdatedAt ? ` title="Official source updated ${escapeHtml(p.sourceUpdatedAt)}"` : ""}>${escapeHtml(context)}</div>` : ""}
+        ${plan}
       </div>
       <span class="badge b-${st}">${STATUS_LABEL[st] || st}</span>
     </div>
     ${metrics}
-    ${models ? `<details class="models"><summary>Models · context · effort</summary>${models}<div class="mnote">indicative values</div></details>` : ""}
-    ${p.message ? `<div class="msg">${escapeHtml(p.message)}</div>` : ""}
-    ${p.setupUrl ? `<button class="integration-btn" data-setup="${escapeHtml(p.setupUrl)}" data-provider="${id}">${escapeHtml(p.setupLabel || "Enable official integration")}</button>` : ""}
-    ${p.needsKey ? `<div class="keyrow"><input type="password" placeholder="Paste API key…" aria-label="API key ${escapeHtml(p.name)}" data-key="${id}" /><button data-save="${id}">Save</button></div>` : ""}
+    ${modelList}
+    ${message}
+    ${setup}
+    ${keyRow}
     <div class="card-foot">
       <a href="${escapeHtml(p.consoleUrl)}" target="_blank" rel="noreferrer">Open console ↗</a>
       ${p.teardownUrl ? `<button class="mini" data-teardown="${escapeHtml(p.teardownUrl)}" data-provider="${id}">${escapeHtml(p.teardownLabel || "Disable integration")}</button>` : ""}
@@ -817,7 +858,7 @@ function drawHorizon() {
     b.dataset.provider = e.id;
     b.dataset.tip = `${e.provider} · ${e.label}|${e.pct}% used|in ${humanGap(e.ms)}`;
     b.setAttribute(
-      "aria-label",
+      ARIA_LABEL,
       `${e.provider}, ${e.label}: resets in ${humanGap(e.ms)}, ${e.pct}% used`,
     );
   });
@@ -1104,7 +1145,7 @@ mountWidgetButton(document.getElementById("openWidget"), desktopBridge, window);
 const titleEl = document.getElementById("title");
 if (titleEl) {
   const text = titleEl.textContent;
-  titleEl.setAttribute("aria-label", text);
+  titleEl.setAttribute(ARIA_LABEL, text);
 
   // Built through the DOM rather than by concatenating innerHTML. The text is this
   // page's own heading and carries no user input today, but the shape of the code is

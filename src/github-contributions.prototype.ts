@@ -142,7 +142,7 @@ function streaks(days: GitHubContributionDay[]): { longest: number; current: num
   const today = new Date().toISOString().slice(0, 10);
   if (days[index]?.date === today && days[index]?.count === 0) index -= 1;
   let current = 0;
-  while (index >= 0 && days[index]!.count > 0) {
+  while (index >= 0 && days[index].count > 0) {
     current += 1;
     index -= 1;
   }

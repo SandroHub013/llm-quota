@@ -1,8 +1,10 @@
 import type { Provider, QuotaMetric, QuotaResult } from "./types.js";
 import { readCodexRateLimits } from "../codex-app-server.js";
 import { nowIso } from "./util.js";
+import { text } from "../coerce.js";
 
 const CONSOLE = "https://chatgpt.com/#settings";
+const APP_SERVER = "Codex app-server";
 
 export const codex: Provider = {
   id: "codex",
@@ -16,7 +18,7 @@ export const codex: Provider = {
       status: "error",
       consoleUrl: CONSOLE,
       sourceKind: "official_ipc",
-      sourceLabel: "Codex app-server",
+      sourceLabel: APP_SERVER,
       metrics: [],
       updatedAt: nowIso(),
     };
@@ -31,7 +33,7 @@ export const codex: Provider = {
           ...base,
           status: exhausted ? "rate_limited" : "ok",
           plan,
-          authSource: "Codex app-server",
+          authSource: APP_SERVER,
           sourceUpdatedAt: nowIso(),
           metrics,
           message: exhausted ? "Codex reports an exhausted quota window. Waiting for its official reset." : undefined,
@@ -41,7 +43,7 @@ export const codex: Provider = {
         ...base,
         status: "partial",
         plan,
-        authSource: "Codex app-server",
+        authSource: APP_SERVER,
         message: "Codex is connected, but it returned no active ChatGPT quota windows.",
       };
     } catch (error) {
@@ -96,20 +98,26 @@ export interface CodexRateLimits {
   rateLimitsByLimitId?: Record<string, CodexBucket | null>;
 }
 
+/**
+ * Codex reports its windows either keyed by limit id or as one unnamed bucket, and
+ * never both. The keyed map is the newer shape, so it wins when it is there.
+ */
+function bucketsOf(payload?: CodexRateLimits): CodexBucket[] {
+  const byId = payload?.rateLimitsByLimitId;
+  if (byId && typeof byId === "object") {
+    return Object.values(byId).filter((bucket): bucket is CodexBucket => Boolean(bucket));
+  }
+  return payload?.rateLimits ? [payload.rateLimits] : [];
+}
+
 /** Parse the stable account/rateLimits/read response. */
 export function parseRateLimits(body: unknown): QuotaMetric[] {
-  const payload = (body ?? undefined) as CodexRateLimits | undefined;
-  const byId = payload?.rateLimitsByLimitId;
-  const buckets: CodexBucket[] = byId && typeof byId === "object"
-    ? Object.values(byId).filter((bucket): bucket is CodexBucket => Boolean(bucket))
-    : payload?.rateLimits
-      ? [payload.rateLimits]
-      : [];
+  const buckets = bucketsOf(body as CodexRateLimits | undefined);
   const multiple = buckets.length > 1;
   const metrics: QuotaMetric[] = [];
 
   for (const bucket of buckets) {
-    const prefix = multiple ? `${bucket.limitName ?? bucket.limitId ?? "Codex"} \u00b7 ` : "";
+    const prefix = multiple ? `${text(bucket.limitName, text(bucket.limitId, "Codex"))} \u00b7 ` : "";
     for (const window of [bucket.primary, bucket.secondary]) {
       const used = number(window?.usedPercent);
       // A bucket Codex left out is not a window with no usage; it is no window.
@@ -127,12 +135,13 @@ export function parseRateLimits(body: unknown): QuotaMetric[] {
 }
 
 function readPlan(body: unknown): string | undefined {
-  const payload = (body ?? undefined) as CodexRateLimits | undefined;
-  if (payload?.planType) return String(payload.planType);
+  const payload = body as CodexRateLimits | undefined;
   const byId = payload?.rateLimitsByLimitId;
   const buckets = byId && typeof byId === "object" ? Object.values(byId) : undefined;
-  const plan = buckets?.find((bucket) => bucket?.planType)?.planType ?? payload?.rateLimits?.planType;
-  return plan ? String(plan) : undefined;
+  const plan = payload?.planType
+    || buckets?.find((bucket) => bucket?.planType)?.planType
+    || payload?.rateLimits?.planType;
+  return text(plan, "") || undefined;
 }
 
 /**

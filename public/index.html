@@ -154,6 +154,11 @@
         top: 10px;
         left: 10px;
         z-index: 100;
+        display: inline-flex;
+        align-items: center;
+        /* A 44px target: the link is only reachable by keyboard, but a pointer that
+           lands on it is often a switch or a head pointer, not a mouse. */
+        min-height: 44px;
         padding: 10px 16px;
         border-radius: var(--r-md);
         background: var(--accent);
@@ -163,7 +168,6 @@
         transform: translateY(-200%);
         transition: transform 0.2s var(--ease-out);
       }
-      .skip { display: inline-flex; align-items: center; min-height: 44px; }
       .skip:focus-visible { transform: translateY(0); }
       .vh {
         position: absolute;
@@ -714,7 +718,6 @@
         margin-bottom: 6px;
         overflow: hidden;
       }
-      .hz-next { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
       .hz-label {
         font-family: "JetBrains Mono", "Mono Fallback", monospace;
         font-size: var(--t-xs);
@@ -722,7 +725,15 @@
         text-transform: uppercase;
         color: var(--dim);
       }
-      .hz-next { font-size: var(--t-sm); color: var(--muted); flex: 0 1 auto; min-width: 0; }
+      .hz-next {
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        font-size: var(--t-sm);
+        color: var(--muted);
+      }
       .hz-next b { color: var(--text); font-weight: 600; }
       .hz-next .cd {
         font-family: "JetBrains Mono", "Mono Fallback", monospace;
@@ -1531,8 +1542,7 @@
         white-space: nowrap;
       }
 
-      main .gh-card-a { padding: 10px; }
-      main .gh-card-a { border-color: rgba(123, 91, 255, 0.32); }
+      main .gh-card-a { padding: 10px; border-color: rgba(123, 91, 255, 0.32); }
       main .usage-kicker { color: #a990ff; }
       main .dual-kicker { color: #8eacd8; }
       main .usage-total-number { font-size: 24px; }
@@ -1722,7 +1732,6 @@
         main .gh-card-c > .gh-source { grid-area: source; margin: 0; }
       }
 
-      footer .wrap { padding-top: 6px; padding-bottom: 6px; }
       @media (min-width: 1240px) and (max-height: 820px) {
         footer { display: none; }
         main { padding-bottom: 0; }
@@ -1742,6 +1751,8 @@
         display: flex;
         gap: 12px;
         flex-wrap: wrap;
+        padding-top: 6px;
+        padding-bottom: 6px;
         color: var(--dim);
         font-size: var(--t-sm);
         font-family: "JetBrains Mono", "Mono Fallback", monospace;

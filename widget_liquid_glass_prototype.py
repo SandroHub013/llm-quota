@@ -13,12 +13,18 @@ import tkinter as tk
 import widget
 
 
+# The two typefaces every variant draws with, and the two variant keys read most often.
+MONO = "Cascadia Mono"
+DISPLAY = "Segoe UI Variable Display"
+BACKGROUND = "background"
+TINT_ALPHA = "tint_alpha"
+
 VARIANTS = (
     {
         "key": "A",
         "name": "Frosted Stack",
         "size": (390, 430),
-        "background": "#08131f",
+        BACKGROUND: "#08131f",
         "glass": "#10283b",
         "card": "#15344b",
         "border": "#7dd3fc",
@@ -26,14 +32,14 @@ VARIANTS = (
         "text": "#f5fbff",
         "muted": "#9db8ca",
         "tint": "#0b2639",
-        "tint_alpha": 150,
+        TINT_ALPHA: 150,
         "opacity": 0.93,
     },
     {
         "key": "B",
         "name": "Prism Grid",
         "size": (480, 374),
-        "background": "#100d24",
+        BACKGROUND: "#100d24",
         "glass": "#211842",
         "card": "#2b2054",
         "border": "#c4b5fd",
@@ -41,14 +47,14 @@ VARIANTS = (
         "text": "#fbf9ff",
         "muted": "#c4b9de",
         "tint": "#241346",
-        "tint_alpha": 135,
+        TINT_ALPHA: 135,
         "opacity": 0.91,
     },
     {
         "key": "C",
         "name": "Clear Lens Dock",
         "size": (884, 134),
-        "background": "#070b11",
+        BACKGROUND: "#070b11",
         "glass": "#111a25",
         "card": "#172330",
         "border": "#d9f4ff",
@@ -56,7 +62,7 @@ VARIANTS = (
         "text": "#f7fcff",
         "muted": "#91a5b5",
         "tint": "#08131e",
-        "tint_alpha": 105,
+        TINT_ALPHA: 105,
         "opacity": 0.86,
     },
 )
@@ -281,7 +287,7 @@ class LiquidGlassPrototype(tk.Tk):
         for child in self.winfo_children():
             child.destroy()
 
-        self.configure(bg=variant["background"])
+        self.configure(bg=variant[BACKGROUND])
         self.attributes("-alpha", variant["opacity"])
         width, content_height = variant["size"]
         total_height = content_height + 48
@@ -290,14 +296,14 @@ class LiquidGlassPrototype(tk.Tk):
         self.native_glass = apply_native_acrylic(
             self,
             variant["tint"],
-            variant["tint_alpha"],
+            variant[TINT_ALPHA],
         )
 
         canvas = tk.Canvas(
             self,
             width=width,
             height=content_height,
-            bg=variant["background"],
+            bg=variant[BACKGROUND],
             highlightthickness=0,
         )
         canvas.pack()
@@ -330,7 +336,7 @@ class LiquidGlassPrototype(tk.Tk):
         self.geometry(f"+{x}+{y}")
 
     def _build_switcher(self, variant):
-        rail = tk.Frame(self, bg=variant["background"], height=48)
+        rail = tk.Frame(self, bg=variant[BACKGROUND], height=48)
         rail.pack(fill="x")
         pill = tk.Frame(rail, bg="#02050a", highlightbackground=variant["border"], highlightthickness=1)
         pill.pack(pady=(6, 7))
@@ -353,7 +359,7 @@ class LiquidGlassPrototype(tk.Tk):
             text=f"PROTOTYPE  {variant['key']} — {variant['name']}",
             bg="#02050a",
             fg=variant["text"],
-            font=("Cascadia Mono", 8, "bold"),
+            font=(MONO, 8, "bold"),
         ).pack(side="left", padx=8)
         following = tk.Button(
             pill,
@@ -379,14 +385,14 @@ class LiquidGlassPrototype(tk.Tk):
         canvas.create_oval(286, -74, 430, 70, fill="#164e63", outline="")
         canvas.create_oval(-60, 346, 88, 494, fill="#312e81", outline="")
         canvas.create_text(22, 22, text="LLM QUOTA  /  LIQUID", fill=variant["accent"],
-                           font=("Cascadia Mono", 9, "bold"), anchor="nw")
+                           font=(MONO, 9, "bold"), anchor="nw")
         canvas.create_text(22, 48, text="API-equivalent spend", fill=variant["muted"],
                            font=("Segoe UI", 9), anchor="nw")
         canvas.create_text(20, 68, text=widget.format_eur(self.cost), fill=variant["text"],
-                           font=("Segoe UI Variable Display", 28, "bold"), anchor="nw")
+                           font=(DISPLAY, 28, "bold"), anchor="nw")
         rounded_rectangle(canvas, 222, 24, 368, 51, 13, fill="#0a1d2a", outline=variant["border"])
         canvas.create_text(295, 38, text=self._source_label(), fill=variant["text"],
-                           font=("Cascadia Mono", 6, "bold"))
+                           font=(MONO, 6, "bold"))
 
         rounded_rectangle(canvas, 14, 116, 376, 342, 20,
                           fill=variant["card"], outline="#315a72", width=1)
@@ -402,20 +408,20 @@ class LiquidGlassPrototype(tk.Tk):
             canvas.create_text(62, y + 4, text=provider["name"], fill=variant["text"],
                                font=("Segoe UI", 9, "bold"), anchor="nw")
             canvas.create_text(62, y + 22, text=f"reset {reset_text(provider)}", fill=variant["muted"],
-                               font=("Cascadia Mono", 7), anchor="nw")
+                               font=(MONO, 7), anchor="nw")
             remaining = provider.get("remaining")
             canvas.create_line(220, y + 14, 316, y + 14, fill="#263f50", width=7)
             if remaining is not None:
                 canvas.create_line(220, y + 14, 220 + 0.96 * remaining, y + 14,
                                    fill=widget.quota_color(remaining), width=7)
             canvas.create_text(350, y + 14, text=percent_text(provider),
-                               fill=widget.quota_color(remaining), font=("Cascadia Mono", 9, "bold"),
+                               fill=widget.quota_color(remaining), font=(MONO, 9, "bold"),
                                anchor="e")
 
         rounded_rectangle(canvas, 14, 353, 376, 416, 18,
                           fill="#0b1d2a", outline="#315a72", width=1)
         canvas.create_text(28, 366, text="RESET HORIZON", fill=variant["muted"],
-                           font=("Cascadia Mono", 7, "bold"), anchor="nw")
+                           font=(MONO, 7, "bold"), anchor="nw")
         left, right, baseline = 29, 361, 396
         canvas.create_line(left, baseline, right, baseline, fill="#3b6074", width=2)
         for provider in self.providers[:5]:
@@ -434,11 +440,11 @@ class LiquidGlassPrototype(tk.Tk):
         canvas.create_oval(-88, -100, 118, 106, fill="#312e81", outline="")
         canvas.create_oval(382, 268, 558, 444, fill="#155e75", outline="")
         canvas.create_text(22, 20, text="PRISM QUOTA", fill=variant["accent"],
-                           font=("Cascadia Mono", 10, "bold"), anchor="nw")
+                           font=(MONO, 10, "bold"), anchor="nw")
         canvas.create_text(22, 43, text="Five subscriptions · one refracted view", fill=variant["muted"],
                            font=("Segoe UI", 9), anchor="nw")
         canvas.create_text(458, 22, text=self._source_label(), fill=variant["muted"],
-                           font=("Cascadia Mono", 6, "bold"), anchor="ne")
+                           font=(MONO, 6, "bold"), anchor="ne")
 
         tiles = list(self.providers[:5]) + [None]
         for index, provider in enumerate(tiles):
@@ -452,12 +458,12 @@ class LiquidGlassPrototype(tk.Tk):
                                fill=variant["border"], width=1)
             if provider is None:
                 canvas.create_text(x1 + 16, y1 + 16, text="TOKEN SPEND", fill=variant["muted"],
-                                   font=("Cascadia Mono", 7, "bold"), anchor="nw")
+                                   font=(MONO, 7, "bold"), anchor="nw")
                 canvas.create_text(x1 + 16, y1 + 38, text=widget.format_eur(self.cost),
-                                   fill=variant["text"], font=("Segoe UI Variable Display", 19, "bold"),
+                                   fill=variant["text"], font=(DISPLAY, 19, "bold"),
                                    anchor="nw")
                 canvas.create_text(x2 - 14, y2 - 13, text="LOCAL LEDGER", fill=variant["accent"],
-                                   font=("Cascadia Mono", 6, "bold"), anchor="se")
+                                   font=(MONO, 6, "bold"), anchor="se")
                 continue
 
             color = provider_color(provider)
@@ -468,11 +474,11 @@ class LiquidGlassPrototype(tk.Tk):
                 canvas.create_arc(x1 + 14, y1 + 14, x1 + 70, y1 + 70, start=90,
                                   extent=-3.599 * remaining, outline=color, width=6, style=tk.ARC)
             canvas.create_text(x1 + 42, y1 + 42, text=percent_text(provider), fill=variant["text"],
-                               font=("Cascadia Mono", 8, "bold"))
+                               font=(MONO, 8, "bold"))
             canvas.create_text(x1 + 83, y1 + 19, text=provider["name"], fill=variant["text"],
                                font=("Segoe UI", 10, "bold"), anchor="nw")
             canvas.create_text(x1 + 83, y1 + 44, text=f"reset · {reset_text(provider)}",
-                               fill=variant["muted"], font=("Cascadia Mono", 7), anchor="nw")
+                               fill=variant["muted"], font=(MONO, 7), anchor="nw")
             canvas.create_oval(x2 - 20, y1 + 18, x2 - 12, y1 + 26,
                                fill=widget.STATUS_DOT.get(provider.get("status"), "#6e7681"), outline="")
 
@@ -484,11 +490,11 @@ class LiquidGlassPrototype(tk.Tk):
         rounded_rectangle(canvas, 14, 14, 174, 120, 24,
                           fill="#0c1823", outline="#36586d", width=1)
         canvas.create_text(30, 28, text="LOCAL SPEND", fill=variant["accent"],
-                           font=("Cascadia Mono", 7, "bold"), anchor="nw")
+                           font=(MONO, 7, "bold"), anchor="nw")
         canvas.create_text(28, 51, text=widget.format_eur(self.cost), fill=variant["text"],
-                           font=("Segoe UI Variable Display", 21, "bold"), anchor="nw")
+                           font=(DISPLAY, 21, "bold"), anchor="nw")
         canvas.create_text(30, 91, text=self._source_label(), fill=variant["muted"],
-                           font=("Cascadia Mono", 6, "bold"), anchor="nw")
+                           font=(MONO, 6, "bold"), anchor="nw")
 
         for index, provider in enumerate(self.providers[:5]):
             x1 = 184 + index * 136
@@ -504,9 +510,9 @@ class LiquidGlassPrototype(tk.Tk):
                                font=("Segoe UI", 8, "bold"), anchor="nw")
             canvas.create_text(x1 + 13, 55, text=percent_text(provider),
                                fill=widget.quota_color(remaining),
-                               font=("Cascadia Mono", 16, "bold"), anchor="nw")
+                               font=(MONO, 16, "bold"), anchor="nw")
             canvas.create_text(x1 + 13, 88, text=f"↻ {reset_text(provider)}", fill=variant["muted"],
-                               font=("Cascadia Mono", 7), anchor="nw")
+                               font=(MONO, 7), anchor="nw")
             canvas.create_line(x1 + 13, 108, x2 - 13, 108, fill="#283c4b", width=4)
             if remaining is not None:
                 canvas.create_line(x1 + 13, 108, x1 + 13 + remaining, 108,

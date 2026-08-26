@@ -1,5 +1,6 @@
 import type { Provider, ProviderContext, QuotaMetric, QuotaResult } from "./types.js";
 import { fetchJson, nowIso } from "./util.js";
+import { text } from "../coerce.js";
 
 /**
  * MiniMax Coding Plan.
@@ -105,7 +106,7 @@ export async function readCodingPlan(endpoint: string, key: string): Promise<{
   });
 
   const status = count(response.body?.base_resp?.status_code);
-  const detail = String(response.body?.base_resp?.status_msg ?? response.text).slice(0, 200);
+  const detail = text(response.body?.base_resp?.status_msg, response.text).slice(0, 200);
   const refused = status === COOKIE_DEMANDED || response.status === 401 || response.status === 403;
 
   return {
