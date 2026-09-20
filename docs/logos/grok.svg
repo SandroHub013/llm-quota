@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="Grok">
+  <title>Grok</title>
+  <desc>
+    Local copy of the xAI Grok mark used by the LLM Quota dashboard.
+    Served from public/logos so the page never requests a third-party host.
+    The glyph is a simple X-shaped cutout on a dark plate, sized to match the
+    other 24-by-24 provider marks in this directory.
+  </desc>
+  <rect width="24" height="24" rx="5" fill="#111111"/>
+  <path fill="#f4f4f5" d="M6.2 7.1h3.4l2.4 3.6 2.4-3.6h3.4l-4.1 5.7 4.3 6.1h-3.5l-2.5-3.8-2.5 3.8H6.4l4.3-6.1z"/>
+</svg>

@@ -98,9 +98,11 @@ and returns a `QuotaResult`.
   with exactly one (`hono`) is a feature.
 - **Never commit credentials**, and scrub tokens out of test fixtures. A fixture with
   a real token gets the PR closed, not fixed.
-- **Official surfaces only.** Do not read or refresh another client's OAuth token,
-  imitate its identity, call a private endpoint, scrape a console, or bypass a block.
-  If no documented API/IPC/export exists, return `no_endpoint` and explain the fallback.
+- **Local credentials, first-party quota.** Prefer a documented API, IPC, or
+  status-line export. When a vendor publishes none, an adapter may read the
+  credential the official client already stored locally and call the same
+  first-party quota endpoint that client uses. Do not refresh or rewrite that
+  store, scrape a console, import browser cookies, or send credentials off-machine.
 - **Practitioner voice in docs.** Write what broke and what to do, not what one should
   consider doing.
 

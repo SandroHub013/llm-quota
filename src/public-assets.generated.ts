@@ -15,12 +15,13 @@ import asset10 from "../public/logos/codex.png" with { type: "file" };
 import asset11 from "../public/logos/codex.svg" with { type: "file" };
 import asset12 from "../public/logos/gemini.png" with { type: "file" };
 import asset13 from "../public/logos/gemini.svg" with { type: "file" };
-import asset14 from "../public/logos/moonshot.png" with { type: "file" };
-import asset15 from "../public/logos/zai.svg" with { type: "file" };
-import asset16 from "../public/og.jpg" with { type: "file" };
-import asset17 from "../public/ui.js" with { type: "file" };
-import asset18 from "../public/update.js" with { type: "file" };
-import asset19 from "../public/widget.js" with { type: "file" };
+import asset14 from "../public/logos/grok.svg" with { type: "file" };
+import asset15 from "../public/logos/moonshot.png" with { type: "file" };
+import asset16 from "../public/logos/zai.svg" with { type: "file" };
+import asset17 from "../public/og.jpg" with { type: "file" };
+import asset18 from "../public/ui.js" with { type: "file" };
+import asset19 from "../public/update.js" with { type: "file" };
+import asset20 from "../public/widget.js" with { type: "file" };
 
 /**
  * Served file name → a path `Bun.file` can read: the real one from source, the
@@ -41,10 +42,11 @@ export const PUBLIC_ASSETS: Record<string, string> = {
   "logos/codex.svg": asset11,
   "logos/gemini.png": asset12,
   "logos/gemini.svg": asset13,
-  "logos/moonshot.png": asset14,
-  "logos/zai.svg": asset15,
-  "og.jpg": asset16,
-  "ui.js": asset17,
-  "update.js": asset18,
-  "widget.js": asset19,
+  "logos/grok.svg": asset14,
+  "logos/moonshot.png": asset15,
+  "logos/zai.svg": asset16,
+  "og.jpg": asset17,
+  "ui.js": asset18,
+  "update.js": asset19,
+  "widget.js": asset20,
 };

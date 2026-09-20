@@ -4,7 +4,7 @@
 
 **One live dashboard for every AI subscription you pay for.**
 
-Claude Code · Codex · Gemini — quotas, reset times, and local token spend.
+Claude Code · Codex · Gemini · Grok · Kimi · Z.ai — quotas, reset times, and local token spend.
 Runs on your machine. Talks to nobody but the providers.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -43,9 +43,10 @@ glance which subscription is free, which is cooling down, and exactly when to co
   lights up; hover a card, its marker lights up.
 - ⚡ **Live without reloads** — quotas refresh silently every minute, local spend every five seconds,
   and reset countdowns keep moving between requests. Unchanged data does not repaint the interface.
-- 🔑 **Official-surface first** — Codex is queried through `codex app-server`; Claude Code and
-  Antigravity deliberately deliver quota JSON through opt-in local status-line bridges. LLM Quota
-  never reads or refreshes another client's OAuth token.
+- 🔑 **Local credentials, first-party quota** — Codex is queried through `codex app-server`;
+  Claude Code and Antigravity deliver quota JSON through opt-in local status-line bridges.
+  Grok, Kimi and Z.ai read the session the official client already stored and call that
+  client's own quota endpoint. LLM Quota never refreshes or rewrites those stores.
 - 💶 **Local token ledger** — totals Codex, Claude Code, OpenCode, Kimi Code, pi, Prime Agent,
   NikCLI and Antigravity history by model, effort and main/subagent, with an estimated
   API-equivalent value in euros and a
@@ -215,18 +216,15 @@ credentials, or real usage history.
 | **Claude Code** | Official status-line JSON (opt-in) | 5h + weekly quota %, reset time and source freshness |
 | **Codex** (ChatGPT) | Official `codex app-server` JSON-RPC | Active plan + usage windows |
 | **Gemini / Antigravity** | Official Antigravity status-line JSON (opt-in) | Per-bucket remaining quota and reset time |
-| **z.ai** | Card disabled | The GLM Coding Plan status line carries no quota field to read; token spend still appears in the local ledger |
-| **Kimi / Moonshot** | Card disabled | Kimi Code plan quota has no compliant machine-readable source; token spend still appears in the local ledger |
+| **Grok Build** | Grok CLI session in `~/.grok/auth.json` | Credit windows, Grok Build product usage, prepaid remainder |
+| **Kimi Code** | Kimi Code CLI session or pasted Coding Plan key | 5h + weekly + monthly plan windows |
+| **z.ai** | Pasted Coding Plan key, OpenCode/Pi store, or opt-in bridge | GLM 5h + weekly windows |
 
-Three provider cards ship today. OpenCode, pi, Prime Agent and NikCLI are ledger-only sources: they
+Six provider cards ship today. OpenCode, pi, Prime Agent and NikCLI are ledger-only sources: they
 publish no plan quota, so they contribute local spend and no card. Antigravity does both — its
 status-line bridge feeds the Gemini card, and its conversation history feeds the ledger.
 OpenCode's Zen gateway was dropped entirely, because the public endpoint exposes a model catalog rather than
-numeric usage, limits or reset times. Kimi is disabled for the same reason: its official status line
-carries no quota, rate limit or subscription field, the plan windows behind `/usage` are reachable
-only with the Kimi Code CLI's own OAuth token, and the documented Open Platform balance is API credit
-rather than plan quota. Z.ai's own plugin publishes no quota field either, so its card was withdrawn
-rather than left showing an empty promise.
+numeric usage, limits or reset times.
 
 Keys you paste yourself are stored locally in `~/.llm-quota/config.json`. They are never sent
 anywhere except to the provider they belong to, and never committed.

@@ -56,6 +56,7 @@ test("provider logos are local files with no external references", async () => {
     zai: "zai.svg",
     gemini: "gemini.svg",
     moonshot: "moonshot.png",
+    grok: "grok.svg",
   };
   const [app, dashboard, site] = await Promise.all([
     read("public/app.js"),
@@ -111,15 +112,11 @@ test("fonts are served from the repo, not a CDN", async () => {
 // layout down after first paint. Losing them would bring the layout shift back.
 test("every visible quota provider ships a static skeleton card", async () => {
   const [html, app] = await Promise.all([read("public/index.html"), read("public/app.js")]);
-  for (const id of ["claude", "codex", "gemini"]) {
+  for (const id of ["claude", "codex", "gemini", "grok", "kimi", "zai"]) {
     expect(html).toContain(`class="card is-skeleton" data-provider="${id}"`);
   }
-  // Disabled providers must not reserve a skeleton, or the grid paints a card
-  // that never arrives. Moonshot and Z.ai: see the comments in src/providers/index.ts.
-  for (const id of ["moonshot", "zai"]) {
-    expect(html).not.toContain(`class="card is-skeleton" data-provider="${id}"`);
-  }
-  expect(app).toContain('const LINEUP = ["claude", "codex", "gemini"]');
+  expect(html).not.toContain(`class="card is-skeleton" data-provider="moonshot"`);
+  expect(app).toContain('const LINEUP = ["claude", "codex", "gemini", "grok", "kimi", "zai"]');
 });
 
 test("local token usage sits beside the widget and opens an accessible dialog", async () => {

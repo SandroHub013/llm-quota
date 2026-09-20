@@ -42,9 +42,7 @@ test("the landing page does not animate a card the product no longer ships", asy
 test("the landing page logo strip carries no retired provider", async () => {
   const site = await read("docs/index.html");
   const strip = site.match(/<div class="strip">([\s\S]*?)<\/div>/)?.[1] ?? "";
-  for (const retired of ["moonshot", "zai", "opencode-zen"]) {
-    expect(strip).not.toContain(`logos/${retired}`);
-  }
+  expect(strip).not.toContain("logos/opencode-zen");
 });
 
 // The Zen adapter, its card scaffolding and its mark are gone; OpenCode stays only as a
@@ -61,7 +59,7 @@ test("nothing reintroduces the OpenCode Zen gateway", async () => {
 
 test("the bug report dropdown offers no retired provider", async () => {
   const template = await read(".github/ISSUE_TEMPLATE/bug_report.yml");
-  for (const retired of ["Moonshot", "OpenCode Zen", "z.ai"]) {
+  for (const retired of ["Moonshot", "OpenCode Zen"]) {
     expect(template).not.toContain(`- ${retired}`);
   }
 });

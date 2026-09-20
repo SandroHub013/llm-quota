@@ -127,6 +127,8 @@ const BRAND = {
   zai: { b1: "#4f7cff", b2: "#2b4fb8" },
   gemini: { b1: "#4285f4", b2: "#9b72cf" },
   moonshot: { b1: "#0ea5e9", b2: "#3b82f6" },
+  kimi: { b1: "#0ea5e9", b2: "#3b82f6" },
+  grok: { b1: "#1a1a1a", b2: "#6b7280" },
 };
 const brand = (id) => BRAND[id] ?? { b1: "#5b8cff", b2: "#3a5bbf" };
 
@@ -145,6 +147,8 @@ const LOGO = {
   zai: { src: "/logos/zai.svg" },
   gemini: { src: "/logos/gemini.svg", plate: "#f6f8fc" },
   moonshot: { src: "/logos/moonshot.png", fill: true },
+  kimi: { src: "/logos/moonshot.png", fill: true },
+  grok: { src: "/logos/grok.svg", plate: "#111111", foreground: "#f4f4f5" },
 };
 
 // Drawn fallback, used only if a logo file is missing or fails to decode: same 24
@@ -174,6 +178,8 @@ const GLYPH = {
   zai: `<path d="M14.5 2.5 6 13.5h4.2L8.5 21.5 18 10h-4.2z" fill="currentColor"/>`,
   gemini: `<path d="M12 2.2c0 5.4 4.4 9.8 9.8 9.8-5.4 0-9.8 4.4-9.8 9.8 0-5.4-4.4-9.8-9.8-9.8 5.4 0 9.8-4.4 9.8-9.8z" fill="currentColor"/>`,
   moonshot: `<path d="M20.2 14.8A8.6 8.6 0 0 1 9.2 3.8a8.6 8.6 0 1 0 11 11z" fill="currentColor"/>`,
+  kimi: `<path d="M20.2 14.8A8.6 8.6 0 0 1 9.2 3.8a8.6 8.6 0 1 0 11 11z" fill="currentColor"/>`,
+  grok: `<path d="M4 7h6l2 3 2-3h6v10H4z" fill="currentColor"/>`,
 };
 const glyph = (id) => GLYPH[id] ?? `<circle cx="12" cy="12" r="7" ${S}/>`;
 
@@ -197,10 +203,7 @@ function markHtml(id, cls) {
 
 // Reveal order, matching the static skeletons in index.html. Only used for a
 // provider the server returns that has no skeleton waiting for it.
-// "moonshot" is absent on purpose: see the comment in src/providers/index.ts.
-// Its palette, logo and model list stay below so the card can return unchanged
-// once Kimi Code exposes a quota surface a third-party dashboard may read.
-const LINEUP = ["claude", "codex", "gemini"];
+const LINEUP = ["claude", "codex", "gemini", "grok", "kimi", "zai"];
 const VISIBLE_PROVIDERS = new Set(LINEUP);
 const orderOf = (id) => Math.max(0, LINEUP.indexOf(id));
 
@@ -243,6 +246,16 @@ const MODELS = {
     { n: "K3", ctx: "1,048,576", eff: "low · high · max" },
     { n: "K2.7 Coding", ctx: "262,144", eff: "always thinking" },
     { n: "K2.7 Coding Highspeed", ctx: "262,144", eff: "always thinking" },
+  ],
+  kimi: [
+    { n: "K3", ctx: "1,048,576", eff: "low · high · max" },
+    { n: "K2.7 Coding", ctx: "262,144", eff: "always thinking" },
+    { n: "K2.7 Coding Highspeed", ctx: "262,144", eff: "always thinking" },
+  ],
+  grok: [
+    { n: "Grok 4", ctx: "256K", eff: "default" },
+    { n: "Grok 4 Fast", ctx: "2M", eff: "default" },
+    { n: "Grok Code", ctx: "256K", eff: "default" },
   ],
 };
 

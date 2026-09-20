@@ -33,6 +33,28 @@ export async function fetchJson<T = unknown>(
   }
 }
 
+/**
+ * Same contract as `fetchJson`, for bodies that are not JSON — Grok Build answers
+ * quota as gRPC-web protobuf. Status 0 means nothing came back; the adapter must
+ * not throw.
+ */
+export async function fetchBytes(
+  url: string,
+  init: RequestInit = {},
+  timeoutMs = 15000,
+): Promise<{ ok: boolean; status: number; bytes: Uint8Array; headers: Headers }> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...init, signal: ctrl.signal });
+    return { ok: res.ok, status: res.status, bytes: new Uint8Array(await res.arrayBuffer()), headers: res.headers };
+  } catch {
+    return { ok: false, status: 0, bytes: new Uint8Array(), headers: new Headers() };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export function nowIso(): string {
   return new Date().toISOString();
 }

@@ -7,7 +7,7 @@
 
 **Una sola dashboard live per tutti gli abbonamenti AI che paghi.**
 
-Claude Code · Codex · Gemini — su un unico asse dei reset.
+Claude Code · Codex · Gemini · Grok · Kimi · Z.ai — su un unico asse dei reset.
 Gira sulla tua macchina. Non parla con nessuno tranne i provider.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -44,9 +44,10 @@ vedi a colpo d'occhio quale abbonamento è libero, quale è in raffreddamento e 
   marcatore si illumina la card corrispondente, e viceversa.
 - ⚡ **Live senza ricaricare** — le quote si aggiornano silenziosamente ogni minuto, la spesa locale
   ogni cinque secondi e i countdown continuano tra una richiesta e l'altra. I dati invariati non ridisegnano l'interfaccia.
-- 🔑 **Prima le superfici ufficiali** — Codex passa da `codex app-server`; Claude Code e
-  Antigravity consegnano volontariamente il JSON quota tramite bridge locali opt-in della status
-  line. LLM Quota non legge né rinnova mai il token OAuth di un altro client.
+- 🔑 **Credenziali locali, quota first-party** — Codex passa da `codex app-server`; Claude Code e
+  Antigravity consegnano il JSON quota tramite bridge locali opt-in della status line. Grok, Kimi e
+  Z.ai leggono la sessione già salvata dal client ufficiale e chiamano l'endpoint quota di quel
+  client. LLM Quota non rinnova né riscrive quei store.
 - 💶 **Registro token locale** — somma la cronologia di Codex, Claude Code, OpenCode, Kimi Code,
   pi, Prime Agent, NikCLI e Antigravity per modello, effort e main/subagent, stimandone in euro il
   valore API equivalente e mostrando un indice di efficienza basato sul riuso del contesto. Un calendario giornaliero in
@@ -147,20 +148,16 @@ credenziali o cronologie d'uso reali.
 | **Claude Code** | JSON ufficiale della status line (opt-in) | Quota 5h + settimanale %, reset e freschezza della fonte |
 | **Codex** (ChatGPT) | JSON-RPC ufficiale `codex app-server` | Piano attivo + finestre d'uso |
 | **Gemini / Antigravity** | JSON ufficiale della status line Antigravity (opt-in) | Quota residua per bucket e reset |
-| **z.ai** | Card disabilitata | La status line del GLM Coding Plan non espone alcun campo quota; i token restano nel registro locale |
-| **Kimi / Moonshot** | Card disabilitata | La quota del piano Kimi Code non ha una fonte machine-readable conforme; i token restano nel registro locale |
+| **Grok Build** | Sessione CLI Grok in `~/.grok/auth.json` | Finestre crediti, uso Grok Build, prepaid residuo |
+| **Kimi Code** | Sessione CLI Kimi Code o chiave Coding Plan | Finestre piano 5h + settimanale + mensile |
+| **z.ai** | Chiave Coding Plan, store OpenCode/Pi, o bridge opt-in | Finestre GLM 5h + settimanale |
 
-Oggi vengono spedite tre card provider. OpenCode, pi, Prime Agent e NikCLI sono fonti solo del
+Oggi vengono spedite sei card provider. OpenCode, pi, Prime Agent e NikCLI sono fonti solo del
 registro: non pubblicano quota di piano, quindi contribuiscono alla spesa locale e a nessuna card.
 Antigravity fa entrambe le cose: il bridge della status line alimenta la card Gemini, la cronologia
 delle sue conversazioni alimenta il registro.
 Il gateway Zen di OpenCode è stato rimosso del tutto, perché l'endpoint pubblico espone il catalogo modelli e non
 utilizzo numerico, limiti o tempi di reset.
-Kimi è disabilitato per lo stesso motivo: la sua status line ufficiale non porta campi di quota, rate
-limit o abbonamento, le finestre del piano dietro `/usage` sono raggiungibili solo con il token
-OAuth della CLI Kimi Code, e il balance documentato di Open Platform è credito API, non quota del
-piano. Nemmeno il plugin di Z.ai pubblica un campo quota, quindi la sua card è stata ritirata
-invece di restare a promettere un dato che non arriva.
 
 Le chiavi inserite a mano restano in locale in `~/.llm-quota/config.json`. Non vengono mai inviate
 a nessuno tranne al provider a cui appartengono, e mai committate.

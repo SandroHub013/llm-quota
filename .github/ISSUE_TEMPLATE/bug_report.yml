@@ -10,6 +10,9 @@ body:
         - Claude Code
         - Codex (ChatGPT)
         - Gemini
+        - Grok Build
+        - Kimi Code
+        - z.ai
         - Local token ledger (Codex / Claude / OpenCode / Kimi history)
         - Dashboard / UI (not provider-specific)
         - CLI

@@ -1,9 +1,9 @@
 {
   "name": "llm-quota",
-  "version": "0.6.3",
+  "version": "0.7.0",
   "type": "module",
   "private": false,
-  "description": "Local-first live quota dashboard, desktop app, CLI, and widget for Claude Code, Codex, and Gemini",
+  "description": "Local-first live quota dashboard, desktop app, CLI, and widget for Claude Code, Codex, Gemini, Grok, Kimi, and Z.ai",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -25,7 +25,11 @@
     "codex",
     "openai",
     "gemini",
+    "grok",
+    "xai",
+    "kimi",
     "moonshot",
+    "zai",
     "opencode",
     "local-first",
     "self-hosted",

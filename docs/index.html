@@ -612,19 +612,19 @@
                   class="btn primary"
                   id="download"
                   href="https://github.com/SandroHub013/llm-quota/releases/latest"
-                  data-windows="https://github.com/SandroHub013/llm-quota/releases/download/v0.6.3/LLM.Quota_0.6.3_x64_en-US.msi"
-                  data-macos-arm="https://github.com/SandroHub013/llm-quota/releases/download/v0.6.3/LLM.Quota_0.6.3_aarch64.dmg"
-                  data-macos-intel="https://github.com/SandroHub013/llm-quota/releases/download/v0.6.3/LLM.Quota_0.6.3_x64.dmg"
-                  data-linux="https://github.com/SandroHub013/llm-quota/releases/download/v0.6.3/LLM.Quota_0.6.3_amd64.deb"
+                  data-windows="https://github.com/SandroHub013/llm-quota/releases/download/v0.7.0/LLM.Quota_0.7.0_x64_en-US.msi"
+                  data-macos-arm="https://github.com/SandroHub013/llm-quota/releases/download/v0.7.0/LLM.Quota_0.7.0_aarch64.dmg"
+                  data-macos-intel="https://github.com/SandroHub013/llm-quota/releases/download/v0.7.0/LLM.Quota_0.7.0_x64.dmg"
+                  data-linux="https://github.com/SandroHub013/llm-quota/releases/download/v0.7.0/LLM.Quota_0.7.0_amd64.deb"
                 >Download the app</a>
                 <span class="platforms" id="downloadPlatforms">Windows · macOS · Linux</span>
               </div>
               <p class="hero-alt dl-links">
-                <a href="https://github.com/SandroHub013/llm-quota/releases/download/v0.6.3/LLM.Quota_0.6.3_x64_en-US.msi">Windows</a>
-                <a href="https://github.com/SandroHub013/llm-quota/releases/download/v0.6.3/LLM.Quota_0.6.3_aarch64.dmg">macOS Apple silicon</a>
-                <a href="https://github.com/SandroHub013/llm-quota/releases/download/v0.6.3/LLM.Quota_0.6.3_x64.dmg">macOS Intel</a>
-                <a href="https://github.com/SandroHub013/llm-quota/releases/download/v0.6.3/LLM.Quota_0.6.3_amd64.deb">Linux .deb</a>
-                <a href="https://github.com/SandroHub013/llm-quota/releases/download/v0.6.3/LLM.Quota-0.6.3-1.x86_64.rpm">Linux .rpm</a>
+                <a href="https://github.com/SandroHub013/llm-quota/releases/download/v0.7.0/LLM.Quota_0.7.0_x64_en-US.msi">Windows</a>
+                <a href="https://github.com/SandroHub013/llm-quota/releases/download/v0.7.0/LLM.Quota_0.7.0_aarch64.dmg">macOS Apple silicon</a>
+                <a href="https://github.com/SandroHub013/llm-quota/releases/download/v0.7.0/LLM.Quota_0.7.0_x64.dmg">macOS Intel</a>
+                <a href="https://github.com/SandroHub013/llm-quota/releases/download/v0.7.0/LLM.Quota_0.7.0_amd64.deb">Linux .deb</a>
+                <a href="https://github.com/SandroHub013/llm-quota/releases/download/v0.7.0/LLM.Quota-0.7.0-1.x86_64.rpm">Linux .rpm</a>
               </p>
               <p class="hero-alt" style="margin: 13px 0">
                 No Bun, no clone, no terminal: the server ships inside it. Or run it from source —
@@ -646,6 +646,9 @@
           <figure><img src="./logos/claude.png" alt="" /> Claude Code</figure>
           <figure><img src="./logos/codex.svg" alt="" /> Codex</figure>
           <figure><img src="./logos/gemini.svg" alt="" /> Gemini</figure>
+          <figure><img src="./logos/grok.svg" alt="" /> Grok</figure>
+          <figure><img src="./logos/moonshot.png" alt="" /> Kimi</figure>
+          <figure><img src="./logos/zai.svg" alt="" /> z.ai</figure>
         </div>
       </div>
 
@@ -698,7 +701,8 @@
               <h3>Official-surface first</h3>
               <p>
                 Uses <code>codex app-server</code> and opt-in status-line bridges for Claude and
-                Antigravity. It never reads or refreshes another client's OAuth token.
+                Antigravity. Grok, Kimi and Z.ai read the local official-client session and call
+                that client's own quota endpoint. Stores are never refreshed or rewritten.
               </p>
             </article>
             <article class="feat">
@@ -806,8 +810,9 @@
                     <tr><td>Claude Code</td><td>Official status-line JSON (opt-in)</td><td>5h + weekly quota %, reset time</td></tr>
                     <tr><td>Codex (ChatGPT)</td><td>Official <code>codex app-server</code></td><td>Active plan + usage windows</td></tr>
                     <tr><td>Gemini / Antigravity</td><td>Official Antigravity status-line JSON (opt-in)</td><td>Per-bucket quota and reset time</td></tr>
-                    <tr><td>z.ai</td><td>Card disabled</td><td>Its status line exposes no quota field; token spend stays in the local ledger</td></tr>
-                    <tr><td>Kimi / Moonshot</td><td>Card disabled</td><td>No compliant machine-readable plan quota; token spend stays in the local ledger</td></tr>
+                    <tr><td>Grok Build</td><td>Grok CLI session in <code>~/.grok/auth.json</code></td><td>Credit windows and prepaid remainder</td></tr>
+                    <tr><td>Kimi Code</td><td>Kimi Code CLI session or pasted key</td><td>5h + weekly + monthly plan windows</td></tr>
+                    <tr><td>z.ai</td><td>Coding Plan key, OpenCode/Pi store, or opt-in bridge</td><td>GLM 5h + weekly windows</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -980,6 +985,8 @@ bun run cli provider codex</code></pre>
         zai: "#4f7cff",
         gemini: "#4285f4",
         moonshot: "#0ea5e9",
+        kimi: "#0ea5e9",
+        grok: "#1a1a1a",
       };
       const S = 'stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"';
       const GLYPH = {
@@ -988,6 +995,8 @@ bun run cli provider codex</code></pre>
         zai: `<path d="M14.5 2.5 6 13.5h4.2L8.5 21.5 18 10h-4.2z" fill="currentColor"/>`,
         gemini: `<path d="M12 2.2c0 5.4 4.4 9.8 9.8 9.8-5.4 0-9.8 4.4-9.8 9.8 0-5.4-4.4-9.8-9.8-9.8 5.4 0 9.8-4.4 9.8-9.8z" fill="currentColor"/>`,
         moonshot: `<path d="M20.2 14.8A8.6 8.6 0 0 1 9.2 3.8a8.6 8.6 0 1 0 11 11z" fill="currentColor"/>`,
+        kimi: `<path d="M20.2 14.8A8.6 8.6 0 0 1 9.2 3.8a8.6 8.6 0 1 0 11 11z" fill="currentColor"/>`,
+        grok: `<path d="M4 7h6l2 3 2-3h6v10H4z" fill="currentColor"/>`,
       };
 
       // One entry per window the three shipped cards actually publish. Each has to stay
@@ -1004,6 +1013,9 @@ bun run cli provider codex</code></pre>
         { id: "gemini", name: "Gemini", label: "Weekly (7d)", min: 1420, win: 10080, pct: 40 },
         { id: "claude", name: "Claude Code", label: "Weekly (7d)", min: 3720, win: 10080, pct: 16 },
         { id: "codex", name: "Codex", label: "Weekly (7d)", min: 6240, win: 10080, pct: 3 },
+        { id: "grok", name: "Grok Build", label: "Credits", min: 1880, win: 10080, pct: 33 },
+        { id: "kimi", name: "Kimi Code", label: "Weekly (7d)", min: 4120, win: 10080, pct: 34 },
+        { id: "zai", name: "z.ai", label: "Weekly (7d)", min: 5280, win: 10080, pct: 40 },
       ];
 
       const TICKS_FULL = [

@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-09-20
+
+### Added
+
+- **Grok Build, Kimi Code, and Z.ai cards.** Each reads the credential the official
+  client already stored locally and calls that client's first-party quota endpoint.
+  No refresh, no cookie lift, no rewrite of the vendor store. MiniMax stays
+  unregistered: it still demands a browser session cookie.
+
 ### Security
 
 - **The Codex interpreter no longer comes from the environment.** Running the `codex` shim on
@@ -353,6 +362,7 @@ dashboard may read, and a card promising data that never arrives is worse than n
 
 Initial release: local-first live quota dashboard, CLI, and Windows widget.
 
+[0.7.0]: https://github.com/SandroHub013/llm-quota/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/SandroHub013/llm-quota/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/SandroHub013/llm-quota/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/SandroHub013/llm-quota/compare/v0.6.0...v0.6.1
